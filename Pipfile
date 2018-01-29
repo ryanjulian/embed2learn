@@ -1,0 +1,26 @@
+[[source]]
+
+name = "pypi"
+verify_ssl = true
+url = "https://pypi.python.org/simple"
+
+
+[dev-packages]
+
+yapf = "*"
+
+
+[packages]
+
+dm-control = {git = "git://github.com/deepmind/dm_control.git"}
+numpy = "*"
+jupyter = "*"
+ipython = "*"
+scipy = "*"
+matplotlib = "*"
+gym = "*"
+
+
+[requires]
+
+python_version = "3.5"
