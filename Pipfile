@@ -18,7 +18,8 @@ jupyter = "*"
 ipython = "*"
 scipy = "*"
 matplotlib = "*"
-gym = "*"
+gym = {extras = ["extras"]}
+mujoco-py = "<1.50.2,>=1.50.1"
 
 
 [requires]
