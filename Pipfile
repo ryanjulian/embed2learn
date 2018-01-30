@@ -20,7 +20,7 @@ scipy = "*"
 matplotlib = "*"
 gym = {extras = ["extras"]}
 mujoco-py = "<1.50.2,>=1.50.1"
-tensorflow-gpu = "==1.5"
+tensorflow-gpu = "*"
 
 
 [requires]
