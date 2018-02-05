@@ -21,6 +21,15 @@ matplotlib = "*"
 gym = {extras = ["extras"]}
 mujoco-py = "<1.50.2,>=1.50.1"
 tensorflow-gpu = "*"
+rllab = {editable = true, git = "git://github.com/rll/rllab.git"}
+"path.py" = "*"
+joblib = "*"
+theano = "*"
+pyprind = "*"
+"box2d" = {git = "git://github.com/pybox2d/pybox2d.git"}
+mako = "*"
+cached-property = "*"
+pygame = "*"
 
 
 [requires]

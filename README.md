@@ -14,7 +14,7 @@ Embedding to Learn
 
 ### Step 2
 ```shell
-sudo apt install python-numpy python-dev cmake zlib1g-dev libjpeg-dev xvfb libav-tools xorg-dev python-opengl libboost-all-dev libsdl2-dev swig libglew-dev libglfw3 libglew1.13 patchelf libosmesa6-dev
+sudo apt install python-numpy python-dev cmake zlib1g-dev libjpeg-dev xvfb libav-tools xorg-dev python-opengl libboost-all-dev libsdl2-dev swig libglew-dev libglfw3 libglew1.13 patchelf libosmesa6-dev swig
 ```
 
 ### Step 3
@@ -50,4 +50,7 @@ From dm_control
 sudo apt install libglfw3-dev libglew-dev libglew1.13
 ```
 
-
+From rllab
+```shell
+sudo apt install swig
+```
