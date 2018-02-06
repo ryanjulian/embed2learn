@@ -24,14 +24,14 @@ tensorflow-gpu = "*"
 rllab = {editable = true, git = "git://github.com/rll/rllab.git"}
 "path.py" = "*"
 joblib = "*"
-theano = "*"
-pyprind = "*"
-"box2d" = {git = "git://github.com/pybox2d/pybox2d.git"}
-mako = "*"
+Theano = "*"
+PyPrind = "*"
+"Box2D" = {git = "git://github.com/pybox2d/pybox2d.git"}
+Mako = "*"
 cached-property = "*"
-pygame = "*"
+Pygame = "*"
 "e1839a8" = {path = ".", editable = true}
-pyopengl = "*"
+PyOpenGL = "*"
 
 
 [requires]
