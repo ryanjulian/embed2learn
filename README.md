@@ -28,6 +28,13 @@ cd embed2learn
 pipenv install
 ```
 
+### Step 5
+This is a workaround because rllab's setup of MuJoCo is kind of awkward. I may submit a pull request at some point to fix this.
+```shell
+cd `pipenv --venv`/src/rllab
+bash scripts/setup_mujoco.sh
+```
+
 ### System-specific bugs and workarounds
 On GPU-based systems, mujoco-py has a bug in finding the NVIDIA OpenGL drivers for non-Docker hosts. See https://github.com/openai/mujoco-py/issues/44. Workaround below.
 ```shell
