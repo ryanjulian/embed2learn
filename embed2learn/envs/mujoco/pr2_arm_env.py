@@ -12,12 +12,12 @@ from rllab.misc.overrides import overrides
 
 from embed2learn.envs.mujoco.utils import mujoco_model_path
 
-FILE = path.join('pr2','pr2_arm.xml')
+FILE = path.join('pr2', 'pr2_arm.xml')
 
 ACTION_LIMIT = 0.25
 
-class PR2ArmEnv(MujocoEnv, Serializable):
 
+class PR2ArmEnv(MujocoEnv, Serializable):
     def __init__(self, *args, **kwargs):
         kwargs['file_path'] = mujoco_model_path(FILE)
         super(PR2ArmEnv, self).__init__(*args, **kwargs)
@@ -32,10 +32,10 @@ class PR2ArmEnv(MujocoEnv, Serializable):
     @overrides
     @property
     def action_space(self):
-        shape = self.model.actuator_ctrlrange[:,0].shape
+        shape = self.model.actuator_ctrlrange[:, 0].shape
         lb = np.full(shape, -ACTION_LIMIT)
         ub = np.full(shape, ACTION_LIMIT)
-        return spaces.Box(lb, ub)        
+        return spaces.Box(lb, ub)
 
     def step(self, action):
         self.forward_dynamics(action)
@@ -45,7 +45,7 @@ class PR2ArmEnv(MujocoEnv, Serializable):
         scaling = (ub - lb) * 0.5
         ctrl_cost = 0.5 * 1e-2 * np.sum(np.square(action / scaling))
         distance_to_go = self._finger_to_target_dist()
-        
+
         reward = -distance_to_go - ctrl_cost
         done = self._finger_to_target_dist() < 1e-6
         if done:
@@ -54,7 +54,8 @@ class PR2ArmEnv(MujocoEnv, Serializable):
         return Step(next_obs, reward, done)
 
     def _joint_angles(self):
-        return self.model.data.qpos.flat[2:] # Skip 2 DoFs of the target object
+        return self.model.data.qpos.flat[
+            2:]  # Skip 2 DoFs of the target object
 
     def _finger_to_target(self):
         return self._get_geom_pos('finger') - self._get_geom_pos('target')
