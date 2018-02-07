@@ -43,19 +43,20 @@ class PR2ArmEnv(MujocoEnv, Serializable):
         action = np.clip(action, *self.action_bounds)
         lb, ub = self.action_bounds
         scaling = (ub - lb) * 0.5
-        ctrl_cost = 0.5 * 1e-2 * np.sum(np.square(action / scaling))
+        ctrl_cost = 0.5 * 1e-3 * np.sum(np.square(action / scaling))
         distance_to_go = self._finger_to_target_dist()
+        vel_cost = 1e-2 * np.linalg.norm(self._joint_velocities())
 
-        reward = -distance_to_go - ctrl_cost
-        done = self._finger_to_target_dist() < 1e-6
-        if done:
-            print("done!")
+        reward = -distance_to_go - (ctrl_cost*0) - vel_cost
+        done = self._finger_to_target_dist() < self._target_size()
 
         return Step(next_obs, reward, done)
 
     def _joint_angles(self):
-        return self.model.data.qpos.flat[
-            2:]  # Skip 2 DoFs of the target object
+        return self.model.data.qpos.flat
+
+    def _joint_velocities(self):
+        return self.model.data.qvel.flat
 
     def _finger_to_target(self):
         return self._get_geom_pos('finger') - self._get_geom_pos('target')
@@ -68,7 +69,7 @@ class PR2ArmEnv(MujocoEnv, Serializable):
 
     def _get_geom_pos(self, geom_name):
         idx = self.model.geom_names.index(geom_name)
-        return self.model.geom_pos[idx]
+        return self.model.data.geom_xpos[idx]
 
     def _get_geom_size(self, geom_name):
         idx = self.model.geom_names.index(geom_name)
