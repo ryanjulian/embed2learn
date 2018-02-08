@@ -16,8 +16,8 @@ FILE = path.join('pr2', 'pr2_arm.xml')
 
 ACTION_LIMIT = 0.25
 
-
 class PR2ArmEnv(MujocoEnv, Serializable):
+
     def __init__(self, *args, **kwargs):
         kwargs['file_path'] = mujoco_model_path(FILE)
         super(PR2ArmEnv, self).__init__(*args, **kwargs)
@@ -25,8 +25,8 @@ class PR2ArmEnv(MujocoEnv, Serializable):
 
     def get_current_obs(self):
         return np.concatenate([
-            self._joint_angles(),
-            self._finger_to_target(),
+            self.joint_angles(),
+            self.finger_to_target(),
         ])
 
     @overrides
@@ -40,31 +40,28 @@ class PR2ArmEnv(MujocoEnv, Serializable):
     def step(self, action):
         self.forward_dynamics(action)
         next_obs = self.get_current_obs()
-        action = np.clip(action, *self.action_bounds)
-        lb, ub = self.action_bounds
-        scaling = (ub - lb) * 0.5
-        ctrl_cost = 0.5 * 1e-3 * np.sum(np.square(action / scaling))
-        distance_to_go = self._finger_to_target_dist()
-        vel_cost = 1e-2 * np.linalg.norm(self._joint_velocities())
 
-        reward = -distance_to_go - (ctrl_cost*0) - vel_cost
-        done = self._finger_to_target_dist() < self._target_size()
+        distance_to_go = self.finger_to_target_dist()
+        vel_cost = 1e-2 * np.linalg.norm(self.joint_velocities())
+        reward = - distance_to_go - vel_cost
+
+        done = self.finger_to_target_dist() < self.target_size()
 
         return Step(next_obs, reward, done)
-
-    def _joint_angles(self):
+        
+    def joint_angles(self):
         return self.model.data.qpos.flat
 
-    def _joint_velocities(self):
+    def joint_velocities(self):
         return self.model.data.qvel.flat
 
-    def _finger_to_target(self):
+    def finger_to_target(self):
         return self._get_geom_pos('finger') - self._get_geom_pos('target')
 
-    def _finger_to_target_dist(self):
-        return np.linalg.norm(self._finger_to_target())
+    def finger_to_target_dist(self):
+        return np.linalg.norm(self.finger_to_target())
 
-    def _target_size(self):
+    def target_size(self):
         return self._get_geom_size('target')
 
     def _get_geom_pos(self, geom_name):

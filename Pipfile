@@ -13,7 +13,6 @@ yapf = "*"
 [packages]
 
 dm-control = {git = "git://github.com/deepmind/dm_control.git"}
-numpy = "*"
 jupyter = "*"
 ipython = "*"
 scipy = "*"
@@ -21,10 +20,9 @@ matplotlib = "*"
 gym = {extras = ["extras"]}
 mujoco-py = "<1.50.2,>=1.50.1"
 tensorflow-gpu = "*"
-rllab = {editable = true, git = "git://github.com/rll/rllab.git"}
+rllab = {editable = true, git = "git://github.com/ryanjulian/rllab.git"}
 "path.py" = "*"
 joblib = "*"
-Theano = "*"
 PyPrind = "*"
 "Box2D" = {git = "git://github.com/pybox2d/pybox2d.git"}
 Mako = "*"
@@ -32,6 +30,8 @@ cached-property = "*"
 Pygame = "*"
 "e1839a8" = {path = ".", editable = true}
 PyOpenGL = "*"
+Theano = {ref = "adfe319ce6b781083d8dc3200fb4481b00853791", git = "https://github.com/Theano/Theano.git"}
+Lasagne = {ref = "484866cf8b38d878e92d521be445968531646bb8", git = "https://github.com/neocxi/Lasagne.git"}
 
 
 [requires]

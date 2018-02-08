@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "4caac4337fa555d17a76d49461add1bd465e11414d6caa8198e413679f0884ba"
+            "sha256": "3c0ce0d986758c00240538e8eab9397b1ccee3385139d3be71b0c61600859df7"
         },
         "host-environment-markers": {
             "implementation_name": "cpython",
@@ -167,13 +167,6 @@
             ],
             "version": "==0.16.0"
         },
-        "futures": {
-            "hashes": [
-                "sha256:c4884a65654a7c45435063e14ae85280eb1f111d94e542396717ba9828c4337f",
-                "sha256:51ecb45f0add83c806c68e4b06106f90db260585b25ef2abfcda0bd95c0132fd"
-            ],
-            "version": "==3.1.1"
-        },
         "glfw": {
             "hashes": [
                 "sha256:bb82ab8ba3c41326ffe6b0da649ea77f6540d6c74332653c3cfd7c0c19f39821",
@@ -209,11 +202,11 @@
         },
         "ipykernel": {
             "hashes": [
-                "sha256:9b9a9c1c566eabed6dc1536e9ea0cdb7b3a642cdb8a23b67e2047d8d7d61f5f7",
-                "sha256:8622cd42d952849057db38b81f0837a0ee6b865dea65d4b0b660164c96e6d052",
-                "sha256:dedc199df6a38725c732986dfa606c245fb8fe0fe999b33a0c305b73d80c6774"
+                "sha256:fa4a5cbe2f78894c0ce0b13e6d25ff083355f4077d85ed8d21b615d0c7d25c9b",
+                "sha256:1904617c157e2da135288dd913d9db3bdd7ee7cabb78a6cbaf56f334de3c3f19",
+                "sha256:fe2837622a4121cbe42b354db1e2ab46c91e807ffcb92f4c2cfd323a75f8737f"
             ],
-            "version": "==4.8.0"
+            "version": "==4.8.1"
         },
         "ipython": {
             "hashes": [
@@ -293,6 +286,10 @@
             ],
             "version": "==4.4.0"
         },
+        "lasagne": {
+            "git": "https://github.com/neocxi/Lasagne.git",
+            "ref": "484866cf8b38d878e92d521be445968531646bb8"
+        },
         "mako": {
             "hashes": [
                 "sha256:4e02fde57bd4abb5ec400181e4c314f56ac3e49ba4fb8b0d50bba18cb27d25ae"
@@ -344,9 +341,9 @@
         },
         "mujoco-py": {
             "hashes": [
-                "sha256:71984f86292aed31da632bf141a37e505b671738c741c8afb555b8368905e245"
+                "sha256:b57b99b44f4a58b6f79f51cec33fcd4b0fcf58c70f775b7c0625f9cbc2f89b43"
             ],
-            "version": "==1.50.1.35"
+            "version": "==1.50.1.36"
         },
         "nbconvert": {
             "hashes": [
@@ -707,10 +704,10 @@
         },
         "tensorflow-tensorboard": {
             "hashes": [
-                "sha256:663986f43e3283cd08f6feb8a2dede39fb2ca53d992b15b5c50858592a03f72f",
-                "sha256:4157520a6f72e40d50509e31231394f2fed4022400dd2763d1f2d0edc86b47cf"
+                "sha256:47f985cdcaeae697d978dcaca5441ff22533cbcc9ebc4f50b606e7485b931436",
+                "sha256:749845a950009cc2a95b9ba7cd915eff01b363e3e2a71d3eee056890f37ecdb3"
             ],
-            "version": "==1.5.0"
+            "version": "==1.5.1"
         },
         "terminado": {
             "hashes": [
@@ -727,10 +724,8 @@
             "version": "==0.3.1"
         },
         "theano": {
-            "hashes": [
-                "sha256:88d8aba1fe2b6b75eacf455d01bc7e31e838c5a0fb8c13dde2d9472495ff4662"
-            ],
-            "version": "==1.0.1"
+            "git": "https://github.com/Theano/Theano.git",
+            "ref": "adfe319ce6b781083d8dc3200fb4481b00853791"
         },
         "tornado": {
             "hashes": [
