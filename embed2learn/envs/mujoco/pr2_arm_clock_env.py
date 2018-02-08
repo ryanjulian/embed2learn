@@ -1,4 +1,5 @@
 from os import path
+import tempfile
 
 import numpy as np
 
@@ -9,18 +10,37 @@ from rllab.envs.mujoco.mujoco_env import MujocoEnv
 from rllab.misc import autoargs
 from rllab.misc import logger
 from rllab.misc.overrides import overrides
+from rllab.mujoco_py import MjViewer
 
 from embed2learn.envs.mujoco.utils import mujoco_model_path
 
-FILE = path.join('pr2', 'pr2_arm.xml')
+FILE = path.join('pr2', 'pr2_arm_clock.xml')
 
 ACTION_LIMIT = 0.25
+TARGETS = [
+    'center',
+    'hour_1',
+    'hour_2',
+    'hour_3',
+    'hour_4',
+    'hour_5',
+    'hour_6',
+    'hour_7',
+    'hour_8',
+    'hour_9',
+    'hour_10',
+    'hour_11',
+    'hour_12',
+]
+DEFAULT_TARGET = 'center'
 
 
-class PR2ArmEnv(MujocoEnv, Serializable):
-    def __init__(self, *args, **kwargs):
+class PR2ArmClockEnv(MujocoEnv, Serializable):
+    def __init__(self, target=DEFAULT_TARGET, *args, **kwargs):
+        self.target = target
+
         kwargs['file_path'] = mujoco_model_path(FILE)
-        super(PR2ArmEnv, self).__init__(*args, **kwargs)
+        super(PR2ArmClockEnv, self).__init__(*args, **kwargs)
         Serializable.quick_init(self, locals())
 
     def get_current_obs(self):
@@ -28,6 +48,15 @@ class PR2ArmEnv(MujocoEnv, Serializable):
             self.joint_angles(),
             self.finger_to_target(),
         ])
+
+    @overrides
+    def get_viewer(self):
+        if self.viewer is None:
+            self.viewer = MjViewer(
+                title='Simulate: target = {}'.format(self.target))
+            self.viewer.start()
+            self.viewer.set_model(self.model)
+        return self.viewer
 
     @overrides
     @property
@@ -56,13 +85,13 @@ class PR2ArmEnv(MujocoEnv, Serializable):
         return self.model.data.qvel.flat
 
     def finger_to_target(self):
-        return self._get_geom_pos('finger') - self._get_geom_pos('target')
+        return self._get_geom_pos('finger') - self._get_geom_pos(self.target)
 
     def finger_to_target_dist(self):
         return np.linalg.norm(self.finger_to_target())
 
     def target_size(self):
-        return self._get_geom_size('target')
+        return self._get_geom_size(self.target)
 
     def _get_geom_pos(self, geom_name):
         idx = self.model.geom_names.index(geom_name)

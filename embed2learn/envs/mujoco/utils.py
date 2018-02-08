@@ -1,4 +1,6 @@
 from os import path
+import tempfile
+import xml.etree.ElementTree as ET
 
 
 def mujoco_model_path(file):
