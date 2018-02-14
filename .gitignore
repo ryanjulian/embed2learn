@@ -103,3 +103,5 @@ ENV/
 # embed2learn stuff
 MUJOCO_LOG.TXT
 .env
+config_personal.py
+data/

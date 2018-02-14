@@ -23,15 +23,18 @@ tensorflow-gpu = "*"
 rllab = {editable = true, git = "git://github.com/ryanjulian/rllab.git"}
 "path.py" = "*"
 joblib = "*"
-PyPrind = "*"
-"Box2D" = {git = "git://github.com/pybox2d/pybox2d.git"}
-Mako = "*"
+pyprind = "*"
+"box2d" = {git = "git://github.com/pybox2d/pybox2d.git"}
+mako = "*"
 cached-property = "*"
-Pygame = "*"
+pygame = "*"
 "e1839a8" = {path = ".", editable = true}
-PyOpenGL = "*"
-Theano = {ref = "adfe319ce6b781083d8dc3200fb4481b00853791", git = "https://github.com/Theano/Theano.git"}
-Lasagne = {ref = "484866cf8b38d878e92d521be445968531646bb8", git = "https://github.com/neocxi/Lasagne.git"}
+pyopengl = "*"
+theano = {ref = "adfe319ce6b781083d8dc3200fb4481b00853791", git = "https://github.com/Theano/Theano.git"}
+lasagne = {ref = "484866cf8b38d878e92d521be445968531646bb8", git = "https://github.com/neocxi/Lasagne.git"}
+flask = "*"
+plotly = "*"
+cloudpickle = "*"
 
 
 [requires]

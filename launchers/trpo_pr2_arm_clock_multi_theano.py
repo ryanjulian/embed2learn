@@ -5,19 +5,10 @@ from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import stub, run_experiment_lite
 from rllab.algos.trpo import TRPO
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
-import rllab.plotter as plotter
-import rllab.misc.logger as logger
 
 from embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
 from embed2learn.envs.multi_task_env import MultiTaskEnv
 
-
-plotter.init_worker()
-logger.set_snapshot_dir('./.snapshots')
-logger.set_snapshot_mode('gap')
-logger.set_snapshot_gap(100)
-
-# yapf: disable
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},
     'hour_12': {'args': [], 'kwargs': {'target': 'hour_12'}},
@@ -32,32 +23,39 @@ TASKS = {
     'hour_9': {'args': [], 'kwargs': {'target': 'hour_9'}},
     'hour_10': {'args': [], 'kwargs': {'target': 'hour_10'}},
     'hour_11': {'args': [], 'kwargs': {'target': 'hour_11'}},
-}
-# yapf: enable
+} # yapf: disable
 TASK_NAMES = list(TASKS.keys())
 TASK_NAMES.sort()
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
-env = normalize(MultiTaskEnv(PR2ArmClockEnv, TASK_ARGS, TASK_KWARGS))
+def run_task(*_):
+    env = normalize(MultiTaskEnv(PR2ArmClockEnv, TASK_ARGS, TASK_KWARGS))
 
-policy = GaussianMLPPolicy(
-    env_spec=env.spec,
-    # The neural network policy should have two hidden layers, each with 32 hidden units.
-    hidden_sizes=(32, 32))
+    policy = GaussianMLPPolicy(
+        env_spec=env.spec,
+        # The neural network policy should have two hidden layers, each with 32 hidden units.
+        hidden_sizes=(32, 32))
 
-baseline = LinearFeatureBaseline(env_spec=env.spec)
+    baseline = LinearFeatureBaseline(env_spec=env.spec)
 
-algo = TRPO(
-    env=env,
-    policy=policy,
-    baseline=baseline,
-    batch_size=4000,
-    max_path_length=100,
-    n_itr=400000000,
-    discount=0.99,
-    step_size=0.01,
+    algo = TRPO(
+        env=env,
+        policy=policy,
+        baseline=baseline,
+        batch_size=4000,
+        max_path_length=100,
+        n_itr=400000000,
+        discount=0.99,
+        step_size=0.01,
+        plot=True,
+        # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
+    )
+    algo.train()
+
+run_experiment_lite(
+    run_task,
+    n_parallel=1,
+    snapshot_mode="last",
     plot=True,
-    # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
 )
-algo.train()

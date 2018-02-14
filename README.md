@@ -29,12 +29,40 @@ pipenv install
 ```
 
 ### Step 5
-This is a workaround because rllab's setup of MuJoCo is kind of awkward. I may submit a pull request at some point to fix this.
+This is a workaround because rllab's setup of MuJoCo is kind of awkward. I may submit a pull request at some point to fix this. Note: you have to perform this every time you regenerate your pipenv.
 ```shell
-cd `pipenv --venv`/src/rllab
+export HERE=`pwd`
+export RLLAB=`pipenv --venv`/src/rllab
+cd ${RLLAB}
 bash scripts/setup_mujoco.sh
 ```
 
+### Step 6
+We also need a workaround which redirect's rllab's config file from the package to your project. Again, fixing this is a TODO.
+```shell
+cd ${HERE}
+cp ${RLLAB}/rllab/config_personal_template.py ${HERE}/config_personal.py
+ln -s ${HERE}/config_personal.py ${RLLAB}/rllab/config_personal.py
+```
+
+You should edit `config_personal.py` to set your preferences. In particular, I recommend you add the following to redirect data logs to your project directory.
+```python
+import os.path as osp
+LOG_DIR = osp.abspath(osp.join('.', 'data'))
+```
+
+## Quickstart
+In one shell:
+```shell
+pipenv run python launchers/trpo_pr2_arm_theano.py
+```
+In another shell:
+```shell
+pipenv run python -m rllab.viskit.frontend ./data
+```
+Then navigate to [http://localhost:5000](http://localhost:5000)
+
+## More info
 ### System-specific bugs and workarounds
 On GPU-based systems, mujoco-py has a bug in finding the NVIDIA OpenGL drivers for non-Docker hosts. See https://github.com/openai/mujoco-py/issues/44. Workaround below.
 ```shell
