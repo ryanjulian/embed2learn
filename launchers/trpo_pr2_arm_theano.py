@@ -1,10 +1,11 @@
 from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
 from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import stub, run_experiment_lite
 from rllab.algos.trpo import TRPO
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
 import rllab.plotter as plotter
+
+from embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
 
 plotter.init_worker()
 
@@ -26,7 +27,7 @@ algo = TRPO(
     n_itr=100,
     discount=0.99,
     step_size=0.01,
-    plot=False,
+    plot=True,
     # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
 )
 algo.train()

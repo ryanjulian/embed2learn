@@ -16,7 +16,7 @@ from embed2learn.envs.mujoco.utils import mujoco_model_path
 
 FILE = path.join('pr2', 'pr2_arm_clock.xml')
 
-ACTION_LIMIT = 0.25
+ACTION_LIMIT = 0.5
 TARGETS = [
     'center',
     'hour_1',
