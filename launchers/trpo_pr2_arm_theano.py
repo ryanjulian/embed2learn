@@ -6,6 +6,7 @@ from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
 
 from embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
 
+
 def run_task(*_):
     env = normalize(PR2ArmEnv())
 
@@ -29,6 +30,7 @@ def run_task(*_):
         # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
     )
     algo.train()
+
 
 run_experiment_lite(
     run_task,

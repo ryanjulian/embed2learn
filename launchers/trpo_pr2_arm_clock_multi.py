@@ -33,8 +33,10 @@ TASK_NAMES.sort()
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
+
 def run_task(*_):
-    env = TfEnv(normalize(MultiTaskEnv(PR2ArmClockEnv, TASK_ARGS, TASK_KWARGS)))
+    env = TfEnv(
+        normalize(MultiTaskEnv(PR2ArmClockEnv, TASK_ARGS, TASK_KWARGS)))
 
     policy = GaussianMLPPolicy(
         name="policy",
@@ -57,6 +59,7 @@ def run_task(*_):
         # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
     )
     algo.train()
+
 
 run_experiment_lite(
     run_task,
