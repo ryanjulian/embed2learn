@@ -11,7 +11,7 @@ from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
 
 from embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from embed2learn.envs.multi_task_env import MultiTaskEnv
+from embed2learn.envs.one_hot_multi_task_env import OneHotMultiTaskEnv
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},
@@ -28,21 +28,21 @@ TASKS = {
     'hour_10': {'args': [], 'kwargs': {'target': 'hour_10'}},
     'hour_11': {'args': [], 'kwargs': {'target': 'hour_11'}},
 } # yapf: disable
-TASK_NAMES = list(TASKS.keys())
-TASK_NAMES.sort()
+TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 
 def run_task(*_):
     env = TfEnv(
-        normalize(MultiTaskEnv(PR2ArmClockEnv, TASK_ARGS, TASK_KWARGS)))
+        normalize(
+            OneHotMultiTaskEnv(
+                task_env_cls=PR2ArmClockEnv,
+                task_args=TASK_ARGS,
+                task_kwargs=TASK_KWARGS)))
 
     policy = GaussianMLPPolicy(
-        name="policy",
-        env_spec=env.spec,
-        # The neural network policy should have two hidden layers, each with 32 hidden units.
-        hidden_sizes=(32, 32))
+        name="policy", env_spec=env.spec, hidden_sizes=(32, 32))
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)
 
@@ -56,7 +56,6 @@ def run_task(*_):
         discount=0.99,
         step_size=0.01,
         plot=True,
-        # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
     )
     algo.train()
 

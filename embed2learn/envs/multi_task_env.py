@@ -9,77 +9,81 @@ from rllab.envs.base import Step
 
 
 class MultiTaskEnv(Env, Serializable):
-    def __init__(self, wrapped_env_cls, all_args, all_kwargs):
-        Serializable.quick_init(self, locals())
-        self._wrapped_envs = [
-            wrapped_env_cls(*args, **kwargs)
-            for args, kwargs in zip(all_args, all_kwargs)
+    def __init__(self, task_env_cls=None, task_args=None, task_kwargs=None):
+        self._task_envs = [
+            task_env_cls(*t_args, **t_kwargs)
+            for t_args, t_kwargs in zip(task_args, task_kwargs)
         ]
-        self._current_env = None
-
-        self._choose_current_env()
-
-    @property
-    def wrapped_envs(self):
-        return self._wrapped_envs
+        self._active_env = None
+        self._choose_active_task()
 
     def reset(self, **kwargs):
-        self._choose_current_env()
-        return self._obs_with_one_hot(self._current_env.reset(**kwargs))
+        self._choose_active_task()
+        return self._active_env.reset(**kwargs)
 
     @property
     def action_space(self):
-        return self._wrapped_envs[0].action_space
+        return self._task_envs[0].action_space
 
     @property
     def observation_space(self):
-        n = len(self._wrapped_envs)
-        one_hot_ub = np.ones(n)
-        one_hot_lb = np.zeros(n)
-        env_ub, env_lb = self._wrapped_envs[0].observation_space.bounds
-        return spaces.Box(
-            np.concatenate([one_hot_ub, env_ub]),
-            np.concatenate([one_hot_lb, env_lb]))
+        return self._task_envs[0].observation_space
 
     def step(self, action):
-        obs, reward, done, kwargs = self._current_env.step(action)
-        oh_obs = self._obs_with_one_hot(obs)
-        return Step(oh_obs, reward, done, **kwargs)
+        obs, reward, done, info = self._active_env.step(action)
+        info['task'] = self.active_task_one_hot
+        return Step(obs, reward, done, **info)
+
+        return
 
     def render(self, *args, **kwargs):
-        return self._current_env.render(*args, **kwargs)
+        return self._active_env.render(*args, **kwargs)
 
     def log_diagnostics(self, paths, *args, **kwargs):
-        return self._current_env.log_diagnostics(paths, *args, **kwargs)
+        return self._active_env.log_diagnostics(paths, *args, **kwargs)
 
     @property
     def horizon(self):
-        return self._wrapped_envs[0].horizon
+        return self._task_envs[0].horizon
 
     def terminate(self):
-        for env in self._wrapped_envs:
+        for env in self._task_envs:
             env.terminate()
 
     def get_param_values(self):
-        return self._current_env.get_param_values()
+        return self._active_env.get_param_values()
 
     def set_param_values(self, params):
-        self._current_env.set_param_values(params)
+        self._active_env.set_param_values(params)
 
-    def _obs_with_one_hot(self, obs):
-        one_hot = np.zeros(len(self._wrapped_envs))
-        one_hot[self._wrapped_envs.index(self._current_env)] = 1
-        oh_obs = np.concatenate([one_hot, obs])
-        return oh_obs
+    @property
+    def task_space(self):
+        n = len(self._task_envs)
+        one_hot_ub = np.ones(n)
+        one_hot_lb = np.zeros(n)
+        return spaces.Box(one_hot_ub, one_hot_lb)
 
-    def _choose_current_env(self):
+    @property
+    def active_task(self):
+        return self._task_envs.index(self._active_env)
+
+    @property
+    def active_task_one_hot(self):
+        one_hot = np.zeros(self.task_space.shape)
+        one_hot[self.active_task] = self.task_space.high[self.active_task]
+        return one_hot
+
+    @property
+    def num_tasks(self):
+        return len(self._task_envs)
+
+    def _choose_active_task(self):
         # uniform random
-        #return random.choice(self._wrapped_envs)
+        #return random.choice(self._task_envs)
 
         # round robin
-        if self._current_env is None:
-            self._current_env = self._wrapped_envs[0]
+        if self._active_env is None:
+            self._active_env = self._task_envs[0]
         else:
-            i = self._wrapped_envs.index(self._current_env)
-            n = len(self._wrapped_envs)
-            self._current_env = self._wrapped_envs[(i + 1) % n]
+            self._active_env = self._task_envs[(
+                self.active_task + 1) % self.num_tasks]
