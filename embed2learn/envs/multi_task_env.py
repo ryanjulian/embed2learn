@@ -1,15 +1,21 @@
 import random
 
+from cached_property import cached_property
 import numpy as np
 
+from rllab.envs.normalized_env import NormalizedEnv
 from rllab import spaces
 from rllab.core.serializable import Serializable
 from rllab.envs.base import Env
 from rllab.envs.base import Step
 
+from sandbox.rocky.tf.envs.base import TfEnv as BaseTfEnv
+from sandbox.rocky.tf.envs.base import to_tf_space
 
-class MultiTaskEnv(Env, Serializable):
+
+class MultiTaskEnv(Env):
     def __init__(self, task_env_cls=None, task_args=None, task_kwargs=None):
+        #Serializable.quick_init(self, locals())
         self._task_envs = [
             task_env_cls(*t_args, **t_kwargs)
             for t_args, t_kwargs in zip(task_args, task_kwargs)
@@ -87,3 +93,27 @@ class MultiTaskEnv(Env, Serializable):
         else:
             self._active_env = self._task_envs[(
                 self.active_task + 1) % self.num_tasks]
+
+
+class TfEnv(BaseTfEnv):
+    @cached_property
+    def task_space(self):
+        return to_tf_space(self.wrapped_env.task_space)
+
+    @property
+    def active_task_one_hot(self):
+        return self.wrapped_env.active_task_one_hot
+
+
+# TODO: normalize task space for real
+class NormalizedMultiTaskEnv(NormalizedEnv):
+    @property
+    def task_space(self):
+        return self._wrapped_env.task_space
+
+    @property
+    def active_task_one_hot(self):
+        return self.wrapped_env.active_task_one_hot
+
+
+normalize = NormalizedMultiTaskEnv
