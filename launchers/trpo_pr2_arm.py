@@ -1,7 +1,6 @@
 import numpy as np
 
 from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
 from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import stub, run_experiment_lite
 
@@ -10,6 +9,8 @@ from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGr
 from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDifferenceHvp
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
+
+from sandbox.embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
 
 env = TfEnv(normalize(PR2ArmEnv()))
 
