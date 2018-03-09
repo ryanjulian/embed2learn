@@ -12,7 +12,7 @@ from rllab.misc import logger
 from rllab.misc.overrides import overrides
 from rllab.mujoco_py import MjViewer
 
-from embed2learn.envs.mujoco.utils import mujoco_model_path
+from sandbox.embed2learn.envs.mujoco.utils import mujoco_model_path
 
 FILE = path.join('pr2', 'pr2_arm_clock.xml')
 

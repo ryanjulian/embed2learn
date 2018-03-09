@@ -4,7 +4,7 @@ from rllab.envs.normalized_env import normalize
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from rllab.misc.instrument import stub, run_experiment_lite
 
-from embed2learn.envs.dm_control_env import DmControlEnv
+from sandbox.embed2learn.envs.dm_control_env import DmControlEnv
 
 
 def run_task(*_):

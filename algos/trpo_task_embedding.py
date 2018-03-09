@@ -1,6 +1,6 @@
 from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
 
-from embed2learn.algos.npo_task_embedding import NPOTaskEmbedding
+from sandbox.embed2learn.algos.npo_task_embedding import NPOTaskEmbedding
 
 
 class TRPOTaskEmbedding(NPOTaskEmbedding):

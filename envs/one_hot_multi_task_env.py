@@ -7,7 +7,7 @@ from rllab.core.serializable import Serializable
 from rllab.envs.base import Step
 from rllab.misc.overrides import overrides
 
-from embed2learn.envs.multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 
 
 class OneHotMultiTaskEnv(MultiTaskEnv, Serializable):

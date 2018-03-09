@@ -4,7 +4,7 @@ from rllab.misc.instrument import stub, run_experiment_lite
 from rllab.algos.trpo import TRPO
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
 
-from embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
+from sandbox.embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
 
 
 def run_task(*_):

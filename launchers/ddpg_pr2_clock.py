@@ -6,8 +6,8 @@ from rllab.exploration_strategies.ou_strategy import OUStrategy
 from rllab.policies.deterministic_mlp_policy import DeterministicMLPPolicy
 from rllab.q_functions.continuous_mlp_q_function import ContinuousMLPQFunction
 
-from embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from embed2learn.envs.one_hot_multi_task_env import OneHotMultiTaskEnv
+from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
+from sandbox.embed2learn.envs.one_hot_multi_task_env import OneHotMultiTaskEnv
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

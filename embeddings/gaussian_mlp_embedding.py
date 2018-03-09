@@ -12,7 +12,7 @@ from sandbox.rocky.tf.spaces.box import Box
 from sandbox.rocky.tf.distributions.diagonal_gaussian import DiagonalGaussian
 from sandbox.rocky.tf.misc import tensor_utils
 
-from embed2learn.embeddings.base import StochasticEmbedding
+from sandbox.embed2learn.embeddings.base import StochasticEmbedding
 
 
 class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):

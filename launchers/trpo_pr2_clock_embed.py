@@ -12,13 +12,13 @@ from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDiffe
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.spaces.box import Box
 
-from embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
-from embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
-from embed2learn.embeddings.embedding_spec import EmbeddingSpec
-from embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from embed2learn.envs.multi_task_env import MultiTaskEnv
-from embed2learn.envs.multi_task_env import TfEnv
-from embed2learn.envs.multi_task_env import normalize
+from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
+from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
+from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
+from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
+from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.envs.multi_task_env import TfEnv
+from sandbox.embed2learn.envs.multi_task_env import normalize
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

@@ -10,8 +10,8 @@ from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDiffe
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
 
-from embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from embed2learn.envs.one_hot_multi_task_env import OneHotMultiTaskEnv
+from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
+from sandbox.embed2learn.envs.one_hot_multi_task_env import OneHotMultiTaskEnv
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

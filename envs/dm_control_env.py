@@ -1,9 +1,11 @@
+import numpy as np
 from dm_control import suite
+
 from rllab.envs.base import Env
 from rllab.spaces import Box
 from rllab.envs.base import Step
-import numpy as np
-from embed2learn.envs.dm_control_viewer import DmControlViewer
+
+from sandbox.embed2learn.envs.dm_control_viewer import DmControlViewer
 
 RENDER_WIDTH = 640
 RENDER_HEIGHT = 480

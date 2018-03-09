@@ -6,8 +6,8 @@ from rllab.misc.instrument import stub, run_experiment_lite
 from rllab.algos.trpo import TRPO
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
 
-from embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from embed2learn.envs.one_hot_multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
+from sandbox.embed2learn.envs.one_hot_multi_task_env import MultiTaskEnv
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

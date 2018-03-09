@@ -18,8 +18,8 @@ from sandbox.rocky.tf.optimizers.penalty_lbfgs_optimizer import PenaltyLbfgsOpti
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
 from sandbox.rocky.tf.spaces.box import Box
 
-from embed2learn.envs.multi_task_env import MultiTaskEnv
-from embed2learn.embeddings.base import Embedding
+from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.embeddings.base import Embedding
 
 singleton_pool = parallel_sampler.singleton_pool
 
