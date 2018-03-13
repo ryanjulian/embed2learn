@@ -67,7 +67,7 @@ class MultiTaskEnv(Env):
         n = len(self._task_envs)
         one_hot_ub = np.ones(n)
         one_hot_lb = np.zeros(n)
-        return spaces.Box(one_hot_ub, one_hot_lb)
+        return spaces.Box(one_hot_lb, one_hot_ub)
 
     @property
     def active_task(self):

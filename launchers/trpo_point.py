@@ -10,7 +10,7 @@ from sandbox.rocky.tf.envs.base import TfEnv
 
 from sandbox.embed2learn.envs.point_env import PointEnv
 
-env = TfEnv(normalize(PointEnv()))
+env = TfEnv(normalize(PointEnv(goal=(-1, 0))))
 
 policy = GaussianMLPPolicy(
     name="policy",
@@ -26,10 +26,11 @@ algo = TRPO(
     baseline=baseline,
     batch_size=4000,
     max_path_length=100,
-    n_itr=40,
+    n_itr=100,
     discount=0.99,
     step_size=0.01,
-    plot=True,
-    # optimizer=ConjugateGradientOptimizer(hvp_approach=FiniteDifferenceHvp(base_eps=1e-5))
+    plot=False,
+    center_adv=False, # MAYBE BROKEN
+    positive_adv=False,
 )
 algo.train()
