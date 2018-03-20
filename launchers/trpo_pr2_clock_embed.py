@@ -14,6 +14,7 @@ from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
+from sandbox.embed2learn.embeddings.one_hot_embedding import OneHotEmbedding
 from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
 from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
 from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
@@ -91,10 +92,14 @@ def run_task(*_):
     )
 
     # Embeddings
-    task_embedding = GaussianMLPEmbedding(
+    # task_embedding = GaussianMLPEmbedding(
+    #     name="task_embedding",
+    #     embedding_spec=task_embed_spec,
+    #     hidden_sizes=(32, 32),
+    # )
+    task_embedding = OneHotEmbedding(
         name="task_embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(32, 32),
     )
 
     traj_embedding = GaussianMLPEmbedding(
@@ -117,6 +122,8 @@ def run_task(*_):
         discount=0.99,
         step_size=0.01,
         plot=True,
+        center_adv=False,
+        positive_adv=False,
     )
     algo.train()
 

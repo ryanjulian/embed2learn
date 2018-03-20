@@ -110,7 +110,7 @@ def run_task(*_):
         discount=0.99,
         step_size=0.01,
         plot=False,
-        center_adv=False, # MAYBE BROKEN
+        center_adv=True, # MAYBE BROKEN
         positive_adv=False,
     )
     algo.train()
