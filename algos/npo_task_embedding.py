@@ -11,7 +11,6 @@ import rllab.misc.logger as logger
 from sandbox.rocky.tf.algos.batch_polopt import BatchPolopt
 from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.optimizers.penalty_lbfgs_optimizer import PenaltyLbfgsOptimizer
-from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.embeddings.base import Embedding
 from sandbox.embed2learn.embeddings.utils import concat_spaces
@@ -70,13 +69,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Task encoder optimizer
         self.task_enc_optimizer = _optimizer_or_default(
             task_encoder_optimizer, task_encoder_optimizer_args)
-        self.task_enc_step_size = float(task_encoder_step_size)
+        self.task_enc_step_size = float(task_encoder_step_size)  # TODO unused
         self.task_enc_ent_coeff = float(task_encoder_ent_coeff)
 
         # Trajectory encoder optimizer
         self.traj_enc_optimizer = _optimizer_or_default(
             trajectory_encoder_optimizer, trajectory_encoder_optimizer_args)
-        self.traj_enc_step_size = float(trajectory_encoder_step_size)
+        self.traj_enc_step_size = float(trajectory_encoder_step_size)  # TODO unused
         self.traj_enc_ent_coeff = float(trajectory_encoder_ent_coeff)
 
         sampler_cls = TaskEmbeddingSampler
@@ -92,26 +91,20 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, input_list = \
             self._build_opt()
 
+        from sandbox.rocky.tf.core.parameterized import JointParameterized
+
+        # optimize policy, task_encoder and traj_encoder jointly
+        targets = JointParameterized(components=[self.policy, self.task_encoder, self.traj_encoder])
+
+        # TODO Problem if we don't consider KL constraints (leq_constraint) for
+        # TODO (task_enc_mean_kl, self.task_enc_step_size) and (traj_enc_mean_kl, self.traj_enc_step_size) anymore?
+        # Eric: in the trpo_point_embed experiment, the policy's KL divergence was almost always the highest
         self.optimizer.update_opt(
             loss=loss,
-            target=self.policy,
+            target=targets,
             leq_constraint=(pol_mean_kl, self.step_size),
             inputs=input_list,
             constraint_name="mean_kl")
-
-        self.task_enc_optimizer.update_opt(
-            loss=loss,
-            target=self.task_encoder,
-            leq_constraint=(task_enc_mean_kl, self.task_enc_step_size),
-            inputs=input_list,
-            constraint_name="task_encoder_mean_kl")
-
-        self.traj_enc_optimizer.update_opt(
-            loss=loss,
-            target=self.traj_encoder,
-            leq_constraint=(traj_enc_mean_kl, self.traj_enc_step_size),
-            inputs=input_list,
-            constraint_name="trajectory_encoder_mean_kl")
 
         return dict()
 
@@ -704,8 +697,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         ########################################################################
 
-        # Policy optimization
-        logger.log("### Policy ###")
+        # Joint optimization of Policy, Task encoder, Trajectory encoder
+        logger.log("### Policy, Task encoder, Trajectory encoder ###")
         logger.log("Computing loss before")
         loss_before = self.optimizer.loss(all_input_values)
         logger.log("Computing KL before")
@@ -722,54 +715,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('MeanKL', mean_kl)
         logger.record_tabular('dLoss', loss_before - loss_after)
 
-        # Task encoder optimization
-        logger.log("")
-        logger.log("### Task encoder ###")
-        logger.log("Computing loss before")
-        loss_before = self.task_enc_optimizer.loss(all_input_values)
-        if hasattr(self.task_enc_optimizer, 'constraint_val'):
-            logger.log("Computing KL before")
-            mean_kl_before = self.task_enc_optimizer.constraint_val(
-                all_input_values)
-            logger.record_tabular('TaskEncMeanKLBefore', mean_kl_before)
-        logger.log("Optimizing")
-        self.task_enc_optimizer.optimize(all_input_values)
-        if hasattr(self.task_enc_optimizer, 'constraint_val'):
-            logger.log("Computing KL after")
-            mean_kl = self.task_enc_optimizer.constraint_val(all_input_values)
-            logger.record_tabular('TaskEncMeanKL', mean_kl)
-        logger.log("Computing loss after")
-        loss_after = self.task_enc_optimizer.loss(all_input_values)
-        logger.record_tabular('TaskEncLossBefore', loss_before)
-        logger.record_tabular('TaskEncLossAfter', loss_after)
-        logger.record_tabular('TaskEncdLoss', loss_before - loss_after)
-
-        # Trajectory encoder optimization
-        logger.log("")
-        logger.log("### Trajectory encoder ###")
-        logger.log("Computing loss before")
-        loss_before = self.traj_enc_optimizer.loss(all_input_values)
-        if hasattr(self.traj_enc_optimizer, 'constraint_val'):
-            logger.log("Computing KL before")
-            mean_kl_before = self.traj_enc_optimizer.constraint_val(
-                all_input_values)
-            logger.record_tabular('TrajEncMeanKLBefore', mean_kl_before)
-        logger.log("Optimizing")
-        self.traj_enc_optimizer.optimize(all_input_values)
-        if hasattr(self.traj_enc_optimizer, 'constraint_val'):
-            logger.log("Computing KL after")
-            mean_kl = self.traj_enc_optimizer.constraint_val(all_input_values)
-            logger.record_tabular('TrajEncMeanKL', mean_kl)
-        logger.log("Computing loss after")
-        loss_after = self.traj_enc_optimizer.loss(all_input_values)
-        logger.record_tabular('TrajEncLossBefore', loss_before)
-        logger.record_tabular('TrajEncLossAfter', loss_after)
-        logger.record_tabular('TrajEncdLoss', loss_before - loss_after)
-
         return dict()
 
     def train(self, sess=None):
-        created_session = True if (sess is None) else False
         if sess is None:
             sess = tf.Session()
             sess.__enter__()
