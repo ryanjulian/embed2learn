@@ -20,6 +20,7 @@ from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
 from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
+from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},
@@ -42,6 +43,7 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # NOTE: trajectory encoder network size is O(n) with MAX_PATH_LENGTH
 MAX_PATH_LENGTH = 100
+LATENT_LENGTH = 4
 
 #TODO: there seems to be a locking problems somewhere for n>1
 N_PARALLEL = 1
@@ -59,8 +61,8 @@ def run_task(*_):
 
     # Latent space and embedding specs
     # TODO: this should probably be done in Embedding or Algo
-    latent_lb = np.zeros(13, )
-    latent_ub = np.ones(13, )
+    latent_lb = np.zeros(LATENT_LENGTH, )
+    latent_ub = np.ones(LATENT_LENGTH, )
     latent_space = Box(latent_lb, latent_ub)
 
     # trajectory space is MAX_PATH_LENGTH actions and states
@@ -78,34 +80,38 @@ def run_task(*_):
     task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
     traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
 
-    obs_space_embed = Box(
-        np.concatenate([latent_lb, obs_lb]),
-        np.concatenate([latent_ub, obs_ub])
-    )
-    env_spec_embed = EnvSpec(obs_space_embed, env.action_space)
+    # obs_space_embed = Box(
+    #     np.concatenate([latent_lb, obs_lb]),
+    #     np.concatenate([latent_ub, obs_ub])
+    # )
+    obs_embed_space = concat_spaces(env.observation_space, latent_space)
+    env_spec_embed = EnvSpec(obs_embed_space, env.action_space)
 
     # Base policy
     policy = GaussianMLPPolicy(
         name="policy",
         env_spec=env_spec_embed,
         hidden_sizes=(32, 32),
+        adaptive_std=True, # Must be True for embedding learning
     )
 
     # Embeddings
-    # task_embedding = GaussianMLPEmbedding(
-    #     name="task_embedding",
-    #     embedding_spec=task_embed_spec,
-    #     hidden_sizes=(32, 32),
-    # )
-    task_embedding = OneHotEmbedding(
+    task_embedding = GaussianMLPEmbedding(
         name="task_embedding",
         embedding_spec=task_embed_spec,
+        hidden_sizes=(32, 32),
+        adaptive_std=True, # Must be True for embedding learning
     )
+    # task_embedding = OneHotEmbedding(
+    #     name="task_embedding",
+    #     embedding_spec=task_embed_spec,
+    # )
 
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
         hidden_sizes=(32, 32),
+        adaptive_std=True, # Must be True for embedding learning
     )
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)
@@ -122,14 +128,13 @@ def run_task(*_):
         discount=0.99,
         step_size=0.01,
         plot=True,
-        center_adv=False,
-        positive_adv=False,
     )
     algo.train()
 
 
 run_experiment_lite(
     run_task,
+    exp_prefix='trpo_pr2_clock_embed',
     n_parallel=N_PARALLEL,
     plot=True,
 )

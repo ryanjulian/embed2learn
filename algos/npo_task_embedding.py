@@ -42,17 +42,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  optimizer=None,
                  optimizer_args=None,
                  step_size=0.01,
-                 policy_ent_coeff=1e-4,
+                 policy_ent_coeff=1e-3,
                  task_encoder=None,
                  task_encoder_optimizer=None,
                  task_encoder_optimizer_args=None,
                  task_encoder_step_size=0.01,
-                 task_encoder_ent_coeff=1e-4,
+                 task_encoder_ent_coeff=1e-3,
                  trajectory_encoder=None,
                  trajectory_encoder_optimizer=None,
                  trajectory_encoder_optimizer_args=None,
                  trajectory_encoder_step_size=0.01,
-                 trajectory_encoder_ent_coeff=1e-4,
+                 trajectory_encoder_ent_coeff=1e-3,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -729,19 +729,21 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.log("### Task encoder ###")
         logger.log("Computing loss before")
         loss_before = self.task_enc_optimizer.loss(all_input_values)
-        logger.log("Computing KL before")
-        mean_kl_before = self.task_enc_optimizer.constraint_val(
-            all_input_values)
+        if hasattr(self.task_enc_optimizer, 'constraint_val'):
+            logger.log("Computing KL before")
+            mean_kl_before = self.task_enc_optimizer.constraint_val(
+                all_input_values)
+            logger.record_tabular('TaskEncMeanKLBefore', mean_kl_before)
         logger.log("Optimizing")
         self.task_enc_optimizer.optimize(all_input_values)
-        logger.log("Computing KL after")
-        mean_kl = self.task_enc_optimizer.constraint_val(all_input_values)
+        if hasattr(self.task_enc_optimizer, 'constraint_val'):
+            logger.log("Computing KL after")
+            mean_kl = self.task_enc_optimizer.constraint_val(all_input_values)
+            logger.record_tabular('TaskEncMeanKL', mean_kl)
         logger.log("Computing loss after")
         loss_after = self.task_enc_optimizer.loss(all_input_values)
         logger.record_tabular('TaskEncLossBefore', loss_before)
         logger.record_tabular('TaskEncLossAfter', loss_after)
-        logger.record_tabular('TaskEncMeanKLBefore', mean_kl_before)
-        logger.record_tabular('TaskEncMeanKL', mean_kl)
         logger.record_tabular('TaskEncdLoss', loss_before - loss_after)
 
         # Trajectory encoder optimization
@@ -749,19 +751,21 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.log("### Trajectory encoder ###")
         logger.log("Computing loss before")
         loss_before = self.traj_enc_optimizer.loss(all_input_values)
-        logger.log("Computing KL before")
-        mean_kl_before = self.traj_enc_optimizer.constraint_val(
-            all_input_values)
+        if hasattr(self.traj_enc_optimizer, 'constraint_val'):
+            logger.log("Computing KL before")
+            mean_kl_before = self.traj_enc_optimizer.constraint_val(
+                all_input_values)
+            logger.record_tabular('TrajEncMeanKLBefore', mean_kl_before)
         logger.log("Optimizing")
         self.traj_enc_optimizer.optimize(all_input_values)
-        logger.log("Computing KL after")
-        mean_kl = self.traj_enc_optimizer.constraint_val(all_input_values)
+        if hasattr(self.traj_enc_optimizer, 'constraint_val'):
+            logger.log("Computing KL after")
+            mean_kl = self.traj_enc_optimizer.constraint_val(all_input_values)
+            logger.record_tabular('TrajEncMeanKL', mean_kl)
         logger.log("Computing loss after")
         loss_after = self.traj_enc_optimizer.loss(all_input_values)
         logger.record_tabular('TrajEncLossBefore', loss_before)
         logger.record_tabular('TrajEncLossAfter', loss_after)
-        logger.record_tabular('TrajEncMeanKLBefore', mean_kl_before)
-        logger.record_tabular('TrajEncMeanKL', mean_kl)
         logger.record_tabular('TrajEncdLoss', loss_before - loss_after)
 
         return dict()

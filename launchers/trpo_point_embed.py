@@ -10,6 +10,7 @@ from sandbox.rocky.tf.algos.trpo import TRPO
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
 from sandbox.rocky.tf.spaces.box import Box
+from sandbox.rocky.tf.optimizers.first_order_optimizer import FirstOrderOptimizer
 
 from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
@@ -23,21 +24,21 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 TASKS = {
     '(-1, 0)': {'args': [], 'kwargs': {'goal': (-1, 0)}},
-#    '(1, 0)': {'args': [], 'kwargs': {'goal': (1, 0)}},
+    '(1, 0)': {'args': [], 'kwargs': {'goal': (1, 0)}},
 } # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # NOTE: trajectory encoder network size is O(n) with MAX_PATH_LENGTH
-MAX_PATH_LENGTH = 10
-
-LATENT_LENGTH = 2
+MAX_PATH_LENGTH = 100
+LATENT_LENGTH = 4
+N_PARALLEL = 1
 
 #TODO: there seems to be a locking problems somewhere for n>1
-N_PARALLEL = 1
 # Choose number of cores for sampling
 #N_PARALLEL = max(2, mp.cpu_count() - 4)
+
 
 def run_task(*_):
     # Environment
@@ -81,7 +82,7 @@ def run_task(*_):
         name="policy",
         env_spec=env_spec_embed,
         hidden_sizes=(32, 32),
-        adaptive_std=True, # Must be True to calculate entropy
+        adaptive_std=True,  # Must be True for embedding learning
     )
 
     # Embeddings
@@ -89,7 +90,7 @@ def run_task(*_):
         name="task_embedding",
         embedding_spec=task_embed_spec,
         hidden_sizes=(32, 32),
-        adaptive_std=True, # Must be True to calculate entropy
+        adaptive_std=True,  # Must be True for embedding learning
     )
     # task_embedding = OneHotEmbedding(
     #     name="task_embedding",
@@ -100,10 +101,19 @@ def run_task(*_):
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
         hidden_sizes=(32, 32),
-        adaptive_std=True, # Must be True to calculate entropy
+        adaptive_std=True,  # Must be True for embedding learning
     )
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)
+
+    task_opt = FirstOrderOptimizer(
+        name='task_enc_opt', tf_optimizer_args={
+            'learning_rate': 1e-5 # 1e-3 causes instability
+    })
+    traj_opt = FirstOrderOptimizer(
+        name='traj_enc_opt', tf_optimizer_args={
+            'learning_rate': 1e-5 # 1e-3 causes instability
+    })
 
     algo = TRPOTaskEmbedding(
         env=env,
@@ -111,20 +121,26 @@ def run_task(*_):
         baseline=baseline,
         task_encoder=task_embedding,
         trajectory_encoder=traj_embedding,
-        batch_size=400,
+        batch_size=4000,
         max_path_length=MAX_PATH_LENGTH,
-        n_itr=100,
+        n_itr=1000,
         discount=0.99,
         step_size=0.01,
         plot=False,
         center_adv=True,
         positive_adv=False,
+        policy_ent_coeff=1e-3,
+        task_encoder_ent_coeff=1e-3,
+        trajectory_encoder_ent_coeff=1e-3,
+        task_encoder_optimizer=task_opt,
+        trajectory_encoder_optimizer=traj_opt,
     )
     algo.train()
 
 
 run_experiment_lite(
     run_task,
+    exp_prefix='trpo_point_embed',
     n_parallel=N_PARALLEL,
     plot=False,
 )
