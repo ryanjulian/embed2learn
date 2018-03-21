@@ -70,12 +70,8 @@ def run_task(*_):
     task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
     traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
 
-    # obs_space_embed = Box(
-    #     np.concatenate([latent_lb, obs_lb]),
-    #     np.concatenate([latent_ub, obs_ub])
-    # )
-    obs_embed_space = concat_spaces(env.observation_space, latent_space)
-    env_spec_embed = EnvSpec(obs_embed_space, env.action_space)
+    latent_obs_space = concat_spaces(latent_space, env.observation_space)
+    env_spec_embed = EnvSpec(latent_obs_space, env.action_space)
 
     # Base policy
     policy = GaussianMLPPolicy(

@@ -18,6 +18,7 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 from rllab.algos import util  # DEBUG
 from rllab.misc import special  # DEBUG
 
+
 def rollout(env,
             agent,
             task_encoder,
@@ -46,8 +47,8 @@ def rollout(env,
 
     # Append latent vector to observation
     # TODO: should we sample every step or every rollout?
-    obs_embed_space = concat_spaces(env.observation_space,
-                                    task_encoder.latent_space)
+    latent_obs_space = concat_spaces(task_encoder.latent_space,
+                                     env.observation_space)
 
     if animated:
         env.render()
@@ -58,7 +59,7 @@ def rollout(env,
         a, agent_info = agent.get_action(z_o)
         next_o, r, d, env_info = env.step(a)
         env_observations.append(env.observation_space.flatten(o))
-        observations.append(obs_embed_space.flatten(z_o))
+        observations.append(latent_obs_space.flatten(z_o))
         tasks.append(t)
         latents.append(task_encoder.latent_space.flatten(z))
         latent_infos.append(latent_info)
@@ -104,8 +105,8 @@ class TaskEmbeddingSampler(BatchSampler):
     # parallel_sampler API
     # TODO: figure out how to avoid copying all this code
     def _worker_populate_task(self, G, env, policy, task_encoder, scope=None):
-        cpname = mp.current_process().name # DEBUG
-        mp_logger.info('{0} populating task...'.format(cpname)) # DEBUG
+        cpname = mp.current_process().name  # DEBUG
+        mp_logger.info('{0} populating task...'.format(cpname))  # DEBUG
         G = parallel_sampler._get_scoped_G(G, scope)
         G.env = pickle.loads(env)
         G.policy = pickle.loads(policy)
@@ -136,9 +137,9 @@ class TaskEmbeddingSampler(BatchSampler):
         logger.log("Populating workers...")
         if singleton_pool.n_parallel > 1:
             singleton_pool.run_each(self._worker_populate_task,
-                        [(pickle.dumps(env), pickle.dumps(policy),
-                          pickle.dumps(task_encoder),
-                          scope)] * singleton_pool.n_parallel)
+                                    [(pickle.dumps(env), pickle.dumps(policy),
+                                      pickle.dumps(task_encoder),
+                                      scope)] * singleton_pool.n_parallel)
         else:
             # avoid unnecessary copying
             G = parallel_sampler._get_scoped_G(singleton_pool.G, scope)
@@ -249,7 +250,8 @@ class TaskEmbeddingSampler(BatchSampler):
 
             # trajectories
             act = tensor_utils.pad_tensor(path['actions'], max_path_length)
-            obs = tensor_utils.pad_tensor(path['env_observations'], max_path_length)
+            obs = tensor_utils.pad_tensor(path['env_observations'],
+                                          max_path_length)
             act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
             traj = np.concatenate([act_flat, obs_flat], axis=1)

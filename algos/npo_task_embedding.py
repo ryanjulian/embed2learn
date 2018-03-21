@@ -120,13 +120,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         if is_recurrent:
             raise NotImplementedError
 
-        obs_embed_space = concat_spaces(self.env.observation_space,
-                                        self.task_encoder.latent_space)
+        latent_obs_space = concat_spaces(self.task_encoder.latent_space,
+                                         self.env.observation_space)
 
         #### Policy and loss function ##########################################
 
         # Input variables
-        obs_var = obs_embed_space.new_tensor_variable(
+        obs_var = latent_obs_space.new_tensor_variable(
             'obs',
             extra_dims=1 + 1,
         )
@@ -449,7 +449,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._traj_enc_mean_kl = traj_enc_mean_kl
 
         # DEBUG CPU VERSION ####################################################
-        cpu_obs_var = obs_embed_space.new_tensor_variable(
+        cpu_obs_var = latent_obs_space.new_tensor_variable(
             'obs_cpu',
             extra_dims=1 + is_recurrent,
         )
@@ -548,10 +548,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         all_input_values += tuple(traj_enc_state_info_list) + tuple(
             traj_enc_dist_info_list)
 
-
-
         #### DEBUG #############################################################
-         # for k, v in samples_data.items():
+        # for k, v in samples_data.items():
         #     if hasattr(v, 'shape'):
         #         print('{}: {}'.format(k,v.shape))
         #     if isinstance(v, dict):
@@ -705,7 +703,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #print('baselines_shift: {}:'.format(base_shift))
 
         ########################################################################
-
 
         # Policy optimization
         logger.log("### Policy ###")
