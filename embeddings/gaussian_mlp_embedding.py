@@ -56,7 +56,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         :return:
         """
         Serializable.quick_init(self, locals())
-        assert isinstance(embedding_spec.input_space, Box)
+        assert isinstance(embedding_spec.latent_space, Box)
 
         with tf.variable_scope(name):
             in_dim = embedding_spec.input_space.flat_dim
@@ -84,6 +84,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
                     std_network = MLP(
                         name="std_network",
                         input_shape=(in_dim, ),
+                        input_layer=mean_network.input_layer,
                         output_dim=latent_dim,
                         hidden_sizes=std_hidden_sizes,
                         hidden_nonlinearity=std_hidden_nonlinearity,
@@ -101,7 +102,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
                         mean_network.input_layer,
                         num_units=latent_dim,
                         param=tf.constant_initializer(init_std_param),
-                        name="latent_std_param",
+                        name="output_std_param",
                         trainable=learn_std,
                     )
 
@@ -118,6 +119,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
 
             self._l_mean = l_mean
             self._l_std_param = l_std_param
+
             self._dist = DiagonalGaussian(latent_dim)
 
             LayersPowered.__init__(self, [l_mean, l_std_param])
@@ -163,7 +165,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         means, log_stds = self._f_dist(flat_in)
         rnd = np.random.normal(size=means.shape)
         latents = rnd * np.exp(log_stds) + means
-        return latents, dict(means=means, log_std=log_stds)
+        return latents, dict(mean=means, log_std=log_stds)
 
     def get_reparam_latent_sym(self, in_var, latent_var, old_dist_info_vars):
         """
@@ -199,18 +201,17 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
 
     def log_likelihood_sym(self, input_var, latent_var):
         dist_info = self.dist_info_sym(input_var, latent_var)
-        means_var, log_std_var = dist_info['mean'], dist_info['log_std']
+        means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
         return self._dist.log_likelihood_sym(latent_var,
                                              dict(
                                                  mean=means_var,
                                                  log_std=log_stds_var))
 
     def entropy(self, dist_info):
-        log_stds = dist_info["log_std"]
-        return np.sum(log_stds + np.log(np.sqrt(2 * np.pi * np.e)), axis=-1)
+        return self.distribution.entropy(dist_info)
 
-    def entropy_sym(self):
-        pass
+    def entropy_sym(self, dist_info_var):
+        return self.distribution.entropy_sym(dist_info_var)
 
     def log_diagnostics(self):
         log_stds = np.vstack(

@@ -1,19 +1,21 @@
+import pickle
+
 import numpy as np
 
 import rllab.misc.logger as logger
 from rllab.sampler import parallel_sampler
+from rllab.sampler.stateful_pool import singleton_pool
 
 from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
+from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf
+from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf_vars
 from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 from rllab.algos import util  # DEBUG
 from rllab.misc import special  # DEBUG
-
-singleton_pool = parallel_sampler.singleton_pool
-
 
 def rollout(env,
             agent,
@@ -77,7 +79,7 @@ def rollout(env,
         rewards=tensor_utils.stack_tensor_list(rewards),
         tasks=tensor_utils.stack_tensor_list(tasks),
         latents=tensor_utils.stack_tensor_list(latents),
-        latent_infos=tensor_utils.stack_tensor_list(latent_infos),
+        latent_infos=tensor_utils.stack_tensor_dict_list(latent_infos),
         agent_infos=tensor_utils.stack_tensor_dict_list(agent_infos),
         env_infos=tensor_utils.stack_tensor_dict_list(env_infos),
     )
@@ -89,18 +91,16 @@ class TaskEmbeddingSampler(BatchSampler):
                  *args,
                  task_encoder=None,
                  trajectory_encoder=None,
-                 trajectory_encoder_ent_coeff=None,
-                 policy_ent_coeff=None,
                  **kwargs):
         super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
         self.task_encoder = task_encoder
         self.traj_encoder = trajectory_encoder
-        self.traj_encoder_ent_coeff = trajectory_encoder_ent_coeff
-        self.pol_ent_coeff = policy_ent_coeff
 
     # parallel_sampler API
     # TODO: figure out how to avoid copying all this code
     def _worker_populate_task(self, G, env, policy, task_encoder, scope=None):
+        cpname = mp.current_process().name # DEBUG
+        mp_logger.info('{0} populating task...'.format(cpname)) # DEBUG
         G = parallel_sampler._get_scoped_G(G, scope)
         G.env = pickle.loads(env)
         G.policy = pickle.loads(policy)
@@ -131,9 +131,9 @@ class TaskEmbeddingSampler(BatchSampler):
         logger.log("Populating workers...")
         if singleton_pool.n_parallel > 1:
             singleton_pool.run_each(self._worker_populate_task,
-                                    [(pickle.dumps(env), pickle.dumps(policy),
-                                      pickle.dumps(task_encoder),
-                                      scope)] * singleton_pool.n_parallel)
+                        [(pickle.dumps(env), pickle.dumps(policy),
+                          pickle.dumps(task_encoder),
+                          scope)] * singleton_pool.n_parallel)
         else:
             # avoid unnecessary copying
             G = parallel_sampler._get_scoped_G(singleton_pool.G, scope)
@@ -149,11 +149,11 @@ class TaskEmbeddingSampler(BatchSampler):
     # BatchSampler API
     def start_worker(self):
         if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(BatchSampler.worker_init_tf)
+            singleton_pool.run_each(worker_init_tf)
         self.populate_task(self.algo.env, self.algo.policy,
                            self.algo.task_encoder)
         if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(BatchSampler.worker_init_tf_vars)
+            singleton_pool.run_each(worker_init_tf_vars)
 
     def shutdown_worker(self):
         self.terminate_task(scope=self.algo.scope)
@@ -243,15 +243,18 @@ class TaskEmbeddingSampler(BatchSampler):
             returns.append(path["returns"])
 
             # trajectories
-            act = path['actions']
-            obs = path['observations']
+            act = tensor_utils.pad_tensor(path['actions'], max_path_length)
+            obs = tensor_utils.pad_tensor(path['env_observations'], max_path_length)
             act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
             traj = np.concatenate([act_flat, obs_flat], axis=1)
             traj = np.concatenate(traj)
             trajs = np.tile(traj, (max_path_length, 1))
             path['trajectories'] = trajs
-            trajectories.append(path['trajectories'])
+
+            # trajectory infos
+            _, traj_infos = self.traj_encoder.get_latents(trajs)
+            path['trajectory_infos'] = traj_infos
 
         ev = special.explained_variance_1d(
             np.concatenate(baselines), np.concatenate(returns))
@@ -282,6 +285,9 @@ class TaskEmbeddingSampler(BatchSampler):
         actions = [path["actions"] for path in paths]
         actions = tensor_utils.pad_tensor_n(actions, max_path_length)
 
+        tasks = [path["tasks"] for path in paths]
+        tasks = tensor_utils.pad_tensor_n(tasks, max_path_length)
+
         latents = [path['latents'] for path in paths]
         latents = tensor_utils.pad_tensor_n(latents, max_path_length)
 
@@ -293,12 +299,24 @@ class TaskEmbeddingSampler(BatchSampler):
 
         baselines = tensor_utils.pad_tensor_n(baselines, max_path_length)
 
-        #trajectories = tensor_utils.pad_tensor_n(trajectories, max_path_length)
+        trajectories = np.array([path["trajectories"] for path in paths])
 
         agent_infos = [path["agent_infos"] for path in paths]
         agent_infos = tensor_utils.stack_tensor_dict_list([
             tensor_utils.pad_tensor_dict(p, max_path_length)
             for p in agent_infos
+        ])
+
+        latent_infos = [path["latent_infos"] for path in paths]
+        latent_infos = tensor_utils.stack_tensor_dict_list([
+            tensor_utils.pad_tensor_dict(p, max_path_length)
+            for p in latent_infos
+        ])
+
+        trajectory_infos = [path["trajectory_infos"] for path in paths]
+        trajectory_infos = tensor_utils.stack_tensor_dict_list([
+            tensor_utils.pad_tensor_dict(p, max_path_length)
+            for p in trajectory_infos
         ])
 
         env_infos = [path["env_infos"] for path in paths]
@@ -321,6 +339,7 @@ class TaskEmbeddingSampler(BatchSampler):
         samples_data = dict(
             observations=obs,
             actions=actions,
+            tasks=tasks,
             latents=latents,
             trajectories=trajectories,
             rewards=rewards,
@@ -328,6 +347,8 @@ class TaskEmbeddingSampler(BatchSampler):
             returns=returns,
             valids=valids,
             agent_infos=agent_infos,
+            latent_infos=latent_infos,
+            trajectory_infos=trajectory_infos,
             env_infos=env_infos,
             paths=paths,
             cpu_adv=cpu_adv,  #DEBUG
