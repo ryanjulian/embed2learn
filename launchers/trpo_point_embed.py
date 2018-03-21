@@ -31,7 +31,7 @@ TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # NOTE: trajectory encoder network size is O(n) with MAX_PATH_LENGTH
-MAX_PATH_LENGTH = 100
+MAX_PATH_LENGTH = 20
 LATENT_LENGTH = 4
 N_PARALLEL = 1
 
@@ -121,7 +121,7 @@ def run_task(*_):
         baseline=baseline,
         task_encoder=task_embedding,
         trajectory_encoder=traj_embedding,
-        batch_size=4000,
+        batch_size=800,
         max_path_length=MAX_PATH_LENGTH,
         n_itr=1000,
         discount=0.99,
@@ -132,8 +132,8 @@ def run_task(*_):
         policy_ent_coeff=1e-3,
         task_encoder_ent_coeff=1e-3,
         trajectory_encoder_ent_coeff=1e-3,
-        task_encoder_optimizer=task_opt,
-        trajectory_encoder_optimizer=traj_opt,
+        #task_encoder_optimizer=task_opt,
+        #trajectory_encoder_optimizer=traj_opt,
     )
     algo.train()
 

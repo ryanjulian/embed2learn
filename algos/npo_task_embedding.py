@@ -189,6 +189,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         old_dist_info_flat = flatten_batch_dict(old_dist_info_vars)
 
         # Calculate policy distributions for each timestep
+        # TODO: may need to freeze this for all three op steps
         dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
 
         # Calculate entropy terms

@@ -38,6 +38,12 @@ def rollout(env,
     o = env.reset()
     agent.reset()
 
+    # Sample embedding network
+    # NOTE: it is important to do this _once per rollout_, not once per
+    # time-step, since we need correlated noise.
+    t = env.active_task_one_hot
+    z, latent_info = task_encoder.get_latent(t)
+
     # Append latent vector to observation
     # TODO: should we sample every step or every rollout?
     obs_embed_space = concat_spaces(env.observation_space,
@@ -48,8 +54,6 @@ def rollout(env,
 
     path_length = 0
     while path_length < max_path_length:
-        t = env.active_task_one_hot
-        z, latent_info = task_encoder.get_latent(t)
         z_o = np.concatenate([z, o])
         a, agent_info = agent.get_action(z_o)
         next_o, r, d, env_info = env.step(a)
