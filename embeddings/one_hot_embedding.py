@@ -11,9 +11,7 @@ from sandbox.embed2learn.embeddings.base import Embedding
 
 
 class OneHotEmbedding(Embedding, Serializable):
-    def __init__(self,
-                 name,
-                 embedding_spec):
+    def __init__(self, name, embedding_spec):
         """
         :param embedding_spec:
         :return:

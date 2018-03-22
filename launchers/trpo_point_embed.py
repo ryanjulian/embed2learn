@@ -10,7 +10,6 @@ from sandbox.rocky.tf.algos.trpo import TRPO
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
 from sandbox.rocky.tf.spaces.box import Box
-from sandbox.rocky.tf.optimizers.first_order_optimizer import FirstOrderOptimizer
 
 from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
@@ -22,6 +21,8 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
+N_PARALLEL = 1  # TODO(gh/10): the sampler is broken for n_parallel > 1
+
 TASKS = {
     '(-1, 0)': {'args': [], 'kwargs': {'goal': (-1, 0)}},
     '(1, 0)': {'args': [], 'kwargs': {'goal': (1, 0)}},
@@ -30,14 +31,9 @@ TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
-# NOTE: trajectory encoder network size is O(n) with MAX_PATH_LENGTH
-MAX_PATH_LENGTH = 20
+# Embedding params
 LATENT_LENGTH = 4
-N_PARALLEL = 1
-
-#TODO: there seems to be a locking problems somewhere for n>1
-# Choose number of cores for sampling
-#N_PARALLEL = max(2, mp.cpu_count() - 4)
+TRAJ_ENC_WINDOW = 2
 
 
 def run_task(*_):
@@ -50,12 +46,13 @@ def run_task(*_):
                 task_kwargs=TASK_KWARGS)))
 
     # Latent space and embedding specs
-    # TODO: this should probably be done in Embedding or Algo
+    # TODO(gh/10): this should probably be done in Embedding or Algo
     latent_lb = np.zeros(LATENT_LENGTH, )
     latent_ub = np.ones(LATENT_LENGTH, )
     latent_space = Box(latent_lb, latent_ub)
 
-    # trajectory space is MAX_PATH_LENGTH actions and states
+    # trajectory space is (TRAJ_ENC_WINDOW, act_obs) where act_obs is a stacked
+    # vector of flattened actions and observations
     act_lb, act_ub = env.action_space.bounds
     act_lb_flat = env.action_space.flatten(act_lb)
     act_ub_flat = env.action_space.flatten(act_ub)
@@ -64,12 +61,12 @@ def run_task(*_):
     obs_ub_flat = env.observation_space.flatten(obs_ub)
     act_obs_lb = np.concatenate([act_lb_flat, obs_lb_flat])
     act_obs_ub = np.concatenate([act_ub_flat, obs_ub_flat])
-    traj_lb = np.tile(act_obs_lb, MAX_PATH_LENGTH)
-    traj_ub = np.tile(act_obs_ub, MAX_PATH_LENGTH)
+    traj_lb = np.stack([act_obs_lb] * TRAJ_ENC_WINDOW)
+    traj_ub = np.stack([act_obs_ub] * TRAJ_ENC_WINDOW)
     traj_space = Box(traj_lb, traj_ub)
+
     task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
     traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
-
     latent_obs_space = concat_spaces(latent_space, env.observation_space)
     env_spec_embed = EnvSpec(latent_obs_space, env.action_space)
 
@@ -102,15 +99,6 @@ def run_task(*_):
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)
 
-    task_opt = FirstOrderOptimizer(
-        name='task_enc_opt', tf_optimizer_args={
-            'learning_rate': 1e-5 # 1e-3 causes instability
-    })
-    traj_opt = FirstOrderOptimizer(
-        name='traj_enc_opt', tf_optimizer_args={
-            'learning_rate': 1e-5 # 1e-3 causes instability
-    })
-
     algo = TRPOTaskEmbedding(
         env=env,
         policy=policy,
@@ -118,18 +106,14 @@ def run_task(*_):
         task_encoder=task_embedding,
         trajectory_encoder=traj_embedding,
         batch_size=800,
-        max_path_length=MAX_PATH_LENGTH,
+        max_path_length=20,
         n_itr=1000,
         discount=0.99,
         step_size=0.01,
         plot=False,
-        center_adv=True,
-        positive_adv=False,
         policy_ent_coeff=1e-3,
         task_encoder_ent_coeff=1e-3,
         trajectory_encoder_ent_coeff=1e-3,
-        #task_encoder_optimizer=task_opt,
-        #trajectory_encoder_optimizer=traj_opt,
     )
     algo.train()
 

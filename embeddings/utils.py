@@ -2,6 +2,7 @@ import numpy as np
 
 from sandbox.rocky.tf.spaces.box import Box
 
+
 def concat_spaces(top, bottom):
     assert isinstance(top, Box)
     assert isinstance(bottom, Box)

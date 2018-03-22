@@ -4,11 +4,9 @@ import numpy as np
 
 from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
 from rllab.envs.env_spec import EnvSpec
-from rllab.misc.instrument import stub, run_experiment_lite
+from rllab.misc.instrument import run_experiment_lite
 
 from sandbox.rocky.tf.algos.trpo import TRPO
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDifferenceHvp
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.spaces.box import Box
 
@@ -21,6 +19,8 @@ from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
+
+N_PARALLEL = 1  # TODO(gh/10): the sampler is broken for n_parallel > 1
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},
@@ -41,14 +41,10 @@ TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
-# NOTE: trajectory encoder network size is O(n) with MAX_PATH_LENGTH
-MAX_PATH_LENGTH = 100
+# Embedding parameters
 LATENT_LENGTH = 4
+TRAJ_ENC_WINDOW = 5
 
-#TODO: there seems to be a locking problems somewhere for n>1
-N_PARALLEL = 1
-# Choose number of cores for sampling
-#N_PARALLEL = max(2, mp.cpu_count() - 4)
 
 def run_task(*_):
     # Environment
@@ -60,12 +56,13 @@ def run_task(*_):
                 task_kwargs=TASK_KWARGS)))
 
     # Latent space and embedding specs
-    # TODO: this should probably be done in Embedding or Algo
+    # TODO(gh/10): this should probably be done in Embedding or Algo
     latent_lb = np.zeros(LATENT_LENGTH, )
     latent_ub = np.ones(LATENT_LENGTH, )
     latent_space = Box(latent_lb, latent_ub)
 
-    # trajectory space is MAX_PATH_LENGTH actions and states
+    # trajectory space is (TRAJ_ENC_WINDOW, act_obs) where act_obs is a stacked
+    # vector of flattened actions and observations
     act_lb, act_ub = env.action_space.bounds
     act_lb_flat = env.action_space.flatten(act_lb)
     act_ub_flat = env.action_space.flatten(act_ub)
@@ -74,12 +71,12 @@ def run_task(*_):
     obs_ub_flat = env.observation_space.flatten(obs_ub)
     act_obs_lb = np.concatenate([act_lb_flat, obs_lb_flat])
     act_obs_ub = np.concatenate([act_ub_flat, obs_ub_flat])
-    traj_lb = np.tile(act_obs_lb, MAX_PATH_LENGTH)
-    traj_ub = np.tile(act_obs_ub, MAX_PATH_LENGTH)
+    traj_lb = np.stack([act_obs_lb] * TRAJ_ENC_WINDOW)
+    traj_ub = np.stack([act_obs_ub] * TRAJ_ENC_WINDOW)
     traj_space = Box(traj_lb, traj_ub)
+
     task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
     traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
-
     latent_obs_space = concat_spaces(latent_space, env.observation_space)
     env_spec_embed = EnvSpec(latent_obs_space, env.action_space)
 
@@ -88,7 +85,7 @@ def run_task(*_):
         name="policy",
         env_spec=env_spec_embed,
         hidden_sizes=(32, 32),
-        adaptive_std=True, # Must be True for embedding learning
+        adaptive_std=True,  # Must be True for embedding learning
     )
 
     # Embeddings
@@ -96,7 +93,7 @@ def run_task(*_):
         name="task_embedding",
         embedding_spec=task_embed_spec,
         hidden_sizes=(32, 32),
-        adaptive_std=True, # Must be True for embedding learning
+        adaptive_std=True,  # Must be True for embedding learning
     )
     # task_embedding = OneHotEmbedding(
     #     name="task_embedding",
@@ -107,7 +104,7 @@ def run_task(*_):
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
         hidden_sizes=(32, 32),
-        adaptive_std=True, # Must be True for embedding learning
+        adaptive_std=True,  # Must be True for embedding learning
     )
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)

@@ -10,13 +10,12 @@ from sandbox.rocky.tf.envs.base import TfEnv
 
 from sandbox.embed2learn.envs.point_env import PointEnv
 
+
 def run_task(*_):
     env = TfEnv(normalize(PointEnv(goal=(-1, 0))))
 
     policy = GaussianMLPPolicy(
-        name="policy",
-        env_spec=env.spec,
-        hidden_sizes=(32, 32))
+        name="policy", env_spec=env.spec, hidden_sizes=(32, 32))
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)
 
@@ -31,9 +30,9 @@ def run_task(*_):
         step_size=0.01,
         plot=False,
         force_batch_sampler=True,
-
     )
     algo.train()
+
 
 run_experiment_lite(
     run_task,

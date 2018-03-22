@@ -6,7 +6,6 @@ from rllab.envs.base import Step
 
 
 class PointEnv(Env):
-
     def __init__(self, goal=(0, 0), *args, **kwargs):
         self._goal = np.array(goal, dtype=np.float32)
         super(PointEnv, self).__init__(*args, **kwargs)
