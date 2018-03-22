@@ -33,7 +33,7 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
 LATENT_LENGTH = 4
-TRAJ_ENC_WINDOW = 2
+TRAJ_ENC_WINDOW = 5
 
 
 def run_task(*_):
@@ -85,10 +85,6 @@ def run_task(*_):
         hidden_sizes=(32, 32),
         adaptive_std=True,  # Must be True for embedding learning
     )
-    # task_embedding = OneHotEmbedding(
-    #     name="task_embedding",
-    #     embedding_spec=task_embed_spec,
-    # )
 
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
@@ -97,7 +93,7 @@ def run_task(*_):
         adaptive_std=True,  # Must be True for embedding learning
     )
 
-    baseline = LinearFeatureBaseline(env_spec=env.spec)
+    baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
 
     algo = TRPOTaskEmbedding(
         env=env,
@@ -105,15 +101,15 @@ def run_task(*_):
         baseline=baseline,
         task_encoder=task_embedding,
         trajectory_encoder=traj_embedding,
-        batch_size=800,
-        max_path_length=20,
+        batch_size=4000,
+        max_path_length=100,
         n_itr=1000,
         discount=0.99,
         step_size=0.01,
         plot=False,
         policy_ent_coeff=1e-3,
-        task_encoder_ent_coeff=1e-3,
-        trajectory_encoder_ent_coeff=1e-3,
+        task_encoder_ent_coeff=1e-4,
+        trajectory_encoder_ent_coeff=1e-4,
     )
     algo.train()
 
