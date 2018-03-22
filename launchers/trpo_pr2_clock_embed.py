@@ -95,10 +95,6 @@ def run_task(*_):
         hidden_sizes=(32, 32),
         adaptive_std=True,  # Must be True for embedding learning
     )
-    # task_embedding = OneHotEmbedding(
-    #     name="task_embedding",
-    #     embedding_spec=task_embed_spec,
-    # )
 
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
@@ -107,7 +103,7 @@ def run_task(*_):
         adaptive_std=True,  # Must be True for embedding learning
     )
 
-    baseline = LinearFeatureBaseline(env_spec=env.spec)
+    baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
 
     algo = TRPOTaskEmbedding(
         env=env,
