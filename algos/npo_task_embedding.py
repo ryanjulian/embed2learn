@@ -5,6 +5,7 @@ import tensorflow as tf
 
 from rllab.core.serializable import Serializable
 from rllab.misc import ext
+from rllab.misc import special
 from rllab.misc.overrides import overrides
 import rllab.misc.logger as logger
 
@@ -42,9 +43,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  optimizer=None,
                  optimizer_args=None,
                  step_size=0.01,
-                 policy_ent_coeff=1e-4,
+                 policy_ent_coeff=1e-3,
                  task_encoder=None,
-                 task_encoder_ent_coeff=1e-3,
+                 task_encoder_ent_coeff=1e-4,
                  trajectory_encoder=None,
                  trajectory_encoder_ent_coeff=1e-4,
                  **kwargs):
@@ -225,7 +226,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             float(self.discount) * float(self.gae_lambda),
             dtype=tf.float32,
             shape=[self.max_path_length, 1, 1])
-        discount_filter = tf.cumprod(gamma_lambda, exclusive=True)
+        advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
 
         # Calculate deltas
         pad = tf.zeros_like(baseline_var[:, :1])
@@ -237,7 +238,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         deltas_pad = tf.expand_dims(
             tf.concat([deltas, tf.zeros_like(deltas[:, :-1])], axis=1), axis=2)
         adv = tf.nn.conv1d(
-            deltas_pad, discount_filter, stride=1, padding='VALID')
+            deltas_pad, advantage_filter, stride=1, padding='VALID')
         advantages = tf.reshape(adv, [-1])
         adv_flat = flatten_batch(advantages)
 
@@ -268,6 +269,20 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         pol_mean_kl = tf.reduce_mean(kl)
         surr_loss = -tf.reduce_mean(lr * adv_valid) - \
                     (self.task_enc_ent_coeff * task_enc_entropy)
+
+        #### Returns (for the baseline) ########################################
+        # This uses the same filtering trick as above to calculate the
+        # discounted cumulative sum
+        gamma = tf.constant(
+            float(self.discount),
+            dtype=tf.float32,
+            shape=[self.max_path_length, 1, 1])
+        return_filter = tf.cumprod(gamma, exclusive=True)
+        rewards_pad = tf.expand_dims(
+            tf.concat([rewards, tf.zeros_like(rewards[:, :-1])], axis=1),
+            axis=2)
+        returns = tf.nn.conv1d(
+            rewards_pad, return_filter, stride=1, padding='VALID')
 
         #### Task encoder KL divergence ########################################
         # Input variables
@@ -483,6 +498,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._cpu_surr_loss = cpu_surr_loss
         #######################################################################
 
+        self.f_rewards = tensor_utils.compile_function(
+            input_list, rewards, log_name="f_rewards")
+        self.f_returns = tensor_utils.compile_function(
+            input_list, returns, log_name="f_returns")
+
         return surr_loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, \
                input_list
 
@@ -696,6 +716,53 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('MeanKLBefore', mean_kl_before)
         logger.record_tabular('MeanKL', mean_kl)
         logger.record_tabular('dLoss', loss_before - loss_after)
+
+        # Baseline optimization
+        paths = samples_data['paths']
+        valids = samples_data['valids']
+        baselines = [path['baselines'] for path in paths]
+        env_rewards = [path['rewards'] for path in paths]
+        env_rewards = tensor_utils.concat_tensor_list(env_rewards.copy())
+        env_returns = [path['returns'] for path in paths]
+        env_returns = tensor_utils.concat_tensor_list(env_returns.copy())
+
+        # Get rewards and returns from TF
+        # TODO: check the squeeze/dimension handling for both convolutions
+        rewards_tensor = self.f_rewards(*all_input_values)
+        returns_tensor = self.f_returns(*all_input_values)
+        returns_tensor = np.squeeze(returns_tensor)  # TODO
+
+        # Recompute parts of samples_data
+        aug_rewards = []
+        aug_returns = []
+        for rew, ret, val, path in zip(rewards_tensor, returns_tensor, valids,
+                                       paths):
+            path['rewards'] = rew[val.astype(np.bool)]
+            path['returns'] = ret[val.astype(np.bool)]
+            aug_rewards.append(path['rewards'])
+            aug_returns.append(path['returns'])
+        aug_rewards = tensor_utils.concat_tensor_list(aug_rewards)
+        aug_returns = tensor_utils.concat_tensor_list(aug_returns)
+        samples_data['rewards'] = aug_rewards
+        samples_data['returns'] = aug_returns
+
+        # Calculate effect of the entropy terms
+        d_rewards = np.sqrt(np.sum((env_rewards - aug_rewards)**2))
+        d_returns = np.sqrt(np.sum((env_returns - aug_returns)**2))
+        logger.record_tabular('dAugmentedRewards', d_rewards)
+        logger.record_tabular('dAugmentedReturns', d_returns)
+
+        # Calculate explained variance
+        ev = special.explained_variance_1d(
+            np.concatenate(baselines), aug_returns)
+        logger.record_tabular('ExplainedVariance', ev)
+
+        # Fit baseline
+        logger.log("Fitting baseline...")
+        if hasattr(self.baseline, 'fit_with_samples'):
+            self.baseline.fit_with_samples(paths, samples_data)
+        else:
+            self.baseline.fit(paths)
 
         return dict()
 

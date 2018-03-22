@@ -379,18 +379,10 @@ class TaskEmbeddingSampler(BatchSampler):
             cpu_agent_infos=cpu_agent_infos,  # DEBUG
         )
 
-        logger.log("fitting baseline...")
-        if hasattr(self.algo.baseline, 'fit_with_samples'):
-            self.algo.baseline.fit_with_samples(paths, samples_data)
-        else:
-            self.algo.baseline.fit(paths)
-        logger.log("fitted")
-
         logger.record_tabular('Iteration', itr)
         logger.record_tabular('AverageDiscountedReturn',
                               average_discounted_return)
         logger.record_tabular('AverageReturn', np.mean(undiscounted_returns))
-        logger.record_tabular('ExplainedVariance', ev)
         logger.record_tabular('NumTrajs', len(paths))
         logger.record_tabular('Entropy', ent)
         logger.record_tabular('Perplexity', np.exp(ent))
