@@ -9,9 +9,9 @@ from sandbox.embed2learn.envs.dm_control_env import DmControlEnv
 
 def run_task(*_):
     env = normalize(
-            DmControlEnv(
-                domain_name='cartpole', task_name='balance',
-                visualize_reward=True))
+        DmControlEnv(
+            domain_name='cartpole', task_name='balance',
+            visualize_reward=True))
 
     policy = GaussianMLPPolicy(
         env_spec=env.spec,
@@ -32,6 +32,7 @@ def run_task(*_):
         plot=True,
     )
     algo.train()
+
 
 run_experiment_lite(
     run_task,

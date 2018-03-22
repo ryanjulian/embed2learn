@@ -1,5 +1,8 @@
 import tensorflow as tf
 
+# TODO(gh/17): these should either be in sandbox.rocky.tf.misc.tensor_utils or
+# replaced by the equivalents there.
+
 
 def flatten_batch(t):
     shape = [-1] + list(t.shape[2:])

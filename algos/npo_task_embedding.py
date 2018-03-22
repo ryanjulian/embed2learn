@@ -42,11 +42,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  optimizer=None,
                  optimizer_args=None,
                  step_size=0.01,
-                 policy_ent_coeff=1e-3,
+                 policy_ent_coeff=1e-4,
                  task_encoder=None,
                  task_encoder_ent_coeff=1e-3,
                  trajectory_encoder=None,
-                 trajectory_encoder_ent_coeff=1e-3,
+                 trajectory_encoder_ent_coeff=1e-4,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -77,12 +77,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, input_list = \
             self._build_opt()
 
-        # optimize policy, task_encoder and traj_encoder jointly
-        targets = JointParameterized(components=[self.policy, self.task_encoder, self.traj_encoder])
+        # Optimize policy, task_encoder and traj_encoder jointly
+        targets = JointParameterized(
+            components=[self.policy, self.task_encoder, self.traj_encoder])
 
-        # TODO Problem if we don't consider KL constraints (leq_constraint) for
-        # TODO (task_enc_mean_kl, self.task_enc_step_size) and (traj_enc_mean_kl, self.traj_enc_step_size) anymore?
-        # Eric: in the trpo_point_embed experiment, the policy's KL divergence was almost always the highest
+        # TODO(): should we consider KL constraints for all three networks?
         self.optimizer.update_opt(
             loss=loss,
             target=targets,
@@ -191,6 +190,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                   (self.traj_enc_ent_coeff * traj_ll) + \
                   (self.policy_ent_coeff * pol_entropy)
 
+        # TODO(gh/17): this could be split into some symbolic ops and
+        # contributed to tensor_utils
+        #
         # Calculate advantages
         #
         # Advantages are a discounted cumulative sum.
@@ -217,9 +219,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # reversed for us.
         #    advantages = discount_filter (tf.nn.conv1d) deltas
         #
-        # Due to TensorFlow's implementation of padding for convolution, we also
-        # pad the input signal on the right with 4 zeros, and remove this
-        # padding immediately after the convolution.
 
         # Prepare convolutional IIR filter to calculate advantages
         gamma_lambda = tf.constant(
@@ -681,8 +680,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         ########################################################################
 
-        # Joint optimization of Policy, Task encoder, Trajectory encoder
-        logger.log("### Policy, Task encoder, Trajectory encoder ###")
+        # Joint optimization of policy, task encoder, and trajectory encoder
         logger.log("Computing loss before")
         loss_before = self.optimizer.loss(all_input_values)
         logger.log("Computing KL before")
@@ -718,7 +716,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 samples_data = self.process_samples(itr, paths)
                 logger.log("Logging diagnostics...")
                 self.log_diagnostics(paths)
-                logger.log("Optimizing policy...")
+                logger.log("Optimizing policy and embedding...")
                 self.optimize_policy(itr, samples_data)
                 logger.log("Saving snapshot...")
                 params = self.get_itr_snapshot(itr,

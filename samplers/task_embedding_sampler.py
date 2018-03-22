@@ -14,6 +14,7 @@ from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf_vars
 from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.embeddings.utils import concat_spaces
+from sandbox.embed2learn.samplers.utils import sliding_window
 
 from rllab.algos import util  # DEBUG
 from rllab.misc import special  # DEBUG
@@ -36,19 +37,19 @@ def rollout(env,
     agent_infos = []
     env_infos = []
 
+    latent_obs_space = concat_spaces(task_encoder.latent_space,
+                                     env.observation_space)
+
+    # Resets
     o = env.reset()
     agent.reset()
+    task_encoder.reset()
 
     # Sample embedding network
     # NOTE: it is important to do this _once per rollout_, not once per
-    # time-step, since we need correlated noise.
+    # timestep, since we need correlated noise.
     t = env.active_task_one_hot
     z, latent_info = task_encoder.get_latent(t)
-
-    # Append latent vector to observation
-    # TODO: should we sample every step or every rollout?
-    latent_obs_space = concat_spaces(task_encoder.latent_space,
-                                     env.observation_space)
 
     if animated:
         env.render()
@@ -248,16 +249,28 @@ class TaskEmbeddingSampler(BatchSampler):
                                                       self.algo.discount)
             returns.append(path["returns"])
 
-            # trajectories
+            # Calculate trajectory samples
+            #
+            # Pad and flatten action and observation traces
             act = tensor_utils.pad_tensor(path['actions'], max_path_length)
             obs = tensor_utils.pad_tensor(path['env_observations'],
                                           max_path_length)
             act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
-            traj = np.concatenate([act_flat, obs_flat], axis=1)
-            traj = np.concatenate(traj)
-            trajs = np.tile(traj, (max_path_length, 1))
-            path['trajectories'] = trajs
+            # Create a time series of stacked [act, obs] vectors
+            act_obs = np.concatenate([act_flat, obs_flat], axis=1)
+            # Calculate a forward-looking sliding window of the stacked vectors
+            #
+            # If act_obs has shape (n, d), then trajs will have shape
+            # (n, window, d)
+            #
+            # The length of the sliding window is determined by the trajectory
+            # encoder spec. We smear the last few elements to preserve the time
+            # dimension.
+            window = self.traj_encoder.input_space.shape[0]
+            trajs = sliding_window(act_obs, window, 1, smear=True)
+            trajs_flat = self.traj_encoder.input_space.flatten_n(trajs)
+            path['trajectories'] = trajs_flat
 
             # trajectory infos
             _, traj_infos = self.traj_encoder.get_latents(trajs)
@@ -306,7 +319,8 @@ class TaskEmbeddingSampler(BatchSampler):
 
         baselines = tensor_utils.pad_tensor_n(baselines, max_path_length)
 
-        trajectories = np.array([path["trajectories"] for path in paths])
+        trajectories = tensor_utils.stack_tensor_list(
+            [path["trajectories"] for path in paths])
 
         agent_infos = [path["agent_infos"] for path in paths]
         agent_infos = tensor_utils.stack_tensor_dict_list([
