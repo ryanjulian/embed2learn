@@ -103,13 +103,10 @@ def run_task(*_):
         trajectory_encoder=traj_embedding,
         batch_size=4000,
         max_path_length=100,
-        n_itr=1000,
+        n_itr=200,
         discount=0.99,
         step_size=0.01,
         plot=False,
-        policy_ent_coeff=1e-3,
-        task_encoder_ent_coeff=1e-4,
-        trajectory_encoder_ent_coeff=1e-4,
     )
     algo.train()
 
