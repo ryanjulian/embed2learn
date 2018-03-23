@@ -11,7 +11,7 @@ import rllab.misc.logger as logger
 
 from sandbox.rocky.tf.algos.batch_polopt import BatchPolopt
 from sandbox.rocky.tf.misc import tensor_utils
-from sandbox.rocky.tf.optimizers.penalty_lbfgs_optimizer import PenaltyLbfgsOptimizer
+from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
 from sandbox.rocky.tf.core.parameterized import JointParameterized
 
 from sandbox.embed2learn.embeddings.base import Embedding
@@ -29,8 +29,8 @@ def _optimizer_or_default(optimizer, args):
     use_args = args
     if use_optimizer is None:
         if use_args is None:
-            use_args = dict(name="optimizer")
-        use_optimizer = PenaltyLbfgsOptimizer(**use_args)
+            use_args = dict()
+        use_optimizer = ConjugateGradientOptimizer(**use_args)
     return use_optimizer
 
 
@@ -47,7 +47,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  task_encoder=None,
                  task_encoder_ent_coeff=1e-5,
                  trajectory_encoder=None,
-                 trajectory_encoder_ent_coeff=1e-3,
+                 trajectory_encoder_ent_coeff=1e-4,
+                 trajectory_encoder_optimizer=None,
+                 trajectory_encoder_optimizer_args=None,
+                 trajectory_encoder_step_size=0.01,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -62,8 +65,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.step_size = float(step_size)
         self.policy_ent_coeff = float(policy_ent_coeff)
 
-        self.task_enc_ent_coeff = task_encoder_ent_coeff
-        self.traj_enc_ent_coeff = trajectory_encoder_ent_coeff
+        self.task_enc_ent_coeff = float(task_encoder_ent_coeff)
+
+        self.traj_enc_optimizer = _optimizer_or_default(
+            trajectory_encoder_optimizer, trajectory_encoder_optimizer_args)
+        self.traj_enc_step_size = float(trajectory_encoder_step_size)
+        self.traj_enc_ent_coeff = float(trajectory_encoder_ent_coeff)
 
         sampler_cls = TaskEmbeddingSampler
         sampler_args = dict(
@@ -75,20 +82,27 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     @overrides
     def init_opt(self):
-        loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, input_list = \
-            self._build_opt()
+        loss, pol_mean_kl, task_enc_mean_kl, traj_enc_loss, traj_enc_mean_kl, \
+            input_list = self._build_opt()
 
         # Optimize policy, task_encoder and traj_encoder jointly
         targets = JointParameterized(
-            components=[self.policy, self.task_encoder, self.traj_encoder])
+            components=[self.policy, self.task_encoder])
 
-        # TODO(): should we consider KL constraints for all three networks?
+        # TODO(): should we consider KL constraints for both networks?
         self.optimizer.update_opt(
             loss=loss,
             target=targets,
             leq_constraint=(pol_mean_kl, self.step_size),
             inputs=input_list,
-            constraint_name="mean_kl")
+            constraint_name='mean_kl')
+
+        self.traj_enc_optimizer.update_opt(
+            loss=traj_enc_loss,
+            target=self.traj_encoder,
+            leq_constraint=(traj_enc_mean_kl, self.traj_enc_step_size),
+            inputs=input_list,
+            constraint_name='mean_kl')
 
         return dict()
 
@@ -222,11 +236,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #
 
         # Prepare convolutional IIR filter to calculate advantages
-        gamma_lambda = tf.constant(
+        gamma_lambdas = tf.constant(
             float(self.discount) * float(self.gae_lambda),
             dtype=tf.float32,
             shape=[self.max_path_length, 1, 1])
-        advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
+        advantage_filter = tf.cumprod(gamma_lambdas, exclusive=True)
 
         # Calculate deltas
         pad = tf.zeros_like(baseline_var[:, :1])
@@ -273,11 +287,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #### Returns (for the baseline) ########################################
         # This uses the same filtering trick as above to calculate the
         # discounted cumulative sum
-        gamma = tf.constant(
+        return_gammas = tf.constant(
             float(self.discount),
             dtype=tf.float32,
             shape=[self.max_path_length, 1, 1])
-        return_filter = tf.cumprod(gamma, exclusive=True)
+        return_filter = tf.cumprod(return_gammas, exclusive=True)
         rewards_pad = tf.expand_dims(
             tf.concat([rewards, tf.zeros_like(rewards[:, :-1])], axis=1),
             axis=2)
@@ -286,6 +300,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### Task encoder KL divergence ########################################
         # Input variables
+        #
+        # From above:
+        # * valid_flat
+
         task_var = self.task_encoder.input_space.new_tensor_variable(
             'task',
             extra_dims=1 + 1,
@@ -338,7 +356,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                                            task_enc_dist_info_vars_valid)
         task_enc_mean_kl = tf.reduce_mean(task_enc_kl)
 
-        #### Trajectory encoder KL divergence ##################################
+        #### Trajectory encoder loss and KL divergence #########################
+        # Input variables
+        #
+        # From above:
+        # * latent_var
+        # * traj_ll
+        # * traj_flat
+        # * valid_flat
+
         traj_enc_state_info_vars = {
             k: tf.placeholder(
                 tf.float32,
@@ -364,6 +390,19 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             traj_enc_old_dist_info_vars[k]
             for k in traj_enc_dist.dist_info_keys
         ]
+
+        # Task encoder loss
+        traj_gammas = tf.constant(
+            float(self.discount),
+            dtype=tf.float32,
+            shape=[self.max_path_length])
+        traj_discounts = tf.cumprod(traj_gammas, exclusive=True)
+        discount_traj_ll = traj_discounts * traj_ll
+        discount_traj_ll_flat = flatten_batch(discount_traj_ll)
+        discount_traj_ll_valid = filter_valids(discount_traj_ll_flat,
+                                               valid_flat)
+
+        traj_enc_loss = tf.reduce_mean(discount_traj_ll_valid)
 
         # Flatten input variables
         traj_enc_state_info_flat = flatten_batch_dict(traj_enc_state_info_vars)
@@ -436,6 +475,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._lr = lr
         self._pol_mean_kl = pol_mean_kl
         self._surr_loss = surr_loss
+        self._traj_discounts = traj_discounts
+        self._discount_traj_ll = discount_traj_ll
+        self._traj_enc_loss = traj_enc_loss
         self._task_enc_mean_kl = task_enc_mean_kl
         self._traj_enc_mean_kl = traj_enc_mean_kl
 
@@ -503,8 +545,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.f_returns = tensor_utils.compile_function(
             input_list, returns, log_name="f_returns")
 
-        return surr_loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, \
-               input_list
+        return surr_loss, pol_mean_kl, task_enc_mean_kl, traj_enc_loss, \
+            traj_enc_mean_kl, input_list
 
     @overrides
     def optimize_policy(self, itr, samples_data):
@@ -621,6 +663,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'pol_mean_kl': self._pol_mean_kl,
             'task_enc_mean_kl': self._task_enc_mean_kl,
             'traj_enc_mean_kl': self._traj_enc_mean_kl,
+            'traj_discounts': self._traj_discounts,
+            'discount_traj_ll': self._discount_traj_ll,
             'surr_loss': self._surr_loss,
         }
         cpu_steps = {
@@ -660,6 +704,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #print('traj_ll_flat: {}'.format(f_gpu['traj_ll_flat']))
         #print('traj_ll: {}'.format(f_gpu['traj_ll']))
         #print('traj_ll.shape: {}'.format(f_gpu['traj_ll'].shape))
+        #print('traj_discounts: {}'.format(f_gpu['traj_discounts']))
+        #print('discount_traj_ll: {}'.format(f_gpu['discount_traj_ll']))
 
         # LR
         # dlr = np.sqrt(np.sum((f_cpu['lr'] - f_gpu['lr'])**2))
@@ -747,9 +793,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         if hasattr(self.baseline, 'fit_with_samples'):
             self.baseline.fit_with_samples(paths, samples_data)
         else:
-            self.baseline.fit(paths)
+            self.baseline.fit(paths)        
 
-        # Joint optimization of policy, task encoder, and trajectory encoder ###
+        # Jointly optimize policy and task encoder #############################
+        logger.log("Optimizing policy and task encoder...")
         logger.log("Computing loss before")
         loss_before = self.optimizer.loss(all_input_values)
         logger.log("Computing KL before")
@@ -765,6 +812,25 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('MeanKLBefore', mean_kl_before)
         logger.record_tabular('MeanKL', mean_kl)
         logger.record_tabular('dLoss', loss_before - loss_after)
+
+        # Optimize trajectory encoder
+        logger.log("Optimizing trajectory encoder...")
+        logger.log("Computing loss before")
+        loss_before = self.traj_enc_optimizer.loss(all_input_values)
+        logger.log("Computing KL before")
+        mean_kl_before = self.traj_enc_optimizer.constraint_val(
+            all_input_values)
+        logger.log("Optimizing")
+        self.traj_enc_optimizer.optimize(all_input_values)
+        logger.log("Computing KL after")
+        mean_kl = self.traj_enc_optimizer.constraint_val(all_input_values)
+        logger.log("Computing loss after")
+        loss_after = self.traj_enc_optimizer.loss(all_input_values)
+        logger.record_tabular('TrajEnc/LossBefore', loss_before)
+        logger.record_tabular('TrajEnc/LossAfter', loss_after)
+        logger.record_tabular('TrajEnc/MeanKLBefore', mean_kl_before)
+        logger.record_tabular('TrajEnc/MeanKL', mean_kl)
+        logger.record_tabular('TrajEnc/dLoss', loss_before - loss_after)
 
         return dict()
 
