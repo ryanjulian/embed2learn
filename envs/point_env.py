@@ -107,7 +107,7 @@ class PointEnv(Env, Serializable):
 
         # draw traces
         if self.show_traces:
-            for i, trace in self.traces:
+            for i, trace in enumerate(self.traces):
                 if len(trace) > 1:
                     pygame.draw.lines(self.screen,
                                       TRACE_COLORS[-min(len(TRACE_COLORS)-1, i)],
