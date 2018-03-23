@@ -6,7 +6,7 @@ from Box2D import b2Color
 from rllab.core.serializable import Serializable
 from rllab.envs.base import Env
 from rllab.misc.overrides import overrides
-from rllab.spaces import Box
+from sandbox.rocky.tf.spaces.box import Box
 from rllab.envs.base import Step
 
 MAX_SHOWN_TRACES = 10
