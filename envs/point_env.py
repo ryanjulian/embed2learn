@@ -93,15 +93,6 @@ class PointEnv(Env, Serializable):
             pygame.draw.line(self.screen, dark if y % 2 == 0 else bright,
                              self._to_screen((-10, dy)), self._to_screen((10, dy)))
 
-        # draw traces
-        if self.show_traces:
-            for i, trace in enumerate(reversed(self.traces)):
-                if len(trace) > 1:
-                    pygame.draw.lines(self.screen,
-                                      TRACE_COLORS[min(len(TRACE_COLORS)-1, i)],
-                                      False,
-                                      [self._to_screen(p) for p in trace])
-
         # draw point
         pygame.draw.circle(
             self.screen,
@@ -113,5 +104,14 @@ class PointEnv(Env, Serializable):
             self.screen,
             b2Color(1.0, 0.2, 0.).bytes,
             self._to_screen(self._goal), 10, 0)
+
+        # draw traces
+        if self.show_traces:
+            for i, trace in self.traces:
+                if len(trace) > 1:
+                    pygame.draw.lines(self.screen,
+                                      TRACE_COLORS[-min(len(TRACE_COLORS)-1, i)],
+                                      False,
+                                      [self._to_screen(p) for p in trace])
 
         pygame.display.flip()
