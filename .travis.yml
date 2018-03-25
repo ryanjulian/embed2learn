@@ -1,7 +1,13 @@
 language: python
+
 python:
   - "3.5.2"
+
 install:
   - pip install yapf
+
 script:
   - yapf -dpr --style=pep8 .
+
+notifications:
+  email: false
