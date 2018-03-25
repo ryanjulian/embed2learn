@@ -108,14 +108,14 @@ def run_task(*_):
         n_itr=200,
         discount=0.99,
         step_size=0.01,
-        plot=True
+        plot=True,
     )
     algo.train()
 
-run_experiment_lite(
-    run_task,
-    exp_prefix='trpo_point_embed',
-    n_parallel=N_PARALLEL,
-    plot=True,
-)
-# run_task()
+# run_experiment_lite(
+#     run_task,
+#     exp_prefix='trpo_point_embed',
+#     n_parallel=N_PARALLEL,
+#     plot=True,
+# )
+run_task()

@@ -1,3 +1,6 @@
+[![CircleCI](https://circleci.com/gh/ryanjulian/embed2learn.svg?style=shield&circle-token=c06ba07f6cec915ee03365f69edf0286b1538be5)](https://circleci.com/gh/ryanjulian/embed2learn)
+[![TravisCI](https://travis-ci.com/ryanjulian/embed2learn.svg?token=5Ha2ycwuRnc34dpruRpP&branch=master)](https://travis-ci.com/ryanjulian/embed2learn)
+
 # embed2learn
 Embedding to Learn
 
