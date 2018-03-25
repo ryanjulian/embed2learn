@@ -13,9 +13,10 @@ from sandbox.rocky.tf.envs.base import TfEnv as BaseTfEnv
 from sandbox.rocky.tf.envs.base import to_tf_space
 
 
-class MultiTaskEnv(Env):
+class MultiTaskEnv(Env, Serializable):
     def __init__(self, task_env_cls=None, task_args=None, task_kwargs=None):
-        #Serializable.quick_init(self, locals())
+        # super().__init__()
+        Serializable.quick_init(self, locals())
         self._task_envs = [
             task_env_cls(*t_args, **t_kwargs)
             for t_args, t_kwargs in zip(task_args, task_kwargs)
@@ -39,8 +40,6 @@ class MultiTaskEnv(Env):
         obs, reward, done, info = self._active_env.step(action)
         info['task'] = self.active_task_one_hot
         return Step(obs, reward, done, **info)
-
-        return
 
     def render(self, *args, **kwargs):
         return self._active_env.render(*args, **kwargs)

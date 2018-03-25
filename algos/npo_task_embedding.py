@@ -43,11 +43,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  optimizer=None,
                  optimizer_args=None,
                  step_size=0.01,
-                 policy_ent_coeff=1e-3,
+                 policy_ent_coeff=1e-2,
                  task_encoder=None,
-                 task_encoder_ent_coeff=1e-4,
+                 task_encoder_ent_coeff=1e-5,
                  trajectory_encoder=None,
-                 trajectory_encoder_ent_coeff=1e-4,
+                 trajectory_encoder_ent_coeff=1e-3,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
