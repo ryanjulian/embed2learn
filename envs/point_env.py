@@ -1,8 +1,7 @@
-import numpy as np
-
-import pygame
-
 from collections import deque
+
+import numpy as np
+import pygame
 
 from rllab.core.serializable import Serializable
 from rllab.envs.base import Env, Step
