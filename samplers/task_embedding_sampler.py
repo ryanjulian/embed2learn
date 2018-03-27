@@ -19,6 +19,9 @@ from sandbox.embed2learn.samplers.utils import sliding_window
 from rllab.algos import util  # DEBUG
 from rllab.misc import special  # DEBUG
 
+# TODO: improvements to rllab so that you don't need to rwrite a whole sampler
+# to change the rollout process
+
 
 def rollout(env,
             agent,
@@ -92,6 +95,38 @@ def rollout(env,
     )
 
 
+# parallel_sampler worker API
+def _worker_populate_task(G, env, policy, task_encoder, scope=None):
+    G = parallel_sampler._get_scoped_G(G, scope)
+    G.env = pickle.loads(env)
+    G.policy = pickle.loads(policy)
+    G.task_encoder = pickle.loads(task_encoder)
+
+
+def _worker_terminate_task(G, scope=None):
+    G = parallel_sampler._get_scoped_G(G, scope)
+    if getattr(G, "env", None):
+        G.env.terminate()
+        G.env = None
+    if getattr(G, "policy", None):
+        G.policy.terminate()
+        G.policy = None
+    if getattr(G, "task_encoder", None):
+        G.task_encoder.terminate()
+        G.task_encoder = None
+
+
+def _worker_set_task_encoder_params(G, params, scope=None):
+    G = parallel_sampler._get_scoped_G(G, scope)
+    G.task_encoder.set_param_values(params)
+
+
+def _worker_collect_one_path(G, max_path_length, scope=None):
+    G = parallel_sampler._get_scoped_G(G, scope)
+    path = rollout(G.env, G.policy, G.task_encoder, max_path_length)
+    return path, len(path["rewards"])
+
+
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
     def __init__(self,
@@ -103,41 +138,10 @@ class TaskEmbeddingSampler(BatchSampler):
         self.task_encoder = task_encoder
         self.traj_encoder = trajectory_encoder
 
-    # parallel_sampler API
-    # TODO: figure out how to avoid copying all this code
-    def _worker_populate_task(self, G, env, policy, task_encoder, scope=None):
-        cpname = mp.current_process().name  # DEBUG
-        mp_logger.info('{0} populating task...'.format(cpname))  # DEBUG
-        G = parallel_sampler._get_scoped_G(G, scope)
-        G.env = pickle.loads(env)
-        G.policy = pickle.loads(policy)
-        G.task_encoder = pickle.loads(task_encoder)
-
-    def _worker_terminate_task(self, G, scope=None):
-        G = parallel_sampler._get_scoped_G(G, scope)
-        if getattr(G, "env", None):
-            G.env.terminate()
-            G.env = None
-        if getattr(G, "policy", None):
-            G.policy.terminate()
-            G.policy = None
-        if getattr(G, "task_encoder", None):
-            G.task_encoder.terminate()
-            G.task_encoder = None
-
-    def _worker_set_task_encoder_params(self, G, params, scope=None):
-        G = parallel_sampler._get_scoped_G(G, scope)
-        G.task_encoder.set_param_values(params)
-
-    def _worker_collect_one_path(self, G, max_path_length, scope=None):
-        G = parallel_sampler._get_scoped_G(G, scope)
-        path = rollout(G.env, G.policy, G.task_encoder, max_path_length)
-        return path, len(path["rewards"])
-
     def populate_task(self, env, policy, task_encoder, scope=None):
         logger.log("Populating workers...")
         if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(self._worker_populate_task,
+            singleton_pool.run_each(_worker_populate_task,
                                     [(pickle.dumps(env), pickle.dumps(policy),
                                       pickle.dumps(task_encoder),
                                       scope)] * singleton_pool.n_parallel)
@@ -150,7 +154,7 @@ class TaskEmbeddingSampler(BatchSampler):
         logger.log("Populated")
 
     def terminate_task(self, scope=None):
-        singleton_pool.run_each(self._worker_terminate_task,
+        singleton_pool.run_each(_worker_terminate_task,
                                 [(scope, )] * singleton_pool.n_parallel)
 
     # BatchSampler API
@@ -177,7 +181,7 @@ class TaskEmbeddingSampler(BatchSampler):
             [(policy_params, scope)] * singleton_pool.n_parallel,
         )
         singleton_pool.run_each(
-            self._worker_set_task_encoder_params,
+            _worker_set_task_encoder_params,
             [(task_encoder_params, scope)] * singleton_pool.n_parallel,
         )
         if env_params:
@@ -187,7 +191,7 @@ class TaskEmbeddingSampler(BatchSampler):
             )
 
         return singleton_pool.run_collect(
-            self._worker_collect_one_path,
+            _worker_collect_one_path,
             threshold=max_samples,
             args=(max_path_length, scope),
             show_prog_bar=True,
