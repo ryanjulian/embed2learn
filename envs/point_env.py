@@ -7,7 +7,7 @@ from rllab.core.serializable import Serializable
 from rllab.envs.base import Env, Step
 from rllab.misc.overrides import overrides
 
-from sandbox.rocky.tf.spaces.box import Box
+from rllab.spaces.box import Box
 
 MAX_SHOWN_TRACES = 10
 
@@ -18,7 +18,7 @@ DARK_COLOR = (150, 150, 150)
 
 
 class PointEnv(Env, Serializable):
-    def __init__(self, x, goal=(1, 1), show_traces=True):
+    def __init__(self, goal=(1, 1), show_traces=True):
         Serializable.quick_init(self, locals())
 
         self._goal = np.array(goal, dtype=np.float32)
