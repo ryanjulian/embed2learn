@@ -21,7 +21,7 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-N_PARALLEL = 1  # TODO(gh/10): the sampler is broken for n_parallel > 1
+N_PARALLEL = 20
 
 TASKS = {
     '(-1, 0)': {'args': [], 'kwargs': {'goal': (-1, 0)}},

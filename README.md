@@ -16,5 +16,5 @@ Check out this repository as a submodule of the repository above, into
 `sandbox/embed2learn`.
 
 ```sh
-git submodule add git@github.com:ryanjulian/embed2learn.git sandbox/embed2learn
+git submodule add -f git@github.com:ryanjulian/embed2learn.git sandbox/embed2learn
 ```
