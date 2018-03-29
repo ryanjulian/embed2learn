@@ -700,24 +700,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         ########################################################################
 
-        # Joint optimization of policy, task encoder, and trajectory encoder
-        logger.log("Computing loss before")
-        loss_before = self.optimizer.loss(all_input_values)
-        logger.log("Computing KL before")
-        mean_kl_before = self.optimizer.constraint_val(all_input_values)
-        logger.log("Optimizing")
-        self.optimizer.optimize(all_input_values)
-        logger.log("Computing KL after")
-        mean_kl = self.optimizer.constraint_val(all_input_values)
-        logger.log("Computing loss after")
-        loss_after = self.optimizer.loss(all_input_values)
-        logger.record_tabular('LossBefore', loss_before)
-        logger.record_tabular('LossAfter', loss_after)
-        logger.record_tabular('MeanKLBefore', mean_kl_before)
-        logger.record_tabular('MeanKL', mean_kl)
-        logger.record_tabular('dLoss', loss_before - loss_after)
+        # Baseline optimization ################################################
+        # Get rewards and returns from TF
+        # IMPORTANT: this must be calculated *before* any optimization, because
+        # the values depend on the network parameters
+        rewards_tensor = self.f_rewards(*all_input_values)
+        returns_tensor = self.f_returns(*all_input_values)
+        returns_tensor = np.squeeze(returns_tensor)  # TODO
+        # TODO: check the squeeze/dimension handling for both convolutions
 
-        # Baseline optimization
         paths = samples_data['paths']
         valids = samples_data['valids']
         baselines = [path['baselines'] for path in paths]
@@ -725,12 +716,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         env_rewards = tensor_utils.concat_tensor_list(env_rewards.copy())
         env_returns = [path['returns'] for path in paths]
         env_returns = tensor_utils.concat_tensor_list(env_returns.copy())
-
-        # Get rewards and returns from TF
-        # TODO: check the squeeze/dimension handling for both convolutions
-        rewards_tensor = self.f_rewards(*all_input_values)
-        returns_tensor = self.f_returns(*all_input_values)
-        returns_tensor = np.squeeze(returns_tensor)  # TODO
 
         # Recompute parts of samples_data
         aug_rewards = []
@@ -763,6 +748,23 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self.baseline.fit_with_samples(paths, samples_data)
         else:
             self.baseline.fit(paths)
+
+        # Joint optimization of policy, task encoder, and trajectory encoder ###
+        logger.log("Computing loss before")
+        loss_before = self.optimizer.loss(all_input_values)
+        logger.log("Computing KL before")
+        mean_kl_before = self.optimizer.constraint_val(all_input_values)
+        logger.log("Optimizing")
+        self.optimizer.optimize(all_input_values)
+        logger.log("Computing KL after")
+        mean_kl = self.optimizer.constraint_val(all_input_values)
+        logger.log("Computing loss after")
+        loss_after = self.optimizer.loss(all_input_values)
+        logger.record_tabular('LossBefore', loss_before)
+        logger.record_tabular('LossAfter', loss_after)
+        logger.record_tabular('MeanKLBefore', mean_kl_before)
+        logger.record_tabular('MeanKL', mean_kl)
+        logger.record_tabular('dLoss', loss_before - loss_after)
 
         return dict()
 
