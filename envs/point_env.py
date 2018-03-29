@@ -7,7 +7,7 @@ from rllab.core.serializable import Serializable
 from rllab.envs.base import Env, Step
 from rllab.misc.overrides import overrides
 
-from sandbox.rocky.tf.spaces.box import Box
+from rllab.spaces.box import Box
 
 MAX_SHOWN_TRACES = 10
 
@@ -33,8 +33,6 @@ class PointEnv(Env, Serializable):
 
         self._traces = deque(maxlen=MAX_SHOWN_TRACES)
 
-        Serializable.__init__(self, *args, **kwargs)
-
     @property
     def observation_space(self):
         return Box(low=-np.inf, high=np.inf, shape=(2, ))
@@ -44,8 +42,7 @@ class PointEnv(Env, Serializable):
         return Box(low=-0.1, high=0.1, shape=(2, ))
 
     def reset(self):
-        start = np.random.uniform(-1, 1, size=(2, ))
-        self._point = start + self._goal
+        self._point = np.zeros_like(self._goal)
         observation = np.copy(self._point)
         self._traces.append([])
         return observation
@@ -54,9 +51,8 @@ class PointEnv(Env, Serializable):
         self._point = self._point + action
         x, y = self._point
         self._traces[-1].append((x, y))
-        goal_x, goal_y = self._goal
-        reward = -((x - goal_x)**2 + (y - goal_y)**2)**0.5
-        done = abs(x - goal_x) < 0.01 and abs(y - goal_y) < 0.01
+        reward = -np.linalg.norm(self._point - self._goal)
+        done = np.linalg.norm(self._point - self._goal, ord=np.inf) < 0.1
         next_observation = np.copy(self._point)
         return Step(observation=next_observation, reward=reward, done=done)
 
@@ -66,6 +62,7 @@ class PointEnv(Env, Serializable):
 
     @overrides
     def render(self, **kwargs):
+
         if self.screen is None:
             pygame.init()
             caption = "Point Environment"
@@ -89,13 +86,17 @@ class PointEnv(Env, Serializable):
                              self._to_screen((-10, dy)),
                              self._to_screen((10, dy)))
 
-        # draw point
-        pygame.draw.circle(self.screen, (40, 180, 10),
-                           self._to_screen(self._point), 10, 0)
+        # draw starting point
+        pygame.draw.circle(self.screen, (0, 0, 255), self._to_screen((0, 0)),
+                           10, 0)
 
         # draw goal
         pygame.draw.circle(self.screen, (255, 40, 0),
                            self._to_screen(self._goal), 10, 0)
+
+        # draw point
+        pygame.draw.circle(self.screen, (40, 180, 10),
+                           self._to_screen(self._point), 10, 0)
 
         # draw traces
         if self.show_traces:
@@ -107,3 +108,7 @@ class PointEnv(Env, Serializable):
                         [self._to_screen(p) for p in trace])
 
         pygame.display.flip()
+
+    def terminate(self):
+        if self.screen:
+            pygame.quit()
