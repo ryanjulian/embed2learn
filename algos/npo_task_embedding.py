@@ -402,7 +402,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         discount_traj_ll_valid = filter_valids(discount_traj_ll_flat,
                                                valid_flat)
 
-        traj_enc_loss = tf.reduce_mean(discount_traj_ll_valid)
+        traj_enc_loss = -tf.reduce_mean(discount_traj_ll_valid)
 
         # Flatten input variables
         traj_enc_state_info_flat = flatten_batch_dict(traj_enc_state_info_vars)
