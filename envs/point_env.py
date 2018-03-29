@@ -18,9 +18,8 @@ DARK_COLOR = (150, 150, 150)
 
 
 class PointEnv(Env, Serializable):
-
-    def __init__(self, *args, goal=(0, 0), show_traces=True, **kwargs):
-        super(PointEnv, self).__init__(*args, **kwargs)
+    def __init__(self, goal=(1, 1), show_traces=True):
+        Serializable.quick_init(self, locals())
 
         self._goal = np.array(goal, dtype=np.float32)
         self._point = np.zeros(2, dtype=np.float32)
