@@ -23,7 +23,8 @@ class PointEnv(Env, Serializable):
         super(PointEnv, self).__init__(*args, **kwargs)
 
         self._goal = np.array(goal, dtype=np.float32)
-        self._point = np.zeros(2)
+        self._point = np.zeros(2, dtype=np.float32)
+        self._start = np.zeros(2, dtype=np.float32)
 
         self.screen = None
         self.screen_width = 500
@@ -42,7 +43,7 @@ class PointEnv(Env, Serializable):
         return Box(low=-0.1, high=0.1, shape=(2, ))
 
     def reset(self):
-        self._point = np.zeros_like(self._goal)
+        self._point = np.copy(self._start)
         observation = np.copy(self._point)
         self._traces.append([])
         return observation
@@ -87,8 +88,8 @@ class PointEnv(Env, Serializable):
                              self._to_screen((10, dy)))
 
         # draw starting point
-        pygame.draw.circle(self.screen, (0, 0, 255), self._to_screen((0, 0)),
-                           10, 0)
+        pygame.draw.circle(self.screen, (0, 0, 255),
+                           self._to_screen(self._start), 10, 0)
 
         # draw goal
         pygame.draw.circle(self.screen, (255, 40, 0),

@@ -13,9 +13,8 @@ from sandbox.rocky.tf.envs.base import TfEnv as BaseTfEnv
 from sandbox.rocky.tf.envs.base import to_tf_space
 
 
-class MultiTaskEnv(Env, Serializable):
+class MultiTaskEnv(Env):
     def __init__(self, task_env_cls=None, task_args=None, task_kwargs=None):
-        # super().__init__()
         Serializable.quick_init(self, locals())
         self._task_envs = [
             task_env_cls(*t_args, **t_kwargs)

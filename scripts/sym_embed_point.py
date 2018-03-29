@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 GOALS = [np.array((-1, 0)), np.array((1, 0))]
 
 
-def point_rollout(envs: [PointEnv],
+def point_rollout(env: TfEnv,
                   agent,
                   task_encoder,
                   max_path_length=np.inf,
@@ -24,7 +24,9 @@ def point_rollout(envs: [PointEnv],
                   speedup=1,
                   always_return_paths=False,
                   modulations=10):
-    assert len(envs) == 2
+
+    multi_task_env = env.wrapped_env.wrapped_env
+    assert(isinstance(multi_task_env, MultiTaskEnv))
 
     env_observations = []
     observations = []
@@ -34,8 +36,8 @@ def point_rollout(envs: [PointEnv],
     agent_infos = []
     env_infos = []
 
-    env = PointEnv()
-    state = env.__getstate__()
+    # env = PointEnv()
+    # state = env.__getstate__()
 
     latent_obs_space = concat_spaces(task_encoder.latent_space,
                                      env.observation_space)
@@ -53,33 +55,36 @@ def point_rollout(envs: [PointEnv],
     # timestep, since we need correlated noise.
 
     task_embeddings = []
-    for task_id in range(len(envs)):
+    for task_id in range(multi_task_env.num_tasks):
         task_encoder.reset()
-        task_onehot = np.zeros(len(envs))
-        task_onehot[task_id] = 1
+        # TODO implement public set_active_task(task_id) method in MultiTaskEnv
+        multi_task_env._active_env = multi_task_env._task_envs[task_id]
+        task_onehot = multi_task_env.active_task_one_hot
         z, latent_info = task_encoder.get_latent(task_onehot)
         task_embeddings.append(z)
 
     for m in range(modulations):
         # linear interpolation between two task embeddings
-        alpha = float(m) / (modulations - 1.)
+        alpha = round(float(m) / (modulations - 1.))
         goal = GOALS[1] * alpha + GOALS[0] * (1. - alpha)
         z = task_embeddings[1] * alpha + task_embeddings[0] * (1. - alpha)
+        print(z)
 
-        plt.scatter([goal[0]], [goal[1]], c='r', s=2, zorder=100)
+        plt.scatter([goal[0]], [goal[1]], c='r', s=20, zorder=100)
 
         env.reset()
-        env._goal = goal
-        env._point = (0, -1)
+        multi_task_env._active_env._goal = goal
+        # multi_task_env._active_env._point = (0, -1)
 
         state = env.__getstate__()
+        point_env = multi_task_env._active_env
 
         path_length = 0
         path = []
         while path_length < max_path_length:
             z_o = np.concatenate([z, o])
             a, agent_info = agent.get_action(z_o)
-            path.append(env._point)
+            path.append(point_env._point)
             next_o, r, done, env_info = env.step(a)
             env_observations.append(env.observation_space.flatten(o))
             observations.append(latent_obs_space.flatten(z_o))
@@ -121,13 +126,13 @@ if __name__ == "__main__":
         task_encoder = data['task_encoder']
 
         assert isinstance(env, TfEnv)
-        env = env.wrapped_env
-        assert isinstance(env, NormalizedMultiTaskEnv)
-        env = env.wrapped_env
-        assert isinstance(env, MultiTaskEnv)
-        envs = env._task_envs
-        assert all(isinstance(env, PointEnv) for env in envs), "This script only works with PointEnv."
+        # env = env.wrapped_env
+        # assert isinstance(env, NormalizedMultiTaskEnv)
+        # env = env.wrapped_env
+        # assert isinstance(env, MultiTaskEnv)
+        # envs = env._task_envs
+        # assert all(isinstance(env, PointEnv) for env in envs), "This script only works with PointEnv."
 
-        point_rollout(envs, policy, task_encoder,
+        point_rollout(env, policy, task_encoder,
                       max_path_length=args.max_path_length,
                       animated=True)

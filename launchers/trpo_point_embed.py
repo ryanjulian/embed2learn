@@ -44,8 +44,6 @@ def run_task(*_):
                 task_env_cls=PointEnv,
                 task_args=TASK_ARGS,
                 task_kwargs=TASK_KWARGS)))
-    # env.reset()
-    # env.render()
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -84,14 +82,14 @@ def run_task(*_):
     task_embedding = GaussianMLPEmbedding(
         name="task_embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(8, 8),
+        hidden_sizes=(32, 32),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(8, 8),
+        hidden_sizes=(32, 32),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -108,14 +106,14 @@ def run_task(*_):
         n_itr=200,
         discount=0.99,
         step_size=0.01,
-        plot=True,
+        plot=False,
     )
     algo.train()
 
-# run_experiment_lite(
-#     run_task,
-#     exp_prefix='trpo_point_embed',
-#     n_parallel=N_PARALLEL,
-#     plot=True,
-# )
-run_task()
+
+run_experiment_lite(
+    run_task,
+    exp_prefix='trpo_point_embed',
+    n_parallel=N_PARALLEL,
+    plot=False,
+)
