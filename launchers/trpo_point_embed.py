@@ -103,7 +103,7 @@ def run_task(*_):
         trajectory_encoder=traj_embedding,
         batch_size=4000,
         max_path_length=100,
-        n_itr=200,
+        n_itr=2000,
         discount=0.99,
         step_size=0.01,
         plot=False,
