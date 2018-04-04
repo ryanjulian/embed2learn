@@ -25,6 +25,7 @@ N_PARALLEL = 8
 
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
+    '(-3, 0) copy': {'args': [], 'kwargs': {'goal': (-3, 0)}},
     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
 } # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
@@ -117,3 +118,4 @@ run_experiment_lite(
     n_parallel=N_PARALLEL,
     plot=True,
 )
+# run_task()

@@ -603,6 +603,23 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #     else:
         #         print('Cannot find shape of {}'.format(k))
 
+        # measure KL divergence between task 1 and 2, 3:
+        task1 = np.zeros((3,), dtype=np.float32)
+        task2 = np.zeros((3,), dtype=np.float32)
+        task3 = np.zeros((3,), dtype=np.float32)
+        task1[0] = 1
+        task2[1] = 1
+        task3[2] = 1
+        _, latent_info1 = self.task_encoder.get_latent(task1)
+        _, latent_info2 = self.task_encoder.get_latent(task2)
+        _, latent_info3 = self.task_encoder.get_latent(task3)
+        latent_info1 = flatten_batch_dict(latent_info1)
+        latent_info2 = flatten_batch_dict(latent_info2)
+        latent_info3 = flatten_batch_dict(latent_info3)
+        dist = self.policy.distribution
+        kl12 = dist.kl_sym(latent_info1, latent_info2)
+        kl13 = dist.kl_sym(latent_info1, latent_info3)
+
         sess = tf.get_default_session()
         # Everything else
         gpu_steps = {
@@ -622,6 +639,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'task_enc_mean_kl': self._task_enc_mean_kl,
             'traj_enc_mean_kl': self._traj_enc_mean_kl,
             'surr_loss': self._surr_loss,
+            'kl12': kl12,
+            'kl13': kl13,
         }
         cpu_steps = {
             'dist_info_vars': self._cpu_dist_info_vars,
@@ -643,6 +662,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #print('mean(adv_tf): {}'.format(np.mean(adv_tf)))
         #print('std(adv_cpu): {}'.format(np.std(adv_cpu)))
         #print('std(adv_tf): {}'.format(np.std(adv_tf)))
+
+        logger.record_tabular("KL task 1-2", f_gpu['kl12'])
+        logger.record_tabular("KL task 1-3", f_gpu['kl13'])
 
         # policy entropy
         #print('dist_info_vars[log_std]: {}'.format(f_gpu['dist_info_vars']['log_std']))
@@ -700,24 +722,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         ########################################################################
 
-        # Joint optimization of policy, task encoder, and trajectory encoder
-        logger.log("Computing loss before")
-        loss_before = self.optimizer.loss(all_input_values)
-        logger.log("Computing KL before")
-        mean_kl_before = self.optimizer.constraint_val(all_input_values)
-        logger.log("Optimizing")
-        self.optimizer.optimize(all_input_values)
-        logger.log("Computing KL after")
-        mean_kl = self.optimizer.constraint_val(all_input_values)
-        logger.log("Computing loss after")
-        loss_after = self.optimizer.loss(all_input_values)
-        logger.record_tabular('LossBefore', loss_before)
-        logger.record_tabular('LossAfter', loss_after)
-        logger.record_tabular('MeanKLBefore', mean_kl_before)
-        logger.record_tabular('MeanKL', mean_kl)
-        logger.record_tabular('dLoss', loss_before - loss_after)
+        # Baseline optimization ################################################
+        # Get rewards and returns from TF
+        # IMPORTANT: this must be calculated *before* any optimization, because
+        # the values depend on the network parameters
+        rewards_tensor = self.f_rewards(*all_input_values)
+        returns_tensor = self.f_returns(*all_input_values)
+        returns_tensor = np.squeeze(returns_tensor)  # TODO
+        # TODO: check the squeeze/dimension handling for both convolutions
 
-        # Baseline optimization
         paths = samples_data['paths']
         valids = samples_data['valids']
         baselines = [path['baselines'] for path in paths]
@@ -725,12 +738,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         env_rewards = tensor_utils.concat_tensor_list(env_rewards.copy())
         env_returns = [path['returns'] for path in paths]
         env_returns = tensor_utils.concat_tensor_list(env_returns.copy())
-
-        # Get rewards and returns from TF
-        # TODO: check the squeeze/dimension handling for both convolutions
-        rewards_tensor = self.f_rewards(*all_input_values)
-        returns_tensor = self.f_returns(*all_input_values)
-        returns_tensor = np.squeeze(returns_tensor)  # TODO
 
         # Recompute parts of samples_data
         aug_rewards = []
@@ -764,6 +771,23 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         else:
             self.baseline.fit(paths)
 
+        # Joint optimization of policy, task encoder, and trajectory encoder ###
+        logger.log("Computing loss before")
+        loss_before = self.optimizer.loss(all_input_values)
+        logger.log("Computing KL before")
+        mean_kl_before = self.optimizer.constraint_val(all_input_values)
+        logger.log("Optimizing")
+        self.optimizer.optimize(all_input_values)
+        logger.log("Computing KL after")
+        mean_kl = self.optimizer.constraint_val(all_input_values)
+        logger.log("Computing loss after")
+        loss_after = self.optimizer.loss(all_input_values)
+        logger.record_tabular('LossBefore', loss_before)
+        logger.record_tabular('LossAfter', loss_after)
+        logger.record_tabular('MeanKLBefore', mean_kl_before)
+        logger.record_tabular('MeanKL', mean_kl)
+        logger.record_tabular('dLoss', loss_before - loss_after)
+
         return dict()
 
     def train(self, sess=None):
@@ -794,6 +818,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 logger.log("Saved")
                 logger.record_tabular('Time', time.time() - start_time)
                 logger.record_tabular('ItrTime', time.time() - itr_start_time)
+
                 logger.dump_tabular(with_prefix=False)
                 if self.plot:
                     rollout(
