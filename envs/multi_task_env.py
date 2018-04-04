@@ -104,8 +104,11 @@ class TfEnv(BaseTfEnv):
     def active_task_one_hot(self):
         return self.wrapped_env.active_task_one_hot
 
+    @property
+    def active_task(self):
+        return self.wrapped_env.active_task
 
-# TODO: normalize task space for real
+
 class NormalizedMultiTaskEnv(NormalizedEnv):
     @property
     def task_space(self):
@@ -114,6 +117,10 @@ class NormalizedMultiTaskEnv(NormalizedEnv):
     @property
     def active_task_one_hot(self):
         return self.wrapped_env.active_task_one_hot
+
+    @property
+    def active_task(self):
+        return self.wrapped_env.active_task
 
 
 normalize = NormalizedMultiTaskEnv
