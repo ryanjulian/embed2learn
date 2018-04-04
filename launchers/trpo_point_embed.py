@@ -1,19 +1,16 @@
-import multiprocessing as mp
 import numpy as np
 
 from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.envs.normalized_env import normalize
-from rllab.misc.instrument import stub, run_experiment_lite
+from rllab.misc.instrument import run_experiment_lite
+from rllab.misc.ext import set_seed
 from rllab.envs.env_spec import EnvSpec
 
-from sandbox.rocky.tf.algos.trpo import TRPO
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
 from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings.one_hot_embedding import OneHotEmbedding
 from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
 from sandbox.embed2learn.envs.point_env import PointEnv
 from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
@@ -21,7 +18,7 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-N_PARALLEL = 8
+N_PARALLEL = 16
 
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
@@ -37,6 +34,8 @@ TRAJ_ENC_WINDOW = 5
 
 
 def run_task(*_):
+    set_seed(0)
+
     # Environment
     env = TfEnv(
         normalize(
@@ -106,7 +105,7 @@ def run_task(*_):
         n_itr=2000,
         discount=0.99,
         step_size=0.01,
-        plot=True,
+        plot=False,
     )
     algo.train()
 
@@ -115,5 +114,5 @@ run_experiment_lite(
     run_task,
     exp_prefix='trpo_point_embed',
     n_parallel=N_PARALLEL,
-    plot=True,
+    plot=False,
 )

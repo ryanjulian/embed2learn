@@ -93,6 +93,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return dict()
 
     def _build_opt(self):
+        scope = tf.variable_scope('npo_task_embedding')
+
         is_recurrent = int(self.policy.recurrent)
         if is_recurrent:
             raise NotImplementedError
@@ -157,132 +159,145 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Flatten inputs and filter for valid timesteps
         # TODO: verify this works for tensors in general
         # Flatten
-        obs_flat = flatten_batch(obs_var)
-        act_flat = flatten_batch(action_var)
-        traj_flat = flatten_batch(trajectory_var)
-        latent_flat = flatten_batch(latent_var)
-        valid_flat = flatten_batch(valid_var)
-        state_info_flat = flatten_batch_dict(state_info_vars)
-        old_dist_info_flat = flatten_batch_dict(old_dist_info_vars)
+        with tf.variable_scope('flatten'):
+            obs_flat = flatten_batch(obs_var)
+            act_flat = flatten_batch(action_var)
+            traj_flat = flatten_batch(trajectory_var)
+            latent_flat = flatten_batch(latent_var)
+            valid_flat = flatten_batch(valid_var)
+            state_info_flat = flatten_batch_dict(state_info_vars)
+            old_dist_info_flat = flatten_batch_dict(old_dist_info_vars)
 
         # Calculate policy distributions for each timestep
         # TODO: may need to freeze this for all three op steps
         dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
 
-        # Calculate entropy terms
-        # 1. Task encoder total entropy
-        task_dim = self.task_encoder.input_space.flat_dim
-        all_task_one_hots = tf.one_hot(np.arange(task_dim), task_dim)
-        all_task_dists = self.task_encoder.dist_info_sym(all_task_one_hots)
-        all_task_entropies = self.task_encoder.entropy_sym(all_task_dists)
-        task_enc_entropy = tf.reduce_mean(all_task_entropies)
+        with tf.variable_scope('entropies'):
+            # Calculate entropy terms
+            # 1. Task encoder total entropy
+            with tf.variable_scope('task_encoder_entropy'):
+                task_dim = self.task_encoder.input_space.flat_dim
+                all_task_one_hots = tf.one_hot(np.arange(task_dim), task_dim)
+                all_task_dists = self.task_encoder.dist_info_sym(
+                    all_task_one_hots)
+                all_task_entropies = self.task_encoder.entropy_sym(
+                    all_task_dists)
+                task_enc_entropy = tf.reduce_mean(all_task_entropies)
 
-        # 2. Trajectory encoder log likelihoods
-        traj_ll_flat = self.traj_encoder.log_likelihood_sym(
-            traj_flat, latent_flat)
-        traj_ll = tf.reshape(traj_ll_flat, [-1, self.max_path_length])
+            # 2. Trajectory encoder log-likelihoods (cross-entropies)
+            with tf.variable_scope('traj_encoder_ce'):
+                traj_ll_flat = self.traj_encoder.log_likelihood_sym(
+                    traj_flat, latent_flat)
+                traj_ll = tf.reshape(traj_ll_flat, [-1, self.max_path_length])
 
-        # 3. Policy encoder path entropies
-        pol_entropy_flat = dist.entropy_sym(dist_info_vars)
-        pol_entropy = tf.reshape(pol_entropy_flat, [-1, self.max_path_length])
+            # 3. Policy path entropies
+            with tf.variable_scope('policy_entropy'):
+                pol_entropy_flat = dist.entropy_sym(dist_info_vars)
+                pol_entropy = tf.reshape(pol_entropy_flat,
+                                         [-1, self.max_path_length])
 
-        # Augment the path rewards with entropy terms
-        rewards = reward_var + \
-                  (self.traj_enc_ent_coeff * traj_ll) + \
-                  (self.policy_ent_coeff * pol_entropy)
+        with tf.variable_scope('advantages'):
+            # Augment the path rewards with entropy terms
+            rewards = reward_var + \
+                      (self.traj_enc_ent_coeff * traj_ll) + \
+                      (self.policy_ent_coeff * pol_entropy)
 
-        # TODO(gh/17): this could be split into some symbolic ops and
-        # contributed to tensor_utils
-        #
-        # Calculate advantages
-        #
-        # Advantages are a discounted cumulative sum.
-        #
-        # The discount cumulative sum can be represented as an IIR filter on the
-        # reversed input vectors, i.e.
-        #    y[t] - discount*y[t+1] = x[t]
-        #        or
-        #    rev(y)[t] - discount*rev(y)[t-1] = rev(x)[t]
-        #
-        # Given the time-domain IIR filter step response, we can calculate the
-        # filter response to our signal by convolving the signal with the filter
-        # response function. The time-domain IIR step response is calculated
-        # below as discount_filter:
-        #     discount_filter := [1, discount, discount^2, ..., discount^N-1]
-        #     where the epsiode length is N.
-        #
-        # We convolve discount_filter with the reversed time-domain signal
-        # deltas to get calculate the reversed advantages:
-        #     rev(advantages) = discount_filter (X) rev(deltas)
-        #
-        # TensorFlow's tf.nn.conv1d op is not a true convolution, but actually
-        # a cross-correlation, so its input and output are already implicitly
-        # reversed for us.
-        #    advantages = discount_filter (tf.nn.conv1d) deltas
-        #
+            # TODO(gh/17): this could be split into some symbolic ops and
+            # contributed to tensor_utils
+            #
+            # Calculate advantages
+            #
+            # Advantages are a discounted cumulative sum.
+            #
+            # The discount cumulative sum can be represented as an IIR filter on
+            # the reversed input vectors, i.e.
+            #    y[t] - discount*y[t+1] = x[t]
+            #        or
+            #    rev(y)[t] - discount*rev(y)[t-1] = rev(x)[t]
+            #
+            # Given the time-domain IIR filter step response, we can calculate
+            # the filter response to our signal by convolving the signal with
+            # the filter response function. The time-domain IIR step response is
+            # calculated below as discount_filter:
+            #     discount_filter = [1, discount, discount^2, ..., discount^N-1]
+            #     where the epsiode length is N.
+            #
+            # We convolve discount_filter with the reversed time-domain signal
+            # deltas to get calculate the reversed advantages:
+            #     rev(advantages) = discount_filter (X) rev(deltas)
+            #
+            # TensorFlow's tf.nn.conv1d op is not a true convolution, but
+            # actually a cross-correlation, so its input and output are already
+            # implicitly reversed for us.
+            #    advantages = discount_filter (tf.nn.conv1d) deltas
+            #
 
-        # Prepare convolutional IIR filter to calculate advantages
-        gamma_lambda = tf.constant(
-            float(self.discount) * float(self.gae_lambda),
-            dtype=tf.float32,
-            shape=[self.max_path_length, 1, 1])
-        advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
+            # Prepare convolutional IIR filter to calculate advantages
+            gamma_lambda = tf.constant(
+                float(self.discount) * float(self.gae_lambda),
+                dtype=tf.float32,
+                shape=[self.max_path_length, 1, 1])
+            advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
 
-        # Calculate deltas
-        pad = tf.zeros_like(baseline_var[:, :1])
-        baseline_shift = tf.concat([baseline_var[:, 1:], pad], 1)
-        deltas = rewards + \
-                 (self.discount * baseline_shift) - \
-                 baseline_var
-        # Convolve deltas with the discount filter to get advantages
-        deltas_pad = tf.expand_dims(
-            tf.concat([deltas, tf.zeros_like(deltas[:, :-1])], axis=1), axis=2)
-        adv = tf.nn.conv1d(
-            deltas_pad, advantage_filter, stride=1, padding='VALID')
-        advantages = tf.reshape(adv, [-1])
-        adv_flat = flatten_batch(advantages)
+            # Calculate deltas
+            pad = tf.zeros_like(baseline_var[:, :1])
+            baseline_shift = tf.concat([baseline_var[:, 1:], pad], 1)
+            deltas = rewards + \
+                     (self.discount * baseline_shift) - \
+                     baseline_var
+            # Convolve deltas with the discount filter to get advantages
+            deltas_pad = tf.expand_dims(
+                tf.concat([deltas, tf.zeros_like(deltas[:, :-1])], axis=1),
+                axis=2)
+            adv = tf.nn.conv1d(
+                deltas_pad, advantage_filter, stride=1, padding='VALID')
+            advantages = tf.reshape(adv, [-1])
+            adv_flat = flatten_batch(advantages)
 
-        # Filter valid timesteps
-        obs_valid = filter_valids(obs_flat, valid_flat)
-        act_valid = filter_valids(act_flat, valid_flat)
-        state_info_valid = filter_valids_dict(state_info_vars, valid_flat)
-        old_dist_info_valid = filter_valids_dict(old_dist_info_flat,
-                                                 valid_flat)
-        adv_valid = filter_valids(adv_flat, valid_flat)
-        dist_info_vars_valid = filter_valids_dict(dist_info_vars, valid_flat)
+            # Filter valid timesteps
+            obs_valid = filter_valids(obs_flat, valid_flat)
+            act_valid = filter_valids(act_flat, valid_flat)
+            state_info_valid = filter_valids_dict(state_info_vars, valid_flat)
+            old_dist_info_valid = filter_valids_dict(old_dist_info_flat,
+                                                     valid_flat)
+            adv_valid = filter_valids(adv_flat, valid_flat)
+            dist_info_vars_valid = filter_valids_dict(dist_info_vars,
+                                                      valid_flat)
 
-        # Optionally normalize advantages
-        eps = tf.constant(1e-8, dtype=tf.float32)
-        if self.center_adv:
-            mean, var = tf.nn.moments(adv_valid, axes=[0])
-            adv_valid = tf.nn.batch_normalization(adv_valid, mean, var, 0, 1,
-                                                  eps)
+            # Optionally normalize advantages
+            eps = tf.constant(1e-8, dtype=tf.float32)
+            if self.center_adv:
+                mean, var = tf.nn.moments(adv_valid, axes=[0])
+                adv_valid = tf.nn.batch_normalization(adv_valid, mean, var, 0,
+                                                      1, eps)
 
-        if self.positive_adv:
-            m = tf.reduce_min(adv_valid)
-            adv_valid = (adv_valid - m) + eps
+            if self.positive_adv:
+                m = tf.reduce_min(adv_valid)
+                adv_valid = (adv_valid - m) + eps
 
-        # Calculate loss function and KL divergence
-        kl = dist.kl_sym(old_dist_info_valid, dist_info_vars_valid)
-        lr = dist.likelihood_ratio_sym(act_valid, old_dist_info_valid,
-                                       dist_info_vars_valid)
-        pol_mean_kl = tf.reduce_mean(kl)
-        surr_loss = -tf.reduce_mean(lr * adv_valid) - \
-                    (self.task_enc_ent_coeff * task_enc_entropy)
+        with tf.variable_scope('policy_loss'):
+            # Calculate loss function and KL divergence
+            kl = dist.kl_sym(old_dist_info_valid, dist_info_vars_valid)
+            lr = dist.likelihood_ratio_sym(act_valid, old_dist_info_valid,
+                                           dist_info_vars_valid)
+            pol_mean_kl = tf.reduce_mean(kl)
+            surr_loss = -tf.reduce_mean(lr * adv_valid) - \
+                        (self.task_enc_ent_coeff * task_enc_entropy)
 
         #### Returns (for the baseline) ########################################
         # This uses the same filtering trick as above to calculate the
         # discounted cumulative sum
-        gamma = tf.constant(
-            float(self.discount),
-            dtype=tf.float32,
-            shape=[self.max_path_length, 1, 1])
-        return_filter = tf.cumprod(gamma, exclusive=True)
-        rewards_pad = tf.expand_dims(
-            tf.concat([rewards, tf.zeros_like(rewards[:, :-1])], axis=1),
-            axis=2)
-        returns = tf.nn.conv1d(
-            rewards_pad, return_filter, stride=1, padding='VALID')
+        with tf.variable_scope('returns'):
+            gamma = tf.constant(
+                float(self.discount),
+                dtype=tf.float32,
+                shape=[self.max_path_length, 1, 1])
+            return_filter = tf.cumprod(gamma, exclusive=True)
+            rewards_pad = tf.expand_dims(
+                tf.concat([rewards, tf.zeros_like(rewards[:, :-1])], axis=1),
+                axis=2)
+            returns = tf.nn.conv1d(
+                rewards_pad, return_filter, stride=1, padding='VALID')
 
         #### Task encoder KL divergence ########################################
         # Input variables
@@ -317,26 +332,28 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             for k in task_enc_dist.dist_info_keys
         ]
 
-        # Flatten input variables
-        task_flat = flatten_batch(task_var)
-        task_enc_state_info_flat = flatten_batch_dict(task_enc_state_info_vars)
-        task_enc_old_dist_info_flat = flatten_batch_dict(
-            task_enc_old_dist_info_vars)
+        with tf.variable_scope('task_enc_kl'):
+            # Flatten input variables
+            task_flat = flatten_batch(task_var)
+            task_enc_state_info_flat = flatten_batch_dict(
+                task_enc_state_info_vars)
+            task_enc_old_dist_info_flat = flatten_batch_dict(
+                task_enc_old_dist_info_vars)
 
-        # Calculate task encoder distributions for each timestep
-        task_enc_dist_info_vars = self.task_encoder.dist_info_sym(
-            task_flat, task_enc_state_info_flat)
+            # Calculate task encoder distributions for each timestep
+            task_enc_dist_info_vars = self.task_encoder.dist_info_sym(
+                task_flat, task_enc_state_info_flat)
 
-        # Filter for valid time steps
-        task_enc_old_dist_info_valid = filter_valids_dict(
-            task_enc_old_dist_info_flat, valid_flat)
-        task_enc_dist_info_vars_valid = filter_valids_dict(
-            task_enc_dist_info_vars, valid_flat)
+            # Filter for valid time steps
+            task_enc_old_dist_info_valid = filter_valids_dict(
+                task_enc_old_dist_info_flat, valid_flat)
+            task_enc_dist_info_vars_valid = filter_valids_dict(
+                task_enc_dist_info_vars, valid_flat)
 
-        # Calculate KL divergence
-        task_enc_kl = task_enc_dist.kl_sym(task_enc_old_dist_info_valid,
-                                           task_enc_dist_info_vars_valid)
-        task_enc_mean_kl = tf.reduce_mean(task_enc_kl)
+            # Calculate KL divergence
+            task_enc_kl = task_enc_dist.kl_sym(task_enc_old_dist_info_valid,
+                                               task_enc_dist_info_vars_valid)
+            task_enc_mean_kl = tf.reduce_mean(task_enc_kl)
 
         #### Trajectory encoder KL divergence ##################################
         traj_enc_state_info_vars = {
@@ -365,28 +382,29 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             for k in traj_enc_dist.dist_info_keys
         ]
 
-        # Flatten input variables
-        traj_enc_state_info_flat = flatten_batch_dict(traj_enc_state_info_vars)
-        traj_enc_old_dist_info_flat = flatten_batch_dict(
-            traj_enc_old_dist_info_vars)
+        with tf.variable_scope('traj_enc_kl'):
+            # Flatten input variables
+            traj_enc_state_info_flat = flatten_batch_dict(
+                traj_enc_state_info_vars)
+            traj_enc_old_dist_info_flat = flatten_batch_dict(
+                traj_enc_old_dist_info_vars)
 
-        # Calculate task encoder distributions for each timestep
-        traj_enc_dist_info_vars = self.traj_encoder.dist_info_sym(
-            traj_flat, traj_enc_state_info_flat)
+            # Calculate task encoder distributions for each timestep
+            traj_enc_dist_info_vars = self.traj_encoder.dist_info_sym(
+                traj_flat, traj_enc_state_info_flat)
 
-        # Filter for valid time steps
-        traj_enc_old_dist_info_valid = filter_valids_dict(
-            traj_enc_old_dist_info_flat, valid_flat)
-        traj_enc_dist_info_vars_valid = filter_valids_dict(
-            traj_enc_dist_info_vars, valid_flat)
+            # Filter for valid time steps
+            traj_enc_old_dist_info_valid = filter_valids_dict(
+                traj_enc_old_dist_info_flat, valid_flat)
+            traj_enc_dist_info_vars_valid = filter_valids_dict(
+                traj_enc_dist_info_vars, valid_flat)
 
-        # Calculate KL divergence
-        traj_enc_kl = traj_enc_dist.kl_sym(traj_enc_old_dist_info_valid,
-                                           traj_enc_dist_info_vars_valid)
-        traj_enc_mean_kl = tf.reduce_mean(traj_enc_kl)
+            # Calculate KL divergence
+            traj_enc_kl = traj_enc_dist.kl_sym(traj_enc_old_dist_info_valid,
+                                               traj_enc_dist_info_vars_valid)
+            traj_enc_mean_kl = tf.reduce_mean(traj_enc_kl)
 
         #### Input list ########################################################
-
         input_list = [
             obs_var,
             action_var,
@@ -440,48 +458,49 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._traj_enc_mean_kl = traj_enc_mean_kl
 
         # DEBUG CPU VERSION ####################################################
-        cpu_obs_var = latent_obs_space.new_tensor_variable(
-            'obs_cpu',
-            extra_dims=1 + is_recurrent,
-        )
-        cpu_action_var = self.env.action_space.new_tensor_variable(
-            'action_cpu',
-            extra_dims=1 + is_recurrent,
-        )
-        cpu_advantage_var = tensor_utils.new_tensor(
-            'advantage_cpu',
-            ndim=1 + is_recurrent,
-            dtype=tf.float32,
-        )
-        cpu_old_dist_info_vars = {
-            k: tf.placeholder(
-                tf.float32,
-                shape=[None] * (1 + is_recurrent) + list(shape),
-                name='cpu_old_%s' % k)
-            for k, shape in dist.dist_info_specs
-        }
-        cpu_old_dist_info_vars_list = [
-            cpu_old_dist_info_vars[k] for k in dist.dist_info_keys
-        ]
+        with tf.variable_scope('cpu_debug'):
+            cpu_obs_var = latent_obs_space.new_tensor_variable(
+                'obs_cpu',
+                extra_dims=1 + is_recurrent,
+            )
+            cpu_action_var = self.env.action_space.new_tensor_variable(
+                'action_cpu',
+                extra_dims=1 + is_recurrent,
+            )
+            cpu_advantage_var = tensor_utils.new_tensor(
+                'advantage_cpu',
+                ndim=1 + is_recurrent,
+                dtype=tf.float32,
+            )
+            cpu_old_dist_info_vars = {
+                k: tf.placeholder(
+                    tf.float32,
+                    shape=[None] * (1 + is_recurrent) + list(shape),
+                    name='cpu_old_%s' % k)
+                for k, shape in dist.dist_info_specs
+            }
+            cpu_old_dist_info_vars_list = [
+                cpu_old_dist_info_vars[k] for k in dist.dist_info_keys
+            ]
 
-        cpu_state_info_vars = {
-            k: tf.placeholder(
-                tf.float32,
-                shape=[None] * (1 + is_recurrent) + list(shape),
-                name='cpu_old_state_%s' % k)
-            for k, shape in self.policy.state_info_specs
-        }
-        cpu_state_info_vars_list = [
-            cpu_state_info_vars[k] for k in self.policy.state_info_keys
-        ]
+            cpu_state_info_vars = {
+                k: tf.placeholder(
+                    tf.float32,
+                    shape=[None] * (1 + is_recurrent) + list(shape),
+                    name='cpu_old_state_%s' % k)
+                for k, shape in self.policy.state_info_specs
+            }
+            cpu_state_info_vars_list = [
+                cpu_state_info_vars[k] for k in self.policy.state_info_keys
+            ]
 
-        cpu_dist_info_vars = self.policy.dist_info_sym(cpu_obs_var,
-                                                       cpu_state_info_vars)
-        cpu_kl = dist.kl_sym(cpu_old_dist_info_vars, cpu_dist_info_vars)
-        cpu_lr = dist.likelihood_ratio_sym(
-            cpu_action_var, cpu_old_dist_info_vars, cpu_dist_info_vars)
-        cpu_mean_kl = tf.reduce_mean(cpu_kl)
-        cpu_surr_loss = -tf.reduce_mean(cpu_lr * cpu_advantage_var)
+            cpu_dist_info_vars = self.policy.dist_info_sym(
+                cpu_obs_var, cpu_state_info_vars)
+            cpu_kl = dist.kl_sym(cpu_old_dist_info_vars, cpu_dist_info_vars)
+            cpu_lr = dist.likelihood_ratio_sym(
+                cpu_action_var, cpu_old_dist_info_vars, cpu_dist_info_vars)
+            cpu_mean_kl = tf.reduce_mean(cpu_kl)
+            cpu_surr_loss = -tf.reduce_mean(cpu_lr * cpu_advantage_var)
 
         # Inputs
         self._cpu_obs_var = cpu_obs_var
@@ -498,17 +517,28 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._cpu_surr_loss = cpu_surr_loss
         #######################################################################
 
+        # Functions
         self.f_rewards = tensor_utils.compile_function(
             input_list, rewards, log_name="f_rewards")
         self.f_returns = tensor_utils.compile_function(
             input_list, returns, log_name="f_returns")
+        self.f_task_entropies = tensor_utils.compile_function(
+            input_list, all_task_entropies, log_name="f_task_entropies")
+        self.f_policy_entropy = tensor_utils.compile_function(
+            input_list,
+            tf.reduce_sum(pol_entropy * valid_var),
+            log_name="f_policy_entropy")
+        self.f_traj_cross_entropy = tensor_utils.compile_function(
+            input_list,
+            tf.reduce_sum(traj_ll * valid_var),
+            log_name="f_traj_cross_entropy")
+
 
         return surr_loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, \
                input_list
 
     @overrides
     def optimize_policy(self, itr, samples_data):
-
         # Collect input values
         all_input_values = tuple(
             ext.extract(samples_data, 'observations', 'actions', 'rewards',
@@ -543,6 +573,20 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         ]
         all_input_values += tuple(traj_enc_state_info_list) + tuple(
             traj_enc_dist_info_list)
+
+        # Log diagnostics before optimization
+
+        # Task entropy
+        task_ents = self.f_task_entropies(*all_input_values)
+        for i, v in enumerate(task_ents):
+            logger.record_tabular('TaskEncoder/Entropy/t={}'.format(i), v)
+        logger.record_tabular('TaskEncoder/Entropy', np.mean(task_ents))
+        # Policy total path entropy (TODO: discount)
+        policy_ent = self.f_policy_entropy(*all_input_values)
+        logger.record_tabular('Policy/Entropy', policy_ent)
+        # Trajectory encoder cross-entropy (TODO: discount)
+        traj_cross_ent = self.f_traj_cross_entropy(*all_input_values)
+        logger.record_tabular('TrajEncoder/Entropy', traj_cross_ent)
 
         #### DEBUG #############################################################
         # for k, v in samples_data.items():
@@ -675,6 +719,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # task encoder entropy
         # print('all_task_one_hots: {}'.format(f_gpu['all_task_one_hots']))
         # print('all_task_dists: {}'.format(f_gpu['all_task_dists']))
+        latent_mean = np.mean(f_gpu['all_task_dists']['mean'])
+        logger.record_tabular('TaskEncoder/Mean', latent_mean)
         # print('all_task_entropies: {}'.format(f_gpu['all_task_entropies']))
         # print('task_enc_entropy: {}'.format(f_gpu['task_enc_entropy']))
 
@@ -788,6 +834,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('MeanKL', mean_kl)
         logger.record_tabular('dLoss', loss_before - loss_after)
 
+        # Compute after-optimization diagnostics
+        f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
+        latent_mean_kl = f_gpu['task_enc_mean_kl']
+        logger.record_tabular('TaskEncoder/MeanKL', latent_mean_kl)
+
         return dict()
 
     def train(self, sess=None):
@@ -810,8 +861,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 logger.log("Optimizing policy and embedding...")
                 self.optimize_policy(itr, samples_data)
                 logger.log("Saving snapshot...")
-                params = self.get_itr_snapshot(itr,
-                                               samples_data)  # , **kwargs)
+                params = self.get_itr_snapshot(itr, samples_data)
                 if self.store_paths:
                     params["paths"] = samples_data["paths"]
                 logger.save_itr_params(itr, params)

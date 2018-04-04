@@ -64,17 +64,41 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
 
             # create network
             if mean_network is None:
-                mean_network = MLP(
-                    name="mean_network",
-                    input_shape=(in_dim, ),
-                    output_dim=latent_dim,
-                    hidden_sizes=hidden_sizes,
-                    hidden_nonlinearity=hidden_nonlinearity,
-                    output_nonlinearity=output_nonlinearity,
-                )
+                if std_share_network:
+                    if std_parameterization == 'exp':
+                        init_std_param = np.log(init_std)
+                    elif std_parameterization == 'softplus':
+                        init_std_param = np.log(np.exp(init_std) - 1)
+                    else:
+                        raise NotImplementedError
+                    # TODO(gh/): this isn't really the right way to initialize
+                    # the standard deviation
+                    init_b = tf.constant_initializer(init_std_param)
+                    mean_network = MLP(
+                        name="mean_network",
+                        input_shape=(in_dim, ),
+                        output_dim=latent_dim * 2,
+                        hidden_sizes=hidden_sizes,
+                        hidden_nonlinearity=hidden_nonlinearity,
+                        output_nonlinearity=output_nonlinearity,
+                        output_b_init=init_b,
+                    )
+                    l_mean = L.SliceLayer(
+                        mean_network.output_layer,
+                        slice(latent_dim),
+                        name="mean_slice")
+                else:
+                    mean_network = MLP(
+                        name="mean_network",
+                        input_shape=(in_dim, ),
+                        output_dim=latent_dim,
+                        hidden_sizes=hidden_sizes,
+                        hidden_nonlinearity=hidden_nonlinearity,
+                        output_nonlinearity=output_nonlinearity,
+                    )
+                    l_mean = mean_network.output_layer
             self._mean_network = mean_network
 
-            l_mean = mean_network.output_layer
             in_var = mean_network.input_layer.input_var
 
             if std_network is not None:
@@ -91,6 +115,11 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
                         output_nonlinearity=None,
                     )
                     l_std_param = std_network.output_layer
+                elif std_share_network:
+                    l_std_param = L.SliceLayer(
+                        mean_network.output_layer,
+                        slice(latent_dim, 2 * latent_dim),
+                        name="l_std_slice")
                 else:
                     if std_parameterization == 'exp':
                         init_std_param = np.log(init_std)
@@ -179,7 +208,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         """
         new_dist_info_vars = self.dist_info_sym(in_var, latent_var)
         new_mean_var, new_log_std_var = new_dist_info_vars[
-            "mean"], new_dist_info_vars["log_std"]
+            "mean"], new_dist_info_varsl["og_std"]
         old_mean_var, old_log_std_var = old_dist_info_vars[
             "mean"], old_dist_info_vars["log_std"]
         epsilon_var = (latent_var - old_mean_var) / (

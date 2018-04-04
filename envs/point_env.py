@@ -6,13 +6,16 @@ import pygame
 from rllab.core.serializable import Serializable
 from rllab.envs.base import Env, Step
 from rllab.misc.overrides import overrides
-
 from rllab.spaces.box import Box
 
 MAX_SHOWN_TRACES = 10
-
-TRACE_COLORS = [(80, 150, 0), (100, 180, 10), (100, 210, 30), (140, 230, 50),
-                (180, 250, 150)]
+TRACE_COLORS = [
+    (80, 150, 0),
+    (100, 180, 10),
+    (100, 210, 30),
+    (140, 230, 50),
+    (180, 250, 150)
+] # yapf: disable
 BRIGHT_COLOR = (200, 200, 200)
 DARK_COLOR = (150, 150, 150)
 
@@ -45,16 +48,22 @@ class PointEnv(Env, Serializable):
         self._point = np.copy(self._start)
         observation = np.copy(self._point)
         self._traces.append([])
-        return observation
+        return np.copy(self._point)
 
     def step(self, action):
         self._point = self._point + action
         x, y = self._point
         self._traces[-1].append((x, y))
         reward = -np.linalg.norm(self._point - self._goal)
+        
         done = np.linalg.norm(self._point - self._goal, ord=np.inf) < 0.1
-        next_observation = np.copy(self._point)
-        return Step(observation=next_observation, reward=reward, done=done)
+        reward = -np.linalg.norm(self._point - self._goal)
+
+        # completion bonus
+        if done:
+            reward = 20.0
+
+        return Step(observation=np.copy(self._point), reward=reward, done=done)
 
     def _to_screen(self, position):
         return (int(self.screen_width / 2 + position[0] * self.zoom),
