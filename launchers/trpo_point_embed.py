@@ -1,19 +1,16 @@
-import multiprocessing as mp
 import numpy as np
 
 from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.envs.normalized_env import normalize
-from rllab.misc.instrument import stub, run_experiment_lite
+from rllab.misc.instrument import run_experiment_lite
+from rllab.misc.ext import set_seed
 from rllab.envs.env_spec import EnvSpec
 
-from sandbox.rocky.tf.algos.trpo import TRPO
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
 from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings.one_hot_embedding import OneHotEmbedding
 from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
 from sandbox.embed2learn.envs.point_env import PointEnv
 from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
@@ -21,22 +18,24 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-N_PARALLEL = 1  # TODO(gh/10): the sampler is broken for n_parallel > 1
+N_PARALLEL = 16
 
 TASKS = {
-    '(-1, 0)': {'args': [], 'kwargs': {'goal': (-1, 0)}},
-    '(1, 0)': {'args': [], 'kwargs': {'goal': (1, 0)}},
+    '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
+    '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
 } # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 4
+LATENT_LENGTH = 8
 TRAJ_ENC_WINDOW = 5
 
 
 def run_task(*_):
+    set_seed(0)
+
     # Environment
     env = TfEnv(
         normalize(
@@ -74,7 +73,7 @@ def run_task(*_):
     policy = GaussianMLPPolicy(
         name="policy",
         env_spec=env_spec_embed,
-        hidden_sizes=(32, 32),
+        hidden_sizes=(64, 32),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -82,14 +81,14 @@ def run_task(*_):
     task_embedding = GaussianMLPEmbedding(
         name="task_embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(32, 32),
+        hidden_sizes=(64, 64),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(32, 32),
+        hidden_sizes=(64, 64),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -103,13 +102,10 @@ def run_task(*_):
         trajectory_encoder=traj_embedding,
         batch_size=4000,
         max_path_length=100,
-        n_itr=1000,
+        n_itr=1100,
         discount=0.99,
         step_size=0.01,
         plot=False,
-        policy_ent_coeff=1e-3,
-        task_encoder_ent_coeff=1e-4,
-        trajectory_encoder_ent_coeff=1e-4,
     )
     algo.train()
 

@@ -1,14 +1,39 @@
+from collections import deque
+
 import numpy as np
+import pygame
 
-from rllab.envs.base import Env
-from rllab.spaces import Box
-from rllab.envs.base import Step
+from rllab.core.serializable import Serializable
+from rllab.envs.base import Env, Step
+from rllab.misc.overrides import overrides
+from rllab.spaces.box import Box
+
+MAX_SHOWN_TRACES = 10
+TRACE_COLORS = [
+    (80, 150, 0),
+    (100, 180, 10),
+    (100, 210, 30),
+    (140, 230, 50),
+    (180, 250, 150)
+] # yapf: disable
+BRIGHT_COLOR = (200, 200, 200)
+DARK_COLOR = (150, 150, 150)
 
 
-class PointEnv(Env):
-    def __init__(self, goal=(0, 0), *args, **kwargs):
+class PointEnv(Env, Serializable):
+    def __init__(self, goal=(1, 1), show_traces=True):
+        Serializable.quick_init(self, locals())
+
         self._goal = np.array(goal, dtype=np.float32)
-        super(PointEnv, self).__init__(*args, **kwargs)
+        self._point = np.zeros(2)
+
+        self.screen = None
+        self.screen_width = 500
+        self.screen_height = 500
+        self.zoom = 50.
+        self.show_traces = show_traces
+
+        self._traces = deque(maxlen=MAX_SHOWN_TRACES)
 
     @property
     def observation_space(self):
@@ -19,19 +44,76 @@ class PointEnv(Env):
         return Box(low=-0.1, high=0.1, shape=(2, ))
 
     def reset(self):
-        start = np.random.uniform(-1, 1, size=(2, ))
-        self._state = start + self._goal
-        observation = np.copy(self._state)
-        return observation
+        self._point = np.zeros_like(self._goal)
+        self._traces.append([])
+        return np.copy(self._point)
 
     def step(self, action):
-        self._state = self._state + action
-        x, y = self._state
-        goal_x, goal_y = self._goal
-        reward = -((x - goal_x)**2 + (y - goal_y)**2)**0.5
-        done = abs(x - goal_x) < 0.01 and abs(y - goal_y) < 0.01
-        next_observation = np.copy(self._state)
-        return Step(observation=next_observation, reward=reward, done=done)
+        self._point = self._point + action
+        self._traces[-1].append(tuple(self._point))
 
-    def render(self):
-        print('current state:', self._state)
+        done = np.linalg.norm(self._point - self._goal, ord=np.inf) < 0.1
+        reward = -np.linalg.norm(self._point - self._goal)
+
+        # completion bonus
+        if done:
+            reward = 20.0
+
+        return Step(observation=np.copy(self._point), reward=reward, done=done)
+
+    def _to_screen(self, position):
+        return (int(self.screen_width / 2 + position[0] * self.zoom),
+                int(self.screen_height / 2 - position[1] * self.zoom))
+
+    @overrides
+    def render(self, **kwargs):
+
+        if self.screen is None:
+            pygame.init()
+            caption = "Point Environment"
+            pygame.display.set_caption(caption)
+            self.screen = pygame.display.set_mode((self.screen_width,
+                                                   self.screen_height))
+
+        self.screen.fill((255, 255, 255))
+
+        # draw grid
+        for x in range(25):
+            dx = -6. + x * 0.5
+            pygame.draw.line(self.screen, DARK_COLOR
+                             if x % 2 == 0 else BRIGHT_COLOR,
+                             self._to_screen((dx, -10)),
+                             self._to_screen((dx, 10)))
+        for y in range(25):
+            dy = -6. + y * 0.5
+            pygame.draw.line(self.screen, DARK_COLOR
+                             if y % 2 == 0 else BRIGHT_COLOR,
+                             self._to_screen((-10, dy)),
+                             self._to_screen((10, dy)))
+
+        # draw starting point
+        pygame.draw.circle(self.screen, (0, 0, 255), self._to_screen((0, 0)),
+                           10, 0)
+
+        # draw goal
+        pygame.draw.circle(self.screen, (255, 40, 0),
+                           self._to_screen(self._goal), 10, 0)
+
+        # draw point
+        pygame.draw.circle(self.screen, (40, 180, 10),
+                           self._to_screen(self._point), 10, 0)
+
+        # draw traces
+        if self.show_traces:
+            for i, trace in enumerate(self._traces):
+                if len(trace) > 1:
+                    pygame.draw.lines(
+                        self.screen,
+                        TRACE_COLORS[-min(len(TRACE_COLORS) - 1, i)], False,
+                        [self._to_screen(p) for p in trace])
+
+        pygame.display.flip()
+
+    def terminate(self):
+        if self.screen:
+            pygame.quit()
