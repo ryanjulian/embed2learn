@@ -8,6 +8,7 @@ from rllab.misc import ext
 from rllab.misc import special
 from rllab.misc.overrides import overrides
 import rllab.misc.logger as logger
+from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings.multitask_policy import MultitaskPolicy
 
 from sandbox.rocky.tf.algos.batch_polopt import BatchPolopt
@@ -15,7 +16,7 @@ from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.optimizers.penalty_lbfgs_optimizer import PenaltyLbfgsOptimizer
 from sandbox.rocky.tf.core.parameterized import JointParameterized
 
-from sandbox.embed2learn.embeddings.base import Embedding
+from sandbox.embed2learn.embeddings.base import Embedding, StochasticEmbedding
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 from sandbox.embed2learn.samplers.task_embedding_sampler import TaskEmbeddingSampler
 from sandbox.embed2learn.samplers.task_embedding_sampler import rollout
@@ -45,15 +46,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  optimizer_args=None,
                  step_size=0.01,
                  policy_ent_coeff=1e-2,
-                 policy: MultitaskPolicy = None,
+                 policy: GaussianMLPMultitaskPolicy = None,
                  task_encoder_ent_coeff=1e-5,
                  trajectory_encoder=None,
                  trajectory_encoder_ent_coeff=1e-3,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
-        assert isinstance(policy, MultitaskPolicy)
-        assert isinstance(trajectory_encoder, Embedding)
+        assert isinstance(policy, GaussianMLPMultitaskPolicy)
+        assert isinstance(trajectory_encoder, StochasticEmbedding)
 
         self.traj_encoder = trajectory_encoder
 
@@ -92,19 +93,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return dict()
 
     def _build_opt(self):
-        scope = tf.variable_scope('npo_task_embedding')
+        tf.variable_scope('npo_task_embedding').__enter__()
 
         is_recurrent = int(self.policy.recurrent)
         if is_recurrent:
             raise NotImplementedError
 
-        task_obs_space = concat_spaces(self.task_encoder.latent_space,
-                                         self.env.observation_space)
+        task_obs_space = self.policy.observation_space
 
         #### Policy and loss function ##########################################
 
         # Input variables
-        obs_var = latent_obs_space.new_tensor_variable(
+        obs_var = task_obs_space.new_tensor_variable(
             'obs',
             extra_dims=1 + 1,
         )
@@ -126,10 +126,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'trajectory',
             extra_dims=1 + 1,
         )
-        latent_var = self.task_encoder.latent_space.new_tensor_variable(
-            'latent',
-            extra_dims=1 + 1,
-        )
+        # latent_var = self.task_encoder.latent_space.new_tensor_variable(
+        #     'latent',
+        #     extra_dims=1 + 1,
+        # )
         valid_var = tf.placeholder(
             tf.float32, shape=[None, None], name="valid")
 
@@ -162,7 +162,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             obs_flat = flatten_batch(obs_var)
             act_flat = flatten_batch(action_var)
             traj_flat = flatten_batch(trajectory_var)
-            latent_flat = flatten_batch(latent_var)
+            latent_flat = flatten_batch(self.policy.latent_var)
             valid_flat = flatten_batch(valid_var)
             state_info_flat = flatten_batch_dict(state_info_vars)
             old_dist_info_flat = flatten_batch_dict(old_dist_info_vars)
@@ -300,7 +300,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### Task encoder KL divergence ########################################
         # Input variables
-        task_var = self.task_encoder.input_space.new_tensor_variable(
+        task_var = self.policy.embedding.input_space.new_tensor_variable(
             'task',
             extra_dims=1 + 1,
         )
@@ -310,14 +310,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 tf.float32,
                 shape=[None] * (1 + 1) + list(shape),
                 name='task_enc_%s' % k)
-            for k, shape in self.task_encoder.state_info_specs
+            for k, shape in self.policy.embedding.state_info_specs
         }
         task_enc_state_info_vars_list = [
             task_enc_state_info_vars[k]
-            for k in self.task_encoder.state_info_keys
+            for k in self.policy.embedding.state_info_keys
         ]
 
-        task_enc_dist = self.task_encoder.distribution
+        task_enc_dist = self.policy.embedding.distribution
 
         task_enc_old_dist_info_vars = {
             k: tf.placeholder(
@@ -340,7 +340,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 task_enc_old_dist_info_vars)
 
             # Calculate task encoder distributions for each timestep
-            task_enc_dist_info_vars = self.task_encoder.dist_info_sym(
+            task_enc_dist_info_vars = self.policy.embedding.dist_info_sym(
                 task_flat, task_enc_state_info_flat)
 
             # Filter for valid time steps
@@ -411,7 +411,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             baseline_var,
             trajectory_var,
             task_var,
-            latent_var,
+            # latent_var,
             valid_var,
         ] + state_info_vars_list + old_dist_info_vars_list \
           + task_enc_state_info_vars_list + task_enc_old_dist_info_vars_list \
@@ -425,7 +425,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._baseline_var = baseline_var
         self._trajectory_var = trajectory_var
         self._task_var = task_var
-        self._latent_var = latent_var
+        # self._latent_var = latent_var
         self._valid_var = valid_var
         self._state_info_vars_list = state_info_vars_list
         self._old_dist_info_vars_list = old_dist_info_vars_list
@@ -532,7 +532,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             tf.reduce_sum(traj_ll * valid_var),
             log_name="f_traj_cross_entropy")
 
-
         return surr_loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, \
                input_list
 
@@ -541,7 +540,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Collect input values
         all_input_values = tuple(
             ext.extract(samples_data, 'observations', 'actions', 'rewards',
-                        'baselines', 'trajectories', 'tasks', 'latents',
+                        'baselines', 'trajectories', 'tasks', # 'latents',
                         'valids'))
         # add policy params
         agent_infos = samples_data["agent_infos"]
@@ -551,16 +550,16 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         ]
         all_input_values += tuple(state_info_list) + tuple(dist_info_list)
         # add task encoder params
-        latent_infos = samples_data["latent_infos"]
-        task_enc_state_info_list = [
-            latent_infos[k] for k in self.task_encoder.state_info_keys
-        ]
-        task_enc_dist_info_list = [
-            latent_infos[k]
-            for k in self.task_encoder.distribution.dist_info_keys
-        ]
-        all_input_values += tuple(task_enc_state_info_list) + tuple(
-            task_enc_dist_info_list)
+        # latent_infos = samples_data["latent_infos"]
+        # task_enc_state_info_list = [
+        #     latent_infos[k] for k in self.task_encoder.state_info_keys
+        # ]
+        # task_enc_dist_info_list = [
+        #     latent_infos[k]
+        #     for k in self.task_encoder.distribution.dist_info_keys
+        # ]
+        # all_input_values += tuple(task_enc_state_info_list) + tuple(
+        #     task_enc_dist_info_list)
         # add trajectory encoder params
         trajectory_infos = samples_data["trajectory_infos"]
         traj_enc_state_info_list = [
@@ -614,7 +613,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._baseline_var: samples_data['baselines'],
             self._trajectory_var: samples_data['trajectories'],
             self._task_var: samples_data['tasks'],
-            self._latent_var: samples_data['latents'],
+            # self._latent_var: samples_data['latents'],
             self._valid_var: samples_data['valids'],
             self._cpu_obs_var: samples_data['cpu_obs'],
             self._cpu_action_var: samples_data['cpu_act'],
@@ -628,10 +627,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             feed[v] = cpu_state_info_list[idx]
         for idx, v in enumerate(self._cpu_old_dist_info_vars_list):
             feed[v] = cpu_dist_info_list[idx]
-        for idx, v in enumerate(self._task_enc_state_info_vars_list):
-            feed[v] = task_enc_state_info_list[idx]
-        for idx, v in enumerate(self._task_enc_old_dist_info_vars_list):
-            feed[v] = task_enc_dist_info_list[idx]
+        # for idx, v in enumerate(self._task_enc_state_info_vars_list):
+        #     feed[v] = task_enc_state_info_list[idx]
+        # for idx, v in enumerate(self._task_enc_old_dist_info_vars_list):
+        #     feed[v] = task_enc_dist_info_list[idx]
         for idx, v in enumerate(self._traj_enc_state_info_vars_list):
             feed[v] = traj_enc_state_info_list[idx]
         for idx, v in enumerate(self._traj_enc_old_dist_info_vars_list):
@@ -850,7 +849,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     rollout(
                         self.env,
                         self.policy,
-                        self.task_encoder,
+                        # self.task_encoder,
                         animated=True,
                         max_path_length=self.max_path_length)
                     if self.pause_for_plot:
@@ -864,6 +863,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             policy=self.policy,
             baseline=self.baseline,
             env=self.env,
-            task_encoder=self.task_encoder,
+            # task_encoder=self.task_encoder,
             trajectory_encoder=self.traj_encoder,
         )

@@ -23,6 +23,9 @@ class MultitaskPolicy(Policy, Parameterized):
     def get_actions_from_latent(self, observations, latents):
         raise NotImplementedError
 
+    def get_latent(self, onehot):
+        raise NotImplementedError
+
     def reset(self, dones=None):
         pass
 

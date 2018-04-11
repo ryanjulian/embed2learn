@@ -6,6 +6,7 @@ import numpy as np
 import rllab.misc.logger as logger
 from rllab.sampler import parallel_sampler
 from rllab.sampler.stateful_pool import singleton_pool
+from sandbox.embed2learn.embeddings.multitask_policy import MultitaskPolicy
 
 from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
@@ -24,8 +25,7 @@ from rllab.misc import special  # DEBUG
 
 
 def rollout(env,
-            agent,
-            task_encoder,
+            agent: MultitaskPolicy,
             max_path_length=np.inf,
             animated=False,
             speedup=1,
@@ -40,35 +40,29 @@ def rollout(env,
     agent_infos = []
     env_infos = []
 
-    latent_obs_space = concat_spaces(task_encoder.latent_space,
-                                     env.observation_space)
-
     # Resets
     o = env.reset()
     agent.reset()
-    task_encoder.reset()
 
     # Sample embedding network
     # NOTE: it is important to do this _once per rollout_, not once per
     # timestep, since we need correlated noise.
     t = env.active_task_one_hot
-    z, latent_info = task_encoder.get_latent(t)
+    z, latent_info = agent.get_latent(t)
 
     if animated:
         env.render()
 
     path_length = 0
     while path_length < max_path_length:
-        z_o = np.concatenate([z, o])
-        a, agent_info = agent.get_action(z_o)
+        a, agent_info = agent.get_action(o)
         next_o, r, d, env_info = env.step(a)
-        env_observations.append(env.observation_space.flatten(o))
-        observations.append(latent_obs_space.flatten(z_o))
+        observations.append(agent.observation_space.flatten(o))
         tasks.append(t)
-        latents.append(task_encoder.latent_space.flatten(z))
+        latents.append(agent.latent_space.flatten(z))
         latent_infos.append(latent_info)
         rewards.append(r)
-        actions.append(env.action_space.flatten(a))
+        actions.append(agent.action_space.flatten(a))
         agent_infos.append(agent_info)
         env_infos.append(env_info)
         path_length += 1
@@ -84,7 +78,6 @@ def rollout(env,
 
     return dict(
         observations=tensor_utils.stack_tensor_list(observations),
-        env_observations=tensor_utils.stack_tensor_list(env_observations),
         actions=tensor_utils.stack_tensor_list(actions),
         rewards=tensor_utils.stack_tensor_list(rewards),
         tasks=tensor_utils.stack_tensor_list(tasks),

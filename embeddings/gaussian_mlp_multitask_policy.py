@@ -71,9 +71,9 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             # task embedding + plain obs
             latent_obs_dim = latent_dim + env_obs_dim
 
-            self._latent_sym = tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
+            self.latent_var = tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
             self._env_obs_sym = tf.placeholder(tf.float32, (None, env_obs_dim), name='env_obs')
-            self._policy_input = tf.concat((self._latent_sym, self._env_obs_sym), axis=1, name='policy_input')
+            self._policy_input = tf.concat((self.latent_var, self._env_obs_sym), axis=1, name='policy_input')
 
             # create network
             if mean_network is None:
