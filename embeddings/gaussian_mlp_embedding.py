@@ -208,7 +208,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         """
         new_dist_info_vars = self.dist_info_sym(in_var, latent_var)
         new_mean_var, new_log_std_var = new_dist_info_vars[
-            "mean"], new_dist_info_varsl["og_std"]
+            "mean"], new_dist_info_vars["og_std"]
         old_mean_var, old_log_std_var = old_dist_info_vars[
             "mean"], old_dist_info_vars["log_std"]
         epsilon_var = (latent_var - old_mean_var) / (

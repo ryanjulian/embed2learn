@@ -8,6 +8,7 @@ from rllab.misc import ext
 from rllab.misc import special
 from rllab.misc.overrides import overrides
 import rllab.misc.logger as logger
+from sandbox.embed2learn.embeddings.multitask_policy import MultitaskPolicy
 
 from sandbox.rocky.tf.algos.batch_polopt import BatchPolopt
 from sandbox.rocky.tf.misc import tensor_utils
@@ -44,17 +45,16 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  optimizer_args=None,
                  step_size=0.01,
                  policy_ent_coeff=1e-2,
-                 task_encoder=None,
+                 policy: MultitaskPolicy = None,
                  task_encoder_ent_coeff=1e-5,
                  trajectory_encoder=None,
                  trajectory_encoder_ent_coeff=1e-3,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
-        assert isinstance(task_encoder, Embedding)
+        assert isinstance(policy, MultitaskPolicy)
         assert isinstance(trajectory_encoder, Embedding)
 
-        self.task_encoder = task_encoder
         self.traj_encoder = trajectory_encoder
 
         # Joint optimizer for policy, task encoder and trajectory encoder
@@ -67,11 +67,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         sampler_cls = TaskEmbeddingSampler
         sampler_args = dict(
-            task_encoder=self.task_encoder,
             trajectory_encoder=self.traj_encoder,
         )
         super(NPOTaskEmbedding, self).__init__(
-            sampler_cls=sampler_cls, sampler_args=sampler_args, **kwargs)
+            sampler_cls=sampler_cls, sampler_args=sampler_args, policy=policy, **kwargs)
 
     @overrides
     def init_opt(self):
@@ -99,7 +98,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         if is_recurrent:
             raise NotImplementedError
 
-        latent_obs_space = concat_spaces(self.task_encoder.latent_space,
+        task_obs_space = concat_spaces(self.task_encoder.latent_space,
                                          self.env.observation_space)
 
         #### Policy and loss function ##########################################
@@ -176,11 +175,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             # Calculate entropy terms
             # 1. Task encoder total entropy
             with tf.variable_scope('task_encoder_entropy'):
-                task_dim = self.task_encoder.input_space.flat_dim
+                task_dim = self.policy.embedding.input_space.flat_dim
                 all_task_one_hots = tf.one_hot(np.arange(task_dim), task_dim)
-                all_task_dists = self.task_encoder.dist_info_sym(
+                all_task_dists = self.policy.embedding.dist_info_sym(
                     all_task_one_hots)
-                all_task_entropies = self.task_encoder.entropy_sym(
+                all_task_entropies = self.policy.embedding.entropy_sym(
                     all_task_dists)
                 task_enc_entropy = tf.reduce_mean(all_task_entropies)
 

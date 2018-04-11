@@ -4,6 +4,7 @@ from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
 from rllab.misc.instrument import run_experiment_lite
 from rllab.misc.ext import set_seed
 from rllab.envs.env_spec import EnvSpec
+from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
 
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
@@ -29,11 +30,11 @@ TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 8
+LATENT_LENGTH = 4
 TRAJ_ENC_WINDOW = 5
 
 
-def run_task(*_):
+def run_task(plot=False, *_):
     set_seed(0)
 
     # Environment
@@ -66,16 +67,8 @@ def run_task(*_):
 
     task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
     traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
-    latent_obs_space = concat_spaces(latent_space, env.observation_space)
-    env_spec_embed = EnvSpec(latent_obs_space, env.action_space)
-
-    # Base policy
-    policy = GaussianMLPPolicy(
-        name="policy",
-        env_spec=env_spec_embed,
-        hidden_sizes=(64, 32),
-        adaptive_std=True,  # Must be True for embedding learning
-    )
+    task_obs_space = concat_spaces(env.task_space, env.observation_space)
+    env_spec_embed = EnvSpec(task_obs_space, env.action_space)
 
     # Embeddings
     task_embedding = GaussianMLPEmbedding(
@@ -85,10 +78,20 @@ def run_task(*_):
         adaptive_std=True,  # Must be True for embedding learning
     )
 
+    # TODO(): rename to inference_network
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
         hidden_sizes=(64, 64),
+        adaptive_std=True,  # Must be True for embedding learning
+    )
+
+    # Multitask policy
+    policy = GaussianMLPMultitaskPolicy(
+        name="policy",
+        env_spec=env_spec_embed,
+        embedding=task_embedding,
+        hidden_sizes=(64, 32),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -98,21 +101,26 @@ def run_task(*_):
         env=env,
         policy=policy,
         baseline=baseline,
-        task_encoder=task_embedding,
         trajectory_encoder=traj_embedding,
         batch_size=4000,
         max_path_length=100,
         n_itr=1100,
         discount=0.99,
         step_size=0.01,
-        plot=False,
+        plot=plot,
+
+        # TODO comment out
+        policy_ent_coeff=0,
+        task_encoder_ent_coeff=0,
+        trajectory_encoder_ent_coeff=0,
     )
     algo.train()
 
 
-run_experiment_lite(
-    run_task,
-    exp_prefix='trpo_point_embed',
-    n_parallel=N_PARALLEL,
-    plot=False,
-)
+# run_experiment_lite(
+#     run_task,
+#     exp_prefix='trpo_point_embed',
+#     n_parallel=N_PARALLEL,
+#     plot=False,
+# )
+run_task(plot=True)
