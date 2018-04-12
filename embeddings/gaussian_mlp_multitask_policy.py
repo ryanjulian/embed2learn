@@ -76,6 +76,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             embed_dist_info_sym = self._embedding.dist_info_sym(
                 self._embedding._mean_network.input_layer.input_var, dict())
             self.latent_var = embed_dist_info_sym["mean"]
+            # self.latent_var = tf.reshape(self.latent_var, (None,) + tuple(self.latent_var.shape), name='latent')
 
             # self.latent_var = self._embedding._l_mean.get_output_for(self.onehot_input_var)  # tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
             self._policy_input_var = tf.concat((self.latent_var, self.env_input_var), axis=1, name='policy_input')

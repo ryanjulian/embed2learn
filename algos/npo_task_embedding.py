@@ -75,7 +75,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     @overrides
     def init_opt(self):
-        loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, input_list = \
+        loss, pol_mean_kl, traj_enc_mean_kl, input_list = \
             self._build_opt()
 
         # Optimize policy, task_encoder and traj_encoder jointly
@@ -109,10 +109,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'obs',
             extra_dims=1 + 1,
         )
-        task_var = task_space.new_tensor_variable(
-            'task',
-            extra_dims=1 + 1,
-        )
+        # task_var = task_space.new_tensor_variable(
+        #     'task',
+        #     extra_dims=1 + 1,
+        # )
         action_var = self.env.action_space.new_tensor_variable(
             'action',
             extra_dims=1 + 1,
@@ -131,10 +131,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'trajectory',
             extra_dims=1 + 1,
         )
-        latent_var = self.policy.latent_space.new_tensor_variable(
-            'latent',
-            extra_dims=1 + 1,
-        )
+        # latent_var = self.policy.latent_space.new_tensor_variable(
+        #     'latent',
+        #     extra_dims=1 + 1,
+        # )
         valid_var = tf.placeholder(
             tf.float32, shape=[None, None], name="valid")
 
@@ -165,11 +165,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Flatten
         with tf.variable_scope('flatten'):
             obs_flat = flatten_batch(obs_var)
-            task_flat = flatten_batch(task_var)
+            # task_flat = flatten_batch(task_var)
             act_flat = flatten_batch(action_var)
             traj_flat = flatten_batch(trajectory_var)
-            # latent_flat = flatten_batch(self.policy.latent_var)
-            latent_flat = flatten_batch(latent_var)
+            latent_flat = flatten_batch(self.policy.latent_var)
+            # latent_flat = flatten_batch(latent_var)
             valid_flat = flatten_batch(valid_var)
             state_info_flat = flatten_batch_dict(state_info_vars)
             old_dist_info_flat = flatten_batch_dict(old_dist_info_vars)
@@ -177,7 +177,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Calculate policy distributions for each timestep
         # TODO: may need to freeze this for all three op steps
         # dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
-        latent_obs_flat = tf.concat((latent_flat, obs_flat), axis=1)
+        latent_obs_flat = tf.concat((self.policy.latent_var, obs_flat), axis=1)
         dist_info_vars = self.policy.dist_info_sym(latent_obs_flat, state_info_flat)
 
         with tf.variable_scope('entropies'):
@@ -328,40 +328,40 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         task_enc_dist = self.policy.embedding.distribution
 
-        task_enc_old_dist_info_vars = {
-            k: tf.placeholder(
-                tf.float32,
-                shape=[None] * (1 + 1) + list(shape),
-                name='task_enc_old_%s' % k)
-            for k, shape in task_enc_dist.dist_info_specs
-        }
-        task_enc_old_dist_info_vars_list = [
-            task_enc_old_dist_info_vars[k]
-            for k in task_enc_dist.dist_info_keys
-        ]
-
-        with tf.variable_scope('task_enc_kl'):
-            # Flatten input variables
-            task_flat = flatten_batch(task_var)
-            task_enc_state_info_flat = flatten_batch_dict(
-                task_enc_state_info_vars)
-            task_enc_old_dist_info_flat = flatten_batch_dict(
-                task_enc_old_dist_info_vars)
-
-            # Calculate task encoder distributions for each timestep
-            task_enc_dist_info_vars = self.policy.embedding.dist_info_sym(
-                task_flat, task_enc_state_info_flat)
-
-            # Filter for valid time steps
-            task_enc_old_dist_info_valid = filter_valids_dict(
-                task_enc_old_dist_info_flat, valid_flat)
-            task_enc_dist_info_vars_valid = filter_valids_dict(
-                task_enc_dist_info_vars, valid_flat)
-
-            # Calculate KL divergence
-            task_enc_kl = task_enc_dist.kl_sym(task_enc_old_dist_info_valid,
-                                               task_enc_dist_info_vars_valid)
-            task_enc_mean_kl = tf.reduce_mean(task_enc_kl)
+        # task_enc_old_dist_info_vars = {
+        #     k: tf.placeholder(
+        #         tf.float32,
+        #         shape=[None] * (1 + 1) + list(shape),
+        #         name='task_enc_old_%s' % k)
+        #     for k, shape in task_enc_dist.dist_info_specs
+        # }
+        # task_enc_old_dist_info_vars_list = [
+        #     task_enc_old_dist_info_vars[k]
+        #     for k in task_enc_dist.dist_info_keys
+        # ]
+        #
+        # with tf.variable_scope('task_enc_kl'):
+        #     # Flatten input variables
+        #     task_flat = flatten_batch(task_var)
+        #     task_enc_state_info_flat = flatten_batch_dict(
+        #         task_enc_state_info_vars)
+        #     task_enc_old_dist_info_flat = flatten_batch_dict(
+        #         task_enc_old_dist_info_vars)
+        #
+        #     # Calculate task encoder distributions for each timestep
+        #     task_enc_dist_info_vars = self.policy.embedding.dist_info_sym(
+        #         task_flat, task_enc_state_info_flat)
+        #
+        #     # Filter for valid time steps
+        #     task_enc_old_dist_info_valid = filter_valids_dict(
+        #         task_enc_old_dist_info_flat, valid_flat)
+        #     task_enc_dist_info_vars_valid = filter_valids_dict(
+        #         task_enc_dist_info_vars, valid_flat)
+        #
+        #     # Calculate KL divergence
+        #     task_enc_kl = task_enc_dist.kl_sym(task_enc_old_dist_info_valid,
+        #                                        task_enc_dist_info_vars_valid)
+        #     task_enc_mean_kl = tf.reduce_mean(task_enc_kl)
 
         #### Trajectory encoder KL divergence ##################################
         traj_enc_state_info_vars = {
@@ -414,17 +414,19 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### Input list ########################################################
         input_list = [
+            self.policy.onehot_input_var,  # TODO find better way to provide task onehot
             obs_var,
             action_var,
             reward_var,
             baseline_var,
             trajectory_var,
             task_var,
-            latent_var,
+            # latent_var,
             valid_var,
         ] + state_info_vars_list + old_dist_info_vars_list \
-          + task_enc_state_info_vars_list + task_enc_old_dist_info_vars_list \
+          + task_enc_state_info_vars_list \
           + traj_enc_state_info_vars_list + traj_enc_old_dist_info_vars_list
+            #+ task_enc_old_dist_info_vars_list
 
         #### DEBUG #############################################################
         # Inputs
@@ -434,12 +436,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._baseline_var = baseline_var
         self._trajectory_var = trajectory_var
         self._task_var = task_var
-        self._latent_var = latent_var
+        # self._latent_var = latent_var
         self._valid_var = valid_var
         self._state_info_vars_list = state_info_vars_list
         self._old_dist_info_vars_list = old_dist_info_vars_list
         self._task_enc_state_info_vars_list = task_enc_state_info_vars_list
-        self._task_enc_old_dist_info_vars_list = task_enc_old_dist_info_vars_list
+        # self._task_enc_old_dist_info_vars_list = task_enc_old_dist_info_vars_list
         self._traj_enc_state_info_vars_list = traj_enc_state_info_vars_list
         self._traj_enc_old_dist_info_vars_list = traj_enc_old_dist_info_vars_list
         # Outputs
@@ -462,7 +464,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._lr = lr
         self._pol_mean_kl = pol_mean_kl
         self._surr_loss = surr_loss
-        self._task_enc_mean_kl = task_enc_mean_kl
+        # self._task_enc_mean_kl = task_enc_mean_kl
         self._traj_enc_mean_kl = traj_enc_mean_kl
 
         # DEBUG CPU VERSION ####################################################
@@ -541,15 +543,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             tf.reduce_sum(traj_ll * valid_var),
             log_name="f_traj_cross_entropy")
 
-        return surr_loss, pol_mean_kl, task_enc_mean_kl, traj_enc_mean_kl, \
-               input_list
+        return surr_loss, pol_mean_kl, traj_enc_mean_kl, \
+               input_list #, task_enc_mean_kl
 
     @overrides
     def optimize_policy(self, itr, samples_data):
         # Collect input values
-        all_input_values = tuple(
+        tasks = np.reshape(samples_data["tasks"], (-1, self.policy.task_space.flat_dim))
+        all_input_values = tasks,
+        all_input_values += tuple(
             ext.extract(samples_data, 'observations', 'actions', 'rewards',
-                        'baselines', 'trajectories', 'tasks', 'latents',
+                        'baselines', 'trajectories', 'tasks', #'latents',
                         'valids'))
         # add policy params
         agent_infos = samples_data["agent_infos"]
@@ -584,11 +588,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Log diagnostics before optimization
 
         # Task entropy
-        task_ents = self.f_task_entropies(*all_input_values)
-        for i, v in enumerate(task_ents):
-            logger.record_tabular('TaskEncoder/Entropy/t={}'.format(i), v)
-        logger.record_tabular('TaskEncoder/Entropy', np.mean(task_ents))
+        # task_ents = self.f_task_entropies(*all_input_values)
+        # for i, v in enumerate(task_ents):
+        #     logger.record_tabular('TaskEncoder/Entropy/t={}'.format(i), v)
+        # logger.record_tabular('TaskEncoder/Entropy', np.mean(task_ents))
         # Policy total path entropy (TODO: discount)
+
+        #TODO remove!!!!!!!!!!!!!!!
+        tf.summary.FileWriter("logs", tf.get_default_graph()).close()
+
         policy_ent = self.f_policy_entropy(*all_input_values)
         logger.record_tabular('Policy/Entropy', policy_ent)
         # Trajectory encoder cross-entropy (TODO: discount)
@@ -670,7 +678,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'kl': self._kl,
             'lr': self._lr,
             'pol_mean_kl': self._pol_mean_kl,
-            'task_enc_mean_kl': self._task_enc_mean_kl,
+            # 'task_enc_mean_kl': self._task_enc_mean_kl,
             'traj_enc_mean_kl': self._traj_enc_mean_kl,
             'surr_loss': self._surr_loss,
         }
