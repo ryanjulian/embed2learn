@@ -1,13 +1,16 @@
 from sandbox.embed2learn.embeddings.base import Embedding, StochasticEmbedding
+from sandbox.embed2learn.embeddings.utils import concat_spaces
 from sandbox.rocky.tf.core.parameterized import Parameterized
 from sandbox.rocky.tf.policies.base import Policy, StochasticPolicy
 
 
 class MultitaskPolicy(Policy, Parameterized):
-    def __init__(self, env_spec, embedding: Embedding):
+    def __init__(self, env_spec, embedding: Embedding, task_space):
         Parameterized.__init__(self)
         self._env_spec = env_spec
         self._embedding = embedding
+        self._task_space = task_space
+        self._task_observation_space = concat_spaces(self._task_space, self._env_spec.observation_space)
 
     # Should be implemented by all policies
 
@@ -24,7 +27,7 @@ class MultitaskPolicy(Policy, Parameterized):
         raise NotImplementedError
 
     def get_latent(self, onehot):
-        raise NotImplementedError
+        return self._embedding.get_latent(onehot)
 
     def reset(self, dones=None):
         pass
@@ -50,8 +53,16 @@ class MultitaskPolicy(Policy, Parameterized):
         return self._embedding.embedding_spec
 
     @property
+    def task_space(self):
+        return self._task_space
+
+    @property
     def observation_space(self):
         return self._env_spec.observation_space
+
+    @property
+    def task_observation_space(self):
+        return self._task_observation_space
 
     @property
     def action_space(self):
@@ -97,11 +108,19 @@ class MultitaskPolicy(Policy, Parameterized):
         """
         pass
 
+    def split_observation(self, observation):
+        """
+        Splits up observation into task onehot and vanilla environment observation.
+        :param observation: task onehot concatenated with vanilla environment observation
+        :return: tuple (task onehot, vanilla environment observation)
+        """
+        return observation[self.task_space.flat_dim:], observation[:self.task_space.flat_dim]
+
 
 class StochasticMultitaskPolicy(StochasticPolicy, MultitaskPolicy):
 
-    def __init__(self, env_spec, embedding: StochasticEmbedding):
-        super().__init__(env_spec, embedding)
+    def __init__(self, env_spec, embedding: StochasticEmbedding, task_space):
+        super().__init__(env_spec, embedding, task_space)
         self._embedding = embedding
 
     @property

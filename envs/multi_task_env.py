@@ -37,8 +37,8 @@ class MultiTaskEnv(Env):
 
     def step(self, action):
         obs, reward, done, info = self._active_env.step(action)
-        info['task'] = self.active_task_one_hot
-        obs = np.concatenate((info['task'], obs))
+        # info['task'] = self.active_task_one_hot
+        # obs = np.concatenate((info['task'], obs))
         return Step(obs, reward, done, **info)
 
     def render(self, *args, **kwargs):

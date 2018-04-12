@@ -89,7 +89,8 @@ def run_task(plot=False, *_):
     # Multitask policy
     policy = GaussianMLPMultitaskPolicy(
         name="policy",
-        env_spec=env_spec_embed,
+        env_spec=env.spec,
+        task_space=env.task_space,
         embedding=task_embedding,
         hidden_sizes=(64, 32),
         adaptive_std=True,  # Must be True for embedding learning

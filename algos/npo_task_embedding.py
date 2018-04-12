@@ -80,7 +80,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Optimize policy, task_encoder and traj_encoder jointly
         targets = JointParameterized(
-            components=[self.policy, self.task_encoder, self.traj_encoder])
+            components=[self.policy, self.traj_encoder])
 
         # TODO(): should we consider KL constraints for all three networks?
         self.optimizer.update_opt(
@@ -99,13 +99,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         if is_recurrent:
             raise NotImplementedError
 
-        task_obs_space = self.policy.observation_space
+        obs_space = self.policy.observation_space
+        task_space = self.policy.task_space
 
         #### Policy and loss function ##########################################
 
         # Input variables
-        obs_var = task_obs_space.new_tensor_variable(
+        obs_var = obs_space.new_tensor_variable(
             'obs',
+            extra_dims=1 + 1,
+        )
+        task_var = task_space.new_tensor_variable(
+            'task',
             extra_dims=1 + 1,
         )
         action_var = self.env.action_space.new_tensor_variable(
@@ -126,10 +131,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'trajectory',
             extra_dims=1 + 1,
         )
-        # latent_var = self.task_encoder.latent_space.new_tensor_variable(
-        #     'latent',
-        #     extra_dims=1 + 1,
-        # )
+        latent_var = self.policy.latent_space.new_tensor_variable(
+            'latent',
+            extra_dims=1 + 1,
+        )
         valid_var = tf.placeholder(
             tf.float32, shape=[None, None], name="valid")
 
@@ -160,16 +165,20 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Flatten
         with tf.variable_scope('flatten'):
             obs_flat = flatten_batch(obs_var)
+            task_flat = flatten_batch(task_var)
             act_flat = flatten_batch(action_var)
             traj_flat = flatten_batch(trajectory_var)
-            latent_flat = flatten_batch(self.policy.latent_var)
+            # latent_flat = flatten_batch(self.policy.latent_var)
+            latent_flat = flatten_batch(latent_var)
             valid_flat = flatten_batch(valid_var)
             state_info_flat = flatten_batch_dict(state_info_vars)
             old_dist_info_flat = flatten_batch_dict(old_dist_info_vars)
 
         # Calculate policy distributions for each timestep
         # TODO: may need to freeze this for all three op steps
-        dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
+        # dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
+        latent_obs_flat = tf.concat((latent_flat, obs_flat), axis=1)
+        dist_info_vars = self.policy.dist_info_sym(latent_obs_flat, state_info_flat)
 
         with tf.variable_scope('entropies'):
             # Calculate entropy terms
@@ -411,7 +420,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             baseline_var,
             trajectory_var,
             task_var,
-            # latent_var,
+            latent_var,
             valid_var,
         ] + state_info_vars_list + old_dist_info_vars_list \
           + task_enc_state_info_vars_list + task_enc_old_dist_info_vars_list \
@@ -425,7 +434,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._baseline_var = baseline_var
         self._trajectory_var = trajectory_var
         self._task_var = task_var
-        # self._latent_var = latent_var
+        self._latent_var = latent_var
         self._valid_var = valid_var
         self._state_info_vars_list = state_info_vars_list
         self._old_dist_info_vars_list = old_dist_info_vars_list
@@ -457,63 +466,63 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._traj_enc_mean_kl = traj_enc_mean_kl
 
         # DEBUG CPU VERSION ####################################################
-        with tf.variable_scope('cpu_debug'):
-            cpu_obs_var = latent_obs_space.new_tensor_variable(
-                'obs_cpu',
-                extra_dims=1 + is_recurrent,
-            )
-            cpu_action_var = self.env.action_space.new_tensor_variable(
-                'action_cpu',
-                extra_dims=1 + is_recurrent,
-            )
-            cpu_advantage_var = tensor_utils.new_tensor(
-                'advantage_cpu',
-                ndim=1 + is_recurrent,
-                dtype=tf.float32,
-            )
-            cpu_old_dist_info_vars = {
-                k: tf.placeholder(
-                    tf.float32,
-                    shape=[None] * (1 + is_recurrent) + list(shape),
-                    name='cpu_old_%s' % k)
-                for k, shape in dist.dist_info_specs
-            }
-            cpu_old_dist_info_vars_list = [
-                cpu_old_dist_info_vars[k] for k in dist.dist_info_keys
-            ]
-
-            cpu_state_info_vars = {
-                k: tf.placeholder(
-                    tf.float32,
-                    shape=[None] * (1 + is_recurrent) + list(shape),
-                    name='cpu_old_state_%s' % k)
-                for k, shape in self.policy.state_info_specs
-            }
-            cpu_state_info_vars_list = [
-                cpu_state_info_vars[k] for k in self.policy.state_info_keys
-            ]
-
-            cpu_dist_info_vars = self.policy.dist_info_sym(
-                cpu_obs_var, cpu_state_info_vars)
-            cpu_kl = dist.kl_sym(cpu_old_dist_info_vars, cpu_dist_info_vars)
-            cpu_lr = dist.likelihood_ratio_sym(
-                cpu_action_var, cpu_old_dist_info_vars, cpu_dist_info_vars)
-            cpu_mean_kl = tf.reduce_mean(cpu_kl)
-            cpu_surr_loss = -tf.reduce_mean(cpu_lr * cpu_advantage_var)
-
-        # Inputs
-        self._cpu_obs_var = cpu_obs_var
-        self._cpu_action_var = cpu_action_var
-        self._cpu_advantage_var = cpu_advantage_var
-        self._cpu_state_info_vars_list = cpu_state_info_vars_list
-        self._cpu_old_dist_info_vars_list = cpu_old_dist_info_vars_list
-
-        # Outputs
-        self._cpu_dist_info_vars = cpu_dist_info_vars
-        self._cpu_kl = cpu_kl
-        self._cpu_lr = cpu_lr
-        self._cpu_mean_kl = cpu_mean_kl
-        self._cpu_surr_loss = cpu_surr_loss
+        # with tf.variable_scope('cpu_debug'):
+        #     cpu_obs_var = latent_obs_space.new_tensor_variable(
+        #         'obs_cpu',
+        #         extra_dims=1 + is_recurrent,
+        #     )
+        #     cpu_action_var = self.env.action_space.new_tensor_variable(
+        #         'action_cpu',
+        #         extra_dims=1 + is_recurrent,
+        #     )
+        #     cpu_advantage_var = tensor_utils.new_tensor(
+        #         'advantage_cpu',
+        #         ndim=1 + is_recurrent,
+        #         dtype=tf.float32,
+        #     )
+        #     cpu_old_dist_info_vars = {
+        #         k: tf.placeholder(
+        #             tf.float32,
+        #             shape=[None] * (1 + is_recurrent) + list(shape),
+        #             name='cpu_old_%s' % k)
+        #         for k, shape in dist.dist_info_specs
+        #     }
+        #     cpu_old_dist_info_vars_list = [
+        #         cpu_old_dist_info_vars[k] for k in dist.dist_info_keys
+        #     ]
+        #
+        #     cpu_state_info_vars = {
+        #         k: tf.placeholder(
+        #             tf.float32,
+        #             shape=[None] * (1 + is_recurrent) + list(shape),
+        #             name='cpu_old_state_%s' % k)
+        #         for k, shape in self.policy.state_info_specs
+        #     }
+        #     cpu_state_info_vars_list = [
+        #         cpu_state_info_vars[k] for k in self.policy.state_info_keys
+        #     ]
+        #
+        #     cpu_dist_info_vars = self.policy.dist_info_sym(
+        #         cpu_obs_var, cpu_state_info_vars)
+        #     cpu_kl = dist.kl_sym(cpu_old_dist_info_vars, cpu_dist_info_vars)
+        #     cpu_lr = dist.likelihood_ratio_sym(
+        #         cpu_action_var, cpu_old_dist_info_vars, cpu_dist_info_vars)
+        #     cpu_mean_kl = tf.reduce_mean(cpu_kl)
+        #     cpu_surr_loss = -tf.reduce_mean(cpu_lr * cpu_advantage_var)
+        #
+        # # Inputs
+        # self._cpu_obs_var = cpu_obs_var
+        # self._cpu_action_var = cpu_action_var
+        # self._cpu_advantage_var = cpu_advantage_var
+        # self._cpu_state_info_vars_list = cpu_state_info_vars_list
+        # self._cpu_old_dist_info_vars_list = cpu_old_dist_info_vars_list
+        #
+        # # Outputs
+        # self._cpu_dist_info_vars = cpu_dist_info_vars
+        # self._cpu_kl = cpu_kl
+        # self._cpu_lr = cpu_lr
+        # self._cpu_mean_kl = cpu_mean_kl
+        # self._cpu_surr_loss = cpu_surr_loss
         #######################################################################
 
         # Functions
@@ -540,7 +549,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Collect input values
         all_input_values = tuple(
             ext.extract(samples_data, 'observations', 'actions', 'rewards',
-                        'baselines', 'trajectories', 'tasks', # 'latents',
+                        'baselines', 'trajectories', 'tasks', 'latents',
                         'valids'))
         # add policy params
         agent_infos = samples_data["agent_infos"]
@@ -615,18 +624,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._task_var: samples_data['tasks'],
             # self._latent_var: samples_data['latents'],
             self._valid_var: samples_data['valids'],
-            self._cpu_obs_var: samples_data['cpu_obs'],
-            self._cpu_action_var: samples_data['cpu_act'],
-            self._cpu_advantage_var: samples_data['cpu_adv'],
+            # self._cpu_obs_var: samples_data['cpu_obs'],
+            # self._cpu_action_var: samples_data['cpu_act'],
+            # self._cpu_advantage_var: samples_data['cpu_adv'],
         }
         for idx, v in enumerate(self._state_info_vars_list):
             feed[v] = state_info_list[idx]
         for idx, v in enumerate(self._old_dist_info_vars_list):
             feed[v] = dist_info_list[idx]
-        for idx, v in enumerate(self._cpu_state_info_vars_list):
-            feed[v] = cpu_state_info_list[idx]
-        for idx, v in enumerate(self._cpu_old_dist_info_vars_list):
-            feed[v] = cpu_dist_info_list[idx]
+        # for idx, v in enumerate(self._cpu_state_info_vars_list):
+        #     feed[v] = cpu_state_info_list[idx]
+        # for idx, v in enumerate(self._cpu_old_dist_info_vars_list):
+        #     feed[v] = cpu_dist_info_list[idx]
         # for idx, v in enumerate(self._task_enc_state_info_vars_list):
         #     feed[v] = task_enc_state_info_list[idx]
         # for idx, v in enumerate(self._task_enc_old_dist_info_vars_list):
@@ -666,21 +675,21 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             'surr_loss': self._surr_loss,
         }
         cpu_steps = {
-            'dist_info_vars': self._cpu_dist_info_vars,
-            'kl': self._cpu_kl,
-            'lr': self._cpu_lr,
-            'mean_kl': self._cpu_mean_kl,
-            'surr_loss': self._cpu_surr_loss,
+            # 'dist_info_vars': self._cpu_dist_info_vars,
+            # 'kl': self._cpu_kl,
+            # 'lr': self._cpu_lr,
+            # 'mean_kl': self._cpu_mean_kl,
+            # 'surr_loss': self._cpu_surr_loss,
         }
         f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
 
         # Advantage step
         adv_tf = sess.run(self._f_adv, feed_dict=feed)
-        adv_cpu = samples_data['cpu_adv']
-        dadv = np.sqrt(np.sum((adv_cpu - adv_tf)**2))
+        # adv_cpu = samples_data['cpu_adv']
+        # dadv = np.sqrt(np.sum((adv_cpu - adv_tf)**2))
         #print('adv_tf: {}'.format(adv_tf))
         #print('adv_cpu: {}'.format(adv_cpu))
-        logger.record_tabular('dAdv', dadv)
+        # logger.record_tabular('dAdv', dadv)
         #print('mean(adv_cpu): {}'.format(np.mean(adv_cpu)))
         #print('mean(adv_tf): {}'.format(np.mean(adv_tf)))
         #print('std(adv_cpu): {}'.format(np.std(adv_cpu)))
@@ -730,12 +739,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # print('GPU KL: {}'.format(f_gpu['kl']))
 
         # Delta step
-        delta_tf = sess.run(self._f_deltas, feed_dict=feed)
-        delta_cpu = samples_data['cpu_deltas']
-        ddelta = np.sqrt(np.sum((delta_cpu - delta_tf)**2))
+        # delta_tf = sess.run(self._f_deltas, feed_dict=feed)
+        # delta_cpu = samples_data['cpu_deltas']
+        # ddelta = np.sqrt(np.sum((delta_cpu - delta_tf)**2))
         #print('deltas_tf: {}'.format(delta_tf))
         #print('deltas_cpu: {}'.format(delta_cpu))
-        logger.record_tabular('dDelta', ddelta)
+        # logger.record_tabular('dDelta', ddelta)
 
         # Baselines shift
         # base_shift = sess.run(self._f_base_shift, feed_dict=feed)

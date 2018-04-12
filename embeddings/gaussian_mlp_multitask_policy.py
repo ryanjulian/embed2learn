@@ -22,6 +22,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             name,
             env_spec,
             embedding: StochasticEmbedding,
+            task_space,
             hidden_sizes=(32, 32),
             learn_std=True,
             init_std=1.0,
@@ -58,29 +59,33 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
         Serializable.quick_init(self, locals())
         assert isinstance(env_spec.action_space, Box)
 
-        super(GaussianMLPMultitaskPolicy, self).__init__(env_spec, embedding)
+        super(GaussianMLPMultitaskPolicy, self).__init__(env_spec, embedding, task_space)
 
         with tf.variable_scope(name):
+            task_obs_dim = self.task_observation_space.flat_dim
+            action_dim = self.action_space.flat_dim
+            latent_dim = self.latent_space.flat_dim
+            obs_dim = self.observation_space.flat_dim
 
-            task_obs_dim = env_spec.observation_space.flat_dim
-            action_dim = env_spec.action_space.flat_dim
-            latent_dim = self._embedding.latent_space.flat_dim
-
-            # observations from vanilla environment
-            env_obs_dim = task_obs_dim - self._embedding.input_space.flat_dim
             # task embedding + plain obs
-            latent_obs_dim = latent_dim + env_obs_dim
+            latent_obs_dim = latent_dim + obs_dim
 
-            self.latent_var = tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
-            self._env_obs_sym = tf.placeholder(tf.float32, (None, env_obs_dim), name='env_obs')
-            self._policy_input = tf.concat((self.latent_var, self._env_obs_sym), axis=1, name='policy_input')
+            self.onehot_input_var = self._embedding._mean_network.input_layer.input_var
+            self.env_input_var = tf.placeholder(tf.float32, (None, obs_dim), name='env_obs')
+
+            embed_dist_info_sym = self._embedding.dist_info_sym(
+                self._embedding._mean_network.input_layer.input_var, dict())
+            self.latent_var = embed_dist_info_sym["mean"]
+
+            # self.latent_var = self._embedding._l_mean.get_output_for(self.onehot_input_var)  # tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
+            self._policy_input_var = tf.concat((self.latent_var, self.env_input_var), axis=1, name='policy_input')
 
             # create network
             if mean_network is None:
                 mean_network = MLP(
                     name="mean_network",
                     input_shape=(latent_obs_dim,),
-                    input_var=self._policy_input,
+                    input_var=self._policy_input_var,
                     output_dim=action_dim,
                     hidden_sizes=hidden_sizes,
                     hidden_nonlinearity=hidden_nonlinearity,
@@ -149,10 +154,20 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
 
-            self._f_dist = tensor_utils.compile_function(
-                inputs=[self._policy_input],
+            self._task_obs_action_dist = tensor_utils.compile_function(
+                inputs=[self.onehot_input_var, self.env_input_var],
+                outputs=[mean_var, log_std_var, self.latent_var],
+            )
+
+            self._latent_obs_action_dist = tensor_utils.compile_function(
+                inputs=[self.latent_var, self.env_input_var],
                 outputs=[mean_var, log_std_var],
             )
+
+            # self._f_dist = tensor_utils.compile_function(
+            #     inputs=[self.latent_var, self.env_input_var],
+            #     outputs=[mean_var, log_std_var],
+            # )
 
     @property
     def vectorized(self):
@@ -172,18 +187,36 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
 
     @overrides
     def get_action(self, observation):
+        """
+
+        :param observation: task onehot + env observation
+        :return: action, dict
+        """
+        flat_task_obs = self.task_observation_space.flatten(observation)
+        flat_task, flat_obs = self.split_observation(flat_task_obs)
+        # evaluate embedding
+        mean, log_std, latent = [x[0] for x in self._task_obs_action_dist([flat_task, flat_obs])]
+        rnd = np.random.normal(size=mean.shape)
+        action = rnd * np.exp(log_std) + mean
+        return action, dict(mean=mean, log_std=log_std, latent=latent)
+
+    def get_actions(self, observations):
+        # TODO implement split_observation_n(...)
+        flat_obs = self.task_observation_space.flatten_n(observations)
+        means, log_stds, latents = self._task_obs_action_dist(flat_obs)
+        rnd = np.random.normal(size=means.shape)
+        actions = rnd * np.exp(log_stds) + means
+        return actions, dict(mean=means, log_std=log_stds, latent=latents)
+
+    @overrides
+    def get_action_from_latent(self, observation, latent):
         flat_obs = self.observation_space.flatten(observation)
-        mean, log_std = [x[0] for x in self._f_dist([flat_obs])]
+        flat_latent = self.latent_space.flatten(latent)
+        # xs = self._latent_obs_action_dist(flat_latent, flat_obs)
+        mean, log_std = [x[0] for x in self._latent_obs_action_dist([flat_latent], [flat_obs])]
         rnd = np.random.normal(size=mean.shape)
         action = rnd * np.exp(log_std) + mean
         return action, dict(mean=mean, log_std=log_std)
-
-    def get_actions(self, observations):
-        flat_obs = self.observation_space.flatten_n(observations)
-        means, log_stds = self._f_dist(flat_obs)
-        rnd = np.random.normal(size=means.shape)
-        actions = rnd * np.exp(log_stds) + means
-        return actions, dict(mean=means, log_std=log_stds)
 
     def get_reparam_action_sym(self, obs_var, action_var, old_dist_info_vars):
         """
