@@ -1,6 +1,9 @@
 import numpy as np
 import tensorflow as tf
 
+import itertools
+
+
 from sandbox.embed2learn.embeddings.base import StochasticEmbedding
 from sandbox.rocky.tf.core.layers_powered import LayersPowered
 import sandbox.rocky.tf.core.layers as L
@@ -70,23 +73,31 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             # task embedding + plain obs
             latent_obs_dim = latent_dim + obs_dim
 
-            self.onehot_input_var = self._embedding._mean_network.input_layer.input_var
-            self.env_input_var = tf.placeholder(tf.float32, (None, obs_dim), name='env_obs')
+            self.task_input = self._embedding._mean_network.input_layer
+            self.onehot_input_var = self.task_input.input_var
+            # self.env_input_var = tf.placeholder(tf.float32, (None, obs_dim), name='env_obs')
+            self.env_input = L.InputLayer((None, obs_dim), name="policy_env_input")
+            self.env_input_var = self.env_input.input_var
 
             embed_dist_info_sym = self._embedding.dist_info_sym(
-                self._embedding._mean_network.input_layer.input_var, dict())
+                self.task_input.input_var, dict())
             self.latent_var = embed_dist_info_sym["mean"]
+            self.latent = L.InputLayer((None, latent_dim), self.latent_var, name="latent_input")
+            # self.latent_var = self._embedding._mean_network._l_out.get_output_for(self._embedding._mean_network._l_out.input_layer)
+            # self.latent_var = self._embedding._l_mean
             # self.latent_var = tf.reshape(self.latent_var, (None,) + tuple(self.latent_var.shape), name='latent')
 
-            # self.latent_var = self._embedding._l_mean.get_output_for(self.onehot_input_var)  # tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
-            self._policy_input_var = tf.concat((self.latent_var, self.env_input_var), axis=1, name='policy_input')
+            # self.latent_var = tf.placeholder(tf.float32, (None, latent_dim), name='task_embedding')
+            # self._policy_input_var = tf.concat((self.latent_var, self.env_input_var), axis=1, name='policy_input')
+            self._policy_input = L.ConcatLayer((self.latent, self.env_input))
 
             # create network
             if mean_network is None:
                 mean_network = MLP(
                     name="mean_network",
                     input_shape=(latent_obs_dim,),
-                    input_var=self._policy_input_var,
+                    # input_var=self._policy_input_var,
+                    input_layer=self._policy_input,
                     output_dim=action_dim,
                     hidden_sizes=hidden_sizes,
                     hidden_nonlinearity=hidden_nonlinearity,
@@ -95,7 +106,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             self._mean_network = mean_network
 
             l_mean = mean_network.output_layer
-            obs_var = mean_network.input_layer.input_var
+            # obs_var = mean_network.input_layer.input_var
 
             if std_network is not None:
                 l_std_param = std_network.output_layer
@@ -149,19 +160,25 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
 
             self._dist = DiagonalGaussian(action_dim)
 
-            LayersPowered.__init__(self, [l_mean, l_std_param])
+            LayersPowered.__init__(self,
+                                   [l_mean, l_std_param],
+                                   # [self.task_input, self.env_input]
+                                   )
 
-            dist_info_sym = self.dist_info_sym(mean_network.input_layer.input_var, dict())
+            dist_info_sym = self.dist_info_sym({
+                self.env_input.input_var: self.env_input.input_var,
+                self.task_input.input_var: self.task_input.input_var
+            }, dict())
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
 
             self._task_obs_action_dist = tensor_utils.compile_function(
-                inputs=[self.onehot_input_var, self.env_input_var],
+                inputs=[self.onehot_input_var, self.env_input.input_var],
                 outputs=[mean_var, log_std_var, self.latent_var],
             )
 
             self._latent_obs_action_dist = tensor_utils.compile_function(
-                inputs=[self.latent_var, self.env_input_var],
+                inputs=[self.latent_var, self.env_input.input_var],
                 outputs=[mean_var, log_std_var],
             )
 
@@ -173,6 +190,14 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
     @property
     def vectorized(self):
         return True
+
+    @overrides
+    def get_params_internal(self, **tags):
+        # TODO add
+        layers = L.get_all_layers(self._output_layers, treat_as_input=self._input_layers)
+        layers += L.get_all_layers(self._embedding._output_layers, treat_as_input=self._embedding._input_layers)
+        params = itertools.chain.from_iterable(l.get_params(**tags) for l in layers)
+        return L.unique(params)
 
     def dist_info_sym(self, obs_var, state_info_vars=None):
         mean_var, std_param_var = L.get_output([self._l_mean, self._l_std_param], obs_var)

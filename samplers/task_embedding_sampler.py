@@ -42,7 +42,7 @@ def rollout(env,
 
     # Resets
     o = env.reset()
-    agent.reset()
+    # agent.reset()
 
     # Sample embedding network
     # NOTE: it is important to do this _once per rollout_, not once per

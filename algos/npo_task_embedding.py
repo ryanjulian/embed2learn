@@ -80,7 +80,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Optimize policy, task_encoder and traj_encoder jointly
         targets = JointParameterized(
-            components=[self.policy, self.traj_encoder])
+            components=[self.policy, self.policy._embedding, self.traj_encoder])
 
         # TODO(): should we consider KL constraints for all three networks?
         self.optimizer.update_opt(
@@ -105,10 +105,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #### Policy and loss function ##########################################
 
         # Input variables
-        obs_var = obs_space.new_tensor_variable(
-            'obs',
-            extra_dims=1 + 1,
-        )
+        # obs_var = obs_space.new_tensor_variable(
+        #     'obs',
+        #     extra_dims=1 + 1,
+        # )
         # task_var = task_space.new_tensor_variable(
         #     'task',
         #     extra_dims=1 + 1,
@@ -164,11 +164,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # TODO: verify this works for tensors in general
         # Flatten
         with tf.variable_scope('flatten'):
-            obs_flat = flatten_batch(obs_var)
+            obs_flat = self.policy.env_input_var  # flatten_batch(self.policy.env_input_var)
             # task_flat = flatten_batch(task_var)
             act_flat = flatten_batch(action_var)
             traj_flat = flatten_batch(trajectory_var)
-            latent_flat = flatten_batch(self.policy.latent_var)
+            latent_flat = self.policy.latent_var
             # latent_flat = flatten_batch(latent_var)
             valid_flat = flatten_batch(valid_var)
             state_info_flat = flatten_batch_dict(state_info_vars)
@@ -178,7 +178,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # TODO: may need to freeze this for all three op steps
         # dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
         latent_obs_flat = tf.concat((self.policy.latent_var, obs_flat), axis=1)
-        dist_info_vars = self.policy.dist_info_sym(latent_obs_flat, state_info_flat)
+        # dist_info_vars = self.policy.dist_info_sym(latent_obs_flat, state_info_flat)
+        dist_info_vars = self.policy.dist_info_sym({
+            self.policy.env_input.input_var: obs_flat,
+            self.policy._embedding._mean_network.input_layer.input_var: self.policy.latent_var
+        }, state_info_flat)
 
         with tf.variable_scope('entropies'):
             # Calculate entropy terms
@@ -415,7 +419,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #### Input list ########################################################
         input_list = [
             self.policy.onehot_input_var,  # TODO find better way to provide task onehot
-            obs_var,
+            self.policy.env_input_var,
             action_var,
             reward_var,
             baseline_var,
@@ -430,7 +434,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### DEBUG #############################################################
         # Inputs
-        self._obs_var = obs_var
+        self._obs_var = self.policy.env_input_var
         self._action_var = action_var
         self._reward_var = reward_var
         self._baseline_var = baseline_var
@@ -550,9 +554,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     def optimize_policy(self, itr, samples_data):
         # Collect input values
         tasks = np.reshape(samples_data["tasks"], (-1, self.policy.task_space.flat_dim))
-        all_input_values = tasks,
+        obs = np.reshape(samples_data["observations"], (-1, self.policy.observation_space.flat_dim))
+        all_input_values = (tasks, obs)
         all_input_values += tuple(
-            ext.extract(samples_data, 'observations', 'actions', 'rewards',
+            ext.extract(samples_data, 'actions', 'rewards',
                         'baselines', 'trajectories', 'tasks', #'latents',
                         'valids'))
         # add policy params
@@ -624,17 +629,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             cpu_agent_infos[k] for k in self.policy.distribution.dist_info_keys
         ]
         feed = {
-            self._obs_var: samples_data['observations'],
+            self._obs_var: obs,
             self._action_var: samples_data['actions'],
             self._reward_var: samples_data['rewards'],
             self._baseline_var: samples_data['baselines'],
             self._trajectory_var: samples_data['trajectories'],
-            self._task_var: samples_data['tasks'],
+            # self._task_var: samples_data['tasks'],
             # self._latent_var: samples_data['latents'],
             self._valid_var: samples_data['valids'],
             # self._cpu_obs_var: samples_data['cpu_obs'],
             # self._cpu_action_var: samples_data['cpu_act'],
             # self._cpu_advantage_var: samples_data['cpu_adv'],
+            self.policy.onehot_input_var: tasks
         }
         for idx, v in enumerate(self._state_info_vars_list):
             feed[v] = state_info_list[idx]
@@ -729,8 +735,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # surr_loss
         # print('CPU surr_loss: {}'.format(f_cpu['surr_loss']))
         # print('GPU surr_loss: {}'.format(f_gpu['surr_loss']))
-        dsurr_loss = f_cpu['surr_loss'] - f_gpu['surr_loss']
-        logger.record_tabular('dSurr_loss', dsurr_loss)
+        # dsurr_loss = f_cpu['surr_loss'] - f_gpu['surr_loss']
+        # logger.record_tabular('dSurr_loss', dsurr_loss)
 
         # mean_kl
         # print('CPU mean_kl: {}'.format(f_cpu['mean_kl']))
@@ -829,8 +835,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Compute after-optimization diagnostics
         f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
-        latent_mean_kl = f_gpu['task_enc_mean_kl']
-        logger.record_tabular('TaskEncoder/MeanKL', latent_mean_kl)
+        # latent_mean_kl = f_gpu['task_enc_mean_kl']
+        # logger.record_tabular('TaskEncoder/MeanKL', latent_mean_kl)
 
         return dict()
 
