@@ -107,7 +107,7 @@ def run_task(plot=False, *_):
         max_path_length=100,
         n_itr=1100,
         discount=0.99,
-        # step_size=5.,  # TODO investigate KL constraint - it looks suspiciously high
+        step_size=0.99,  # TODO investigate KL constraint - it looks suspiciously high
         plot=plot,
 
         # TODO comment out
