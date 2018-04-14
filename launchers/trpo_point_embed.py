@@ -74,7 +74,7 @@ def run_task(plot=False, *_):
     task_embedding = GaussianMLPEmbedding(
         name="task_embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(64, 64),
+        hidden_sizes=(5,),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -82,7 +82,7 @@ def run_task(plot=False, *_):
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(64, 64),
+        hidden_sizes=(20, 20),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -92,7 +92,7 @@ def run_task(plot=False, *_):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(64, 32),
+        hidden_sizes=(20, 10),
         adaptive_std=True,  # Must be True for embedding learning
     )
 
@@ -107,7 +107,7 @@ def run_task(plot=False, *_):
         max_path_length=100,
         n_itr=1100,
         discount=0.99,
-        step_size=0.01,
+        # step_size=5.,  # TODO investigate KL constraint - it looks suspiciously high
         plot=plot,
 
         # TODO comment out
@@ -118,10 +118,11 @@ def run_task(plot=False, *_):
     algo.train()
 
 
-# run_experiment_lite(
-#     run_task,
-#     exp_prefix='trpo_point_embed',
-#     n_parallel=N_PARALLEL,
-#     plot=False,
-# )
-run_task(plot=True)
+run_experiment_lite(
+    run_task,
+    exp_prefix='trpo_point_embed',
+    n_parallel=N_PARALLEL,
+    plot=True,
+    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
+)
+# run_task(plot=False)

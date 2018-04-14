@@ -42,7 +42,7 @@ def rollout(env,
 
     # Resets
     o = env.reset()
-    # agent.reset()
+    agent.reset()
 
     # Sample embedding network
     # NOTE: it is important to do this _once per rollout_, not once per
@@ -93,7 +93,7 @@ def _worker_populate_task(G, env, policy, task_encoder, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
     G.env = pickle.loads(env)
     G.policy = pickle.loads(policy)
-    G.task_encoder = pickle.loads(task_encoder)
+    # G.task_encoder = pickle.loads(task_encoder)
 
 
 def _worker_terminate_task(G, scope=None):
