@@ -114,7 +114,7 @@ class MultitaskPolicy(Policy, Parameterized):
         :param observation: task onehot concatenated with vanilla environment observation
         :return: tuple (task onehot, vanilla environment observation)
         """
-        return observation[self.task_space.flat_dim:], observation[:self.task_space.flat_dim]
+        return observation[:self.task_space.flat_dim], observation[self.task_space.flat_dim:]
 
 
 class StochasticMultitaskPolicy(StochasticPolicy, MultitaskPolicy):

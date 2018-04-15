@@ -3,7 +3,6 @@ import tensorflow as tf
 
 import itertools
 
-
 from sandbox.embed2learn.embeddings.base import StochasticEmbedding
 from sandbox.rocky.tf.core.layers_powered import LayersPowered
 import sandbox.rocky.tf.core.layers as L
@@ -80,9 +79,15 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             self.env_input_var = self.env_input.input_var
 
             embed_dist_info_sym = self._embedding.dist_info_sym(
-                self.task_input.input_var, dict())
-            self.latent_var = embed_dist_info_sym["mean"]
-            self.latent = L.InputLayer((None, latent_dim), self.latent_var, name="latent_input")
+                self.task_input.input_var,
+                {
+                    self.env_input.input_var: self.env_input.input_var,
+                    self.task_input.input_var: self.task_input.input_var
+                }
+            )
+            self.latent_mean_var = embed_dist_info_sym["mean"]
+            self.latent_log_std_var = embed_dist_info_sym["log_std"]
+            self.latent = L.InputLayer((None, latent_dim), self.latent_mean_var, name="latent_input")
             # self.latent_var = self._embedding._mean_network._l_out.get_output_for(self._embedding._mean_network._l_out.input_layer)
             # self.latent_var = self._embedding._l_mean
             # self.latent_var = tf.reshape(self.latent_var, (None,) + tuple(self.latent_var.shape), name='latent')
@@ -174,11 +179,11 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
 
             self._task_obs_action_dist = tensor_utils.compile_function(
                 inputs=[self.onehot_input_var, self.env_input.input_var],
-                outputs=[mean_var, log_std_var, self.latent_var],
+                outputs=[mean_var, log_std_var, self.latent_mean_var, self.latent_log_std_var],
             )
 
             self._latent_obs_action_dist = tensor_utils.compile_function(
-                inputs=[self.latent_var, self.env_input.input_var],
+                inputs=[self.latent_mean_var, self.env_input.input_var],
                 outputs=[mean_var, log_std_var],
             )
 
@@ -193,7 +198,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
 
     @overrides
     def get_params_internal(self, **tags):
-        # TODO add
         layers = L.get_all_layers(self._output_layers, treat_as_input=self._input_layers)
         layers += L.get_all_layers(self._embedding._output_layers, treat_as_input=self._embedding._input_layers)
         params = itertools.chain.from_iterable(l.get_params(**tags) for l in layers)
@@ -221,18 +225,22 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
         flat_task_obs = self.task_observation_space.flatten(observation)
         flat_task, flat_obs = self.split_observation(flat_task_obs)
         # evaluate embedding
-        mean, log_std, latent = [x[0] for x in self._task_obs_action_dist([flat_task, flat_obs])]
+        mean, log_std, latent_mean, latent_log_std = \
+            [x[0] for x in self._task_obs_action_dist([flat_task], [flat_obs])]
         rnd = np.random.normal(size=mean.shape)
         action = rnd * np.exp(log_std) + mean
-        return action, dict(mean=mean, log_std=log_std, latent=latent)
+        latent_info = dict(mean=latent_mean, log_std=latent_log_std)
+        return action, dict(mean=mean, log_std=log_std,
+                            latent_info=latent_info)
 
     def get_actions(self, observations):
         # TODO implement split_observation_n(...)
-        flat_obs = self.task_observation_space.flatten_n(observations)
-        means, log_stds, latents = self._task_obs_action_dist(flat_obs)
-        rnd = np.random.normal(size=means.shape)
-        actions = rnd * np.exp(log_stds) + means
-        return actions, dict(mean=means, log_std=log_stds, latent=latents)
+        raise NotImplementedError()
+        # flat_obs = self.task_observation_space.flatten_n(observations)
+        # means, log_stds, latents = self._task_obs_action_dist(flat_obs)
+        # rnd = np.random.normal(size=means.shape)
+        # actions = rnd * np.exp(log_stds) + means
+        # return actions, dict(mean=means, log_std=log_stds, latent=latents)
 
     @overrides
     def get_action_from_latent(self, observation, latent):

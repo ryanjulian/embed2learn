@@ -101,14 +101,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #### Policy and loss function ##########################################
 
         # Input variables
-        # obs_var = obs_space.new_tensor_variable(
-        #     'obs',
-        #     extra_dims=1 + 1,
-        # )
-        # task_var = task_space.new_tensor_variable(
-        #     'task',
-        #     extra_dims=1 + 1,
-        # )
+        obs_var = self.policy.observation_space.new_tensor_variable(
+            'obs',
+            extra_dims=1 + 1,
+        )
+        task_var = self.policy.task_space.new_tensor_variable(
+            'task',
+            extra_dims=1 + 1,
+        )
         action_var = self.env.action_space.new_tensor_variable(
             'action',
             extra_dims=1 + 1,
@@ -160,11 +160,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # TODO: verify this works for tensors in general
         # Flatten
         with tf.variable_scope('flatten'):
-            obs_flat = self.policy.env_input_var  # flatten_batch(self.policy.env_input_var)
-            # task_flat = flatten_batch(task_var)
+            obs_flat = flatten_batch(obs_var)
+            task_flat = flatten_batch(task_var)
             act_flat = flatten_batch(action_var)
             traj_flat = flatten_batch(trajectory_var)
-            latent_flat = self.policy.latent_var
+            latent_flat = self.policy.latent_mean_var
             # latent_flat = flatten_batch(latent_var)
             valid_flat = flatten_batch(valid_var)
             state_info_flat = flatten_batch_dict(state_info_vars)
@@ -173,12 +173,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Calculate policy distributions for each timestep
         # TODO: may need to freeze this for all three op steps
         # dist_info_vars = self.policy.dist_info_sym(obs_flat, state_info_flat)
-        # latent_obs_flat = tf.concat((self.policy.latent_var, obs_flat), axis=1)
+        # latent_obs_flat = tf.concat((self.policy.latent_mean_var, obs_flat), axis=1)
         # dist_info_vars = self.policy.dist_info_sym(latent_obs_flat, state_info_flat)
+
         dist_info_vars = self.policy.dist_info_sym({
-            self.policy.env_input.input_var: obs_flat,
-            self.policy._embedding._mean_network.input_layer.input_var: self.policy.latent_var
+            self.policy.env_input_var: obs_flat,
+            self.policy.onehot_input_var: task_flat
         }, state_info_flat)
+        # dist_info_vars = self.policy.dist_info_sym(None, state_info_flat)
 
         with tf.variable_scope('entropies'):
             # Calculate entropy terms
@@ -311,10 +313,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # TODO for this to work, we would need to create a tensor that extends self.policy.onehot_input_var
         # by 1 + 1 extra dims
         # # Input variables
-        task_var = self.policy.embedding.input_space.new_tensor_variable(
-            'task',
-            extra_dims=1 + 1,
-        )
+        # task_var = self.policy.embedding.input_space.new_tensor_variable(
+        #     'task',
+        #     extra_dims=1 + 1,
+        # )
 
         task_enc_state_info_vars = {
             k: tf.placeholder(
@@ -418,6 +420,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         input_list = [
             self.policy.onehot_input_var,
             self.policy.env_input_var,
+            obs_var,
             action_var,
             reward_var,
             baseline_var,
@@ -431,8 +434,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### DEBUG #############################################################
         # Inputs
-        self._task_var = self.policy.onehot_input_var
-        self._obs_var = self.policy.env_input_var
+        self._task_var = task_var  #self.policy.onehot_input_var
+        self._obs_var = obs_var  # self.policy.env_input_var
         self._action_var = action_var
         self._reward_var = reward_var
         self._baseline_var = baseline_var
@@ -553,7 +556,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         obs = np.reshape(samples_data["observations"], (-1, self.policy.observation_space.flat_dim))
         all_input_values = (tasks, obs)
         all_input_values += tuple(
-            ext.extract(samples_data, 'actions', 'rewards',
+            ext.extract(samples_data, 'observations', 'actions', 'rewards',
                         'baselines', 'trajectories', 'tasks', #'latents',
                         'valids'))
         # add policy params
@@ -598,11 +601,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         #TODO remove!!!!!!!!!!!!!!!
         tf.summary.FileWriter("logs", tf.get_default_graph()).close()
 
-        policy_ent = self.f_policy_entropy(*all_input_values)
-        logger.record_tabular('Policy/Entropy', policy_ent)
+        # policy_ent = self.f_policy_entropy(*all_input_values)
+        # logger.record_tabular('Policy/Entropy', policy_ent)
         # Trajectory encoder cross-entropy (TODO: discount)
-        traj_cross_ent = self.f_traj_cross_entropy(*all_input_values)
-        logger.record_tabular('TrajEncoder/Entropy', traj_cross_ent)
+        # traj_cross_ent = self.f_traj_cross_entropy(*all_input_values)
+        # logger.record_tabular('TrajEncoder/Entropy', traj_cross_ent)
 
         #### DEBUG #############################################################
         # for k, v in samples_data.items():
@@ -625,8 +628,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             cpu_agent_infos[k] for k in self.policy.distribution.dist_info_keys
         ]
         feed = {
-            self._task_var: tasks,
-            self._obs_var: obs,
+            self._obs_var: samples_data['observations'],
+            self._task_var: samples_data['tasks'],
             self._action_var: samples_data['actions'],
             self._reward_var: samples_data['rewards'],
             self._baseline_var: samples_data['baselines'],
@@ -636,6 +639,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             # self._cpu_obs_var: samples_data['cpu_obs'],
             # self._cpu_action_var: samples_data['cpu_act'],
             # self._cpu_advantage_var: samples_data['cpu_adv'],
+            self.policy.onehot_input_var: tasks,
+            self.policy.env_input_var: obs,
         }
         for idx, v in enumerate(self._state_info_vars_list):
             feed[v] = state_info_list[idx]

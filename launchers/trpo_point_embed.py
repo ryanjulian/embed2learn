@@ -118,11 +118,11 @@ def run_task(plot=False, *_):
     algo.train()
 
 
-run_experiment_lite(
-    run_task,
-    exp_prefix='trpo_point_embed',
-    n_parallel=N_PARALLEL,
-    plot=True,
-    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
-)
-# run_task(plot=False)
+# run_experiment_lite(
+#     run_task,
+#     exp_prefix='trpo_point_embed',
+#     n_parallel=N_PARALLEL,
+#     plot=True,
+#     python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
+# )
+run_task(plot=False)
