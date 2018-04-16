@@ -78,6 +78,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._build_opt()
 
         # Optimize policy, task_encoder and traj_encoder jointly
+        # TODO check if this needs self.policy._embedding (it shouldn't)
         targets = JointParameterized(
             components=[self.policy, self.policy._embedding, self.traj_encoder])
 
@@ -178,7 +179,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         dist_info_vars = self.policy.dist_info_sym({
             self.policy.env_input_var: obs_flat,
-            self.policy.onehot_input_var: task_flat
+            self.policy.latent_mean_var: latent_flat
         }, state_info_flat)
         # dist_info_vars = self.policy.dist_info_sym(None, state_info_flat)
 

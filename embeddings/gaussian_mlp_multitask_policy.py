@@ -73,6 +73,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             latent_obs_dim = latent_dim + obs_dim
 
             self.task_input = self._embedding._mean_network.input_layer
+            # TODO rename all "onehot" occurrences to "task"
             self.onehot_input_var = self.task_input.input_var
             # self.env_input_var = tf.placeholder(tf.float32, (None, obs_dim), name='env_obs')
             self.env_input = L.InputLayer((None, obs_dim), name="policy_env_input")
@@ -187,11 +188,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
                 outputs=[mean_var, log_std_var],
             )
 
-            # self._f_dist = tensor_utils.compile_function(
-            #     inputs=[self.latent_var, self.env_input_var],
-            #     outputs=[mean_var, log_std_var],
-            # )
-
     @property
     def vectorized(self):
         return True
@@ -251,6 +247,16 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
         rnd = np.random.normal(size=mean.shape)
         action = rnd * np.exp(log_std) + mean
         return action, dict(mean=mean, log_std=log_std)
+
+    # TODO implement these?
+    def get_action_from_onehot(self, observation, onehot):
+        raise NotImplementedError
+
+    def get_actions_from_onehot(self, observations, onehots):
+        raise NotImplementedError
+
+    def get_actions_from_latent(self, observations, latents):
+        raise NotImplementedError
 
     def get_reparam_action_sym(self, obs_var, action_var, old_dist_info_vars):
         """

@@ -107,10 +107,10 @@ def run_task(plot=False, *_):
         max_path_length=100,
         n_itr=1100,
         discount=0.99,
-        step_size=0.99,  # TODO investigate KL constraint - it looks suspiciously high
+        step_size=0.01,
         plot=plot,
 
-        # TODO comment out
+        # TODO reactivate the entropy terms!
         policy_ent_coeff=0,
         task_encoder_ent_coeff=0,
         trajectory_encoder_ent_coeff=0,
@@ -118,11 +118,11 @@ def run_task(plot=False, *_):
     algo.train()
 
 
-# run_experiment_lite(
-#     run_task,
-#     exp_prefix='trpo_point_embed',
-#     n_parallel=N_PARALLEL,
-#     plot=True,
-#     python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
-# )
-run_task(plot=False)
+run_experiment_lite(
+    run_task,
+    exp_prefix='trpo_point_embed',
+    n_parallel=N_PARALLEL,
+    plot=True,
+    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
+)
+# run_task(plot=False)
