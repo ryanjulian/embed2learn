@@ -56,11 +56,11 @@ def rollout(env,
     path_length = 0
     while path_length < max_path_length:
         a, agent_info = agent.get_action(np.concatenate((t, o)))
-        latent_info = agent_info["latent_info"]
+        # latent_info = agent_info["latent_info"]
         next_o, r, d, env_info = env.step(a)
         observations.append(agent.observation_space.flatten(o))
         tasks.append(t)
-        z = latent_info["mean"]
+        # z = latent_info["mean"]
         latents.append(agent.latent_space.flatten(z))
         latent_infos.append(latent_info)
         rewards.append(r)
