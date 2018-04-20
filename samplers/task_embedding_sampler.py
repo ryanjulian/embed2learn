@@ -254,7 +254,8 @@ class TaskEmbeddingSampler(BatchSampler):
             act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
             # Create a time series of stacked [act, obs] vectors
-            act_obs = np.concatenate([act_flat, obs_flat], axis=1)
+            #act_obs = np.concatenate([act_flat, obs_flat], axis=1)
+            act_obs = obs_flat
             # Calculate a forward-looking sliding window of the stacked vectors
             #
             # If act_obs has shape (n, d), then trajs will have shape
