@@ -4,7 +4,6 @@ from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
 from rllab.misc.instrument import run_experiment_lite
 from rllab.misc.ext import set_seed
 from rllab.envs.env_spec import EnvSpec
-from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
 
 from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from sandbox.rocky.tf.envs.base import TfEnv
@@ -12,6 +11,7 @@ from sandbox.rocky.tf.spaces.box import Box
 
 from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
+from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
 from sandbox.embed2learn.envs.point_env import PointEnv
 from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
@@ -19,7 +19,6 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-N_PARALLEL = 16
 
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
@@ -31,7 +30,7 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
 LATENT_LENGTH = 4
-TRAJ_ENC_WINDOW = 5
+TRAJ_ENC_WINDOW = 2
 
 
 def run_task(plot=False, *_):
@@ -59,8 +58,10 @@ def run_task(plot=False, *_):
     obs_lb, obs_ub = env.observation_space.bounds
     obs_lb_flat = env.observation_space.flatten(obs_lb)
     obs_ub_flat = env.observation_space.flatten(obs_ub)
-    act_obs_lb = np.concatenate([act_lb_flat, obs_lb_flat])
-    act_obs_ub = np.concatenate([act_ub_flat, obs_ub_flat])
+    #act_obs_lb = np.concatenate([act_lb_flat, obs_lb_flat])
+    #act_obs_ub = np.concatenate([act_ub_flat, obs_ub_flat])
+    act_obs_lb = obs_lb_flat
+    act_obs_ub = obs_ub_flat
     traj_lb = np.stack([act_obs_lb] * TRAJ_ENC_WINDOW)
     traj_ub = np.stack([act_obs_ub] * TRAJ_ENC_WINDOW)
     traj_space = Box(traj_lb, traj_ub)
@@ -74,8 +75,9 @@ def run_task(plot=False, *_):
     task_embedding = GaussianMLPEmbedding(
         name="task_embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(5,),
-        adaptive_std=True,  # Must be True for embedding learning
+        hidden_sizes=(20, 20),
+        std_share_network=True,
+        init_std=100,
     )
 
     # TODO(): rename to inference_network
@@ -94,6 +96,7 @@ def run_task(plot=False, *_):
         embedding=task_embedding,
         hidden_sizes=(20, 10),
         adaptive_std=True,  # Must be True for embedding learning
+        init_std=100,
     )
 
     baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
@@ -109,11 +112,11 @@ def run_task(plot=False, *_):
         discount=0.99,
         step_size=0.01,
         plot=plot,
-
+        plot_warmup_itrs=50,
         # TODO reactivate the entropy terms!
-        policy_ent_coeff=0,
-        task_encoder_ent_coeff=0,
-        trajectory_encoder_ent_coeff=0,
+        policy_ent_coeff=0.1,
+        task_encoder_ent_coeff=1e-2,
+        trajectory_encoder_ent_coeff=0.1,
     )
     algo.train()
 
@@ -121,8 +124,6 @@ def run_task(plot=False, *_):
 run_experiment_lite(
     run_task,
     exp_prefix='trpo_point_embed',
-    n_parallel=N_PARALLEL,
+    n_parallel=16,
     plot=True,
-    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
 )
-# run_task(plot=False)
