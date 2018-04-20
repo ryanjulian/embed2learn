@@ -73,9 +73,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             latent_obs_dim = latent_dim + obs_dim
 
             self.task_input = self._embedding._mean_network.input_layer
-            # TODO rename all "onehot" occurrences to "task"
-            self.onehot_input_var = self.task_input.input_var
-            # self.env_input_var = tf.placeholder(tf.float32, (None, obs_dim), name='env_obs')
+            self.task_input_var = self.task_input.input_var
+
             self.env_input = L.InputLayer((None, obs_dim), name="policy_env_input")
             self.env_input_var = self.env_input.input_var
 
@@ -102,7 +101,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
                 mean_network = MLP(
                     name="mean_network",
                     input_shape=(latent_obs_dim,),
-                    # input_var=self._policy_input_var,
                     input_layer=self._policy_input,
                     output_dim=action_dim,
                     hidden_sizes=hidden_sizes,
@@ -112,7 +110,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             self._mean_network = mean_network
 
             l_mean = mean_network.output_layer
-            # obs_var = mean_network.input_layer.input_var
 
             if std_network is not None:
                 l_std_param = std_network.output_layer
@@ -166,10 +163,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
 
             self._dist = DiagonalGaussian(action_dim)
 
-            LayersPowered.__init__(self,
-                                   [l_mean, l_std_param],
-                                   # [self.task_input, self.env_input]
-                                   )
+            LayersPowered.__init__(self, [l_mean, l_std_param])
 
             dist_info_sym = self.dist_info_sym({
                 self.env_input.input_var: self.env_input.input_var,
@@ -179,7 +173,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Seria
             log_std_var = dist_info_sym["log_std"]
 
             self._task_obs_action_dist = tensor_utils.compile_function(
-                inputs=[self.onehot_input_var, self.env_input.input_var],
+                inputs=[self.task_input_var, self.env_input.input_var],
                 outputs=[mean_var, log_std_var, self.latent_mean_var, self.latent_log_std_var],
             )
 

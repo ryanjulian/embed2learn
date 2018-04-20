@@ -30,7 +30,7 @@ TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 4
+LATENT_LENGTH = 2
 TRAJ_ENC_WINDOW = 5
 
 
