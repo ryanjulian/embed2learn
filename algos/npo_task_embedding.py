@@ -56,8 +56,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
-        assert isinstance(policy, GaussianMLPMultitaskPolicy
-                          )  # TODO change to StochasticMultitaskPolicy
+        assert isinstance(policy, StochasticMultitaskPolicy)
         assert isinstance(trajectory_encoder, StochasticEmbedding)
 
         self.plot_warmup_itrs = plot_warmup_itrs
@@ -74,6 +73,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             trajectory_encoder_optimizer, trajectory_encoder_optimizer_args)
         self.traj_enc_step_size = float(trajectory_encoder_step_size)
 
+        self.z_summary = None
+
         sampler_cls = TaskEmbeddingSampler
         sampler_args = dict(trajectory_encoder=self.traj_encoder, )
         super(NPOTaskEmbedding, self).__init__(
@@ -87,10 +88,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         loss, pol_mean_kl, traj_enc_loss, traj_enc_mean_kl, input_list = \
             self._build_opt()
 
-        # Optimize policy and task encoder jointly
-        # TODO check if this needs self.policy._embedding (it shouldn't)
-        pol_embed = JointParameterized(
-            components=[self.policy, self.policy._embedding])
+        # Optimize policy (with embedding) and traj_encoder jointly
+        pol_embed = JointParameterized(components=[self.policy, self.policy.embedding])
+
         self.optimizer.update_opt(
             loss=loss,
             target=pol_embed,
@@ -175,7 +175,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # Flatten
         with tf.variable_scope('flatten'):
             obs_flat = flatten_batch(obs_var)
-            task_flat = flatten_batch(task_var)
             act_flat = flatten_batch(action_var)
             traj_flat = flatten_batch(trajectory_var)
             latent_flat = self.policy.latent_mean_var
@@ -324,14 +323,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 rewards_pad, return_filter, stride=1, padding='VALID')
 
         #### Task encoder KL divergence ########################################
-        # TODO for this to work, we would need to create a tensor that extends self.policy.onehot_input_var
-        # by 1 + 1 extra dims
-        # # Input variables
-        # task_var = self.policy.embedding.input_space.new_tensor_variable(
-        #     'task',
-        #     extra_dims=1 + 1,
-        # )
-
         task_enc_state_info_vars = {
             k: tf.placeholder(
                 tf.float32,
@@ -435,7 +426,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             discount_traj_ll_flat = flatten_batch(discount_traj_ll)
             discount_traj_ll_valid = filter_valids(discount_traj_ll_flat,
                                                    valid_flat)
-    
+
             traj_enc_loss = -tf.reduce_mean(discount_traj_ll_valid)
 
             # Calculate KL divergence
@@ -445,7 +436,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### Input list ########################################################
         input_list = [
-            self.policy.onehot_input_var,
+            self.policy.task_input_var,
             self.policy.env_input_var,
             obs_var,
             action_var,
@@ -460,7 +451,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### DEBUG #############################################################
         # Inputs
-        self._task_var = task_var  #self.policy.onehot_input_var
+        self._task_var = task_var  #self.policy.task_input_var
         self._obs_var = obs_var  # self.policy.env_input_var
         self._action_var = action_var
         self._reward_var = reward_var
@@ -633,9 +624,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('TaskEncoder/Entropy', np.mean(task_ents))
         # Policy total path entropy (TODO: discount)
 
-        #TODO remove!!!!!!!!!!!!!!!
-        tf.summary.FileWriter("logs", tf.get_default_graph()).close()
-
         # policy_ent = self.f_policy_entropy(*all_input_values)
         # logger.record_tabular('Policy/Entropy', policy_ent)
         # Trajectory encoder cross-entropy (TODO: discount)
@@ -663,28 +651,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             cpu_agent_infos[k] for k in self.policy.distribution.dist_info_keys
         ]
         feed = {
-            self._obs_var:
-            samples_data['observations'],
-            self._task_var:
-            samples_data['tasks'],
-            self._action_var:
-            samples_data['actions'],
-            self._reward_var:
-            samples_data['rewards'],
-            self._baseline_var:
-            samples_data['baselines'],
-            self._trajectory_var:
-            samples_data['trajectories'],
-            # self._latent_var: samples_data['latents'],
-            self._valid_var:
-            samples_data['valids'],
+            self._obs_var: samples_data['observations'],
+            self._task_var: samples_data['tasks'],
+            self._action_var: samples_data['actions'],
+            self._reward_var: samples_data['rewards'],
+            self._baseline_var: samples_data['baselines'],
+            self._trajectory_var: samples_data['trajectories'],
+            self._valid_var: samples_data['valids'],
             # self._cpu_obs_var: samples_data['cpu_obs'],
             # self._cpu_action_var: samples_data['cpu_act'],
             # self._cpu_advantage_var: samples_data['cpu_adv'],
-            self.policy.onehot_input_var:
-            tasks,
-            self.policy.env_input_var:
-            obs,
+            self.policy.task_input_var: tasks,
+            self.policy.env_input_var: obs,
         }
         for idx, v in enumerate(self._state_info_vars_list):
             feed[v] = state_info_list[idx]
@@ -900,6 +878,35 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
         # latent_mean_kl = f_gpu['task_enc_mean_kl']
         # logger.record_tabular('TaskEncoder/MeanKL', latent_mean_kl)
+
+        # visualize task embedding distribution
+        #TODO(@junchao) implement logger counterpart for distribution histograms
+        num_tasks = self.policy.task_space.flat_dim
+        all_tasks = np.eye(num_tasks, num_tasks)
+        for l in range(max(self.policy.latent_space.shape)):
+            latent_distributions = []
+            for t in range(num_tasks):
+                _, latent_info = self.policy.get_latent(all_tasks[t, :])
+                latent_distributions.append(tf.random_normal(shape=(1000,),
+                                                             mean=latent_info["mean"][l],
+                                                             stddev=np.exp(latent_info["log_std"][l])))
+
+                logger.record_tabular('TaskEnc/Std/%i/%i' % (t, l), np.exp(latent_info["log_std"][l]))
+            all_combined = tf.concat(latent_distributions, 0)
+            if l == 0 and self.z_summary is None:
+                self.z_summary = []
+                self.z_summary_op = []
+                for i in range(max(self.policy.latent_space.shape)):
+                    self.z_summary.append(tf.Variable(all_combined))
+                    self.z_summary_op.append(tf.summary.histogram("TaskEmbedding/%i" % i, self.z_summary[-1]))
+
+            x = tf.assign(self.z_summary[l], all_combined)
+            tf.get_default_session().run(x)
+
+        z_summary = tf.summary.merge(self.z_summary_op)
+        z_summary = tf.get_default_session().run(z_summary)
+        logger._tensorboard_writer.add_summary(z_summary, global_step=logger._tensorboard_default_step)
+        logger._tensorboard_writer.flush()
 
         return dict()
 

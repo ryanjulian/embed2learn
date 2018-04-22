@@ -29,8 +29,8 @@ TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 4
-TRAJ_ENC_WINDOW = 2
+LATENT_LENGTH = 2
+TRAJ_ENC_WINDOW = 4
 
 
 def run_task(plot=False, *_):
@@ -77,7 +77,7 @@ def run_task(plot=False, *_):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=100,
+        init_std=0.5,  # TODO was 100
     )
 
     # TODO(): rename to inference_network
@@ -96,7 +96,7 @@ def run_task(plot=False, *_):
         embedding=task_embedding,
         hidden_sizes=(20, 10),
         adaptive_std=True,  # Must be True for embedding learning
-        init_std=100,
+        init_std=0.5,  # TODO was 100
     )
 
     baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
@@ -113,9 +113,8 @@ def run_task(plot=False, *_):
         step_size=0.01,
         plot=plot,
         plot_warmup_itrs=50,
-        # TODO reactivate the entropy terms!
         policy_ent_coeff=0.1,
-        task_encoder_ent_coeff=1e-2,
+        task_encoder_ent_coeff=1e-4,
         trajectory_encoder_ent_coeff=0.1,
     )
     algo.train()
