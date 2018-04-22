@@ -107,6 +107,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             constraint_name="mean_kl",
         )
 
+        self._summary_writer = tf.summary.FileWriter("test_bk")
+        self._step = 0
+
         return dict()
 
     def _build_opt(self):
@@ -324,7 +327,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 rewards_pad, return_filter, stride=1, padding='VALID')
 
         #### Task encoder KL divergence ########################################
-        # TODO for this to work, we would need to create a tensor that extends self.policy.onehot_input_var
+        # TODO for this to work, we would need to create a tensor that extends self.policy.task_input_var
         # by 1 + 1 extra dims
         # # Input variables
         # task_var = self.policy.embedding.input_space.new_tensor_variable(
@@ -445,7 +448,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### Input list ########################################################
         input_list = [
-            self.policy.onehot_input_var,
+            self.policy.task_input_var,
             self.policy.env_input_var,
             obs_var,
             action_var,
@@ -460,7 +463,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### DEBUG #############################################################
         # Inputs
-        self._task_var = task_var  #self.policy.onehot_input_var
+        self._task_var = task_var  #self.policy.task_input_var
         self._obs_var = obs_var  # self.policy.env_input_var
         self._action_var = action_var
         self._reward_var = reward_var
@@ -681,7 +684,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             # self._cpu_obs_var: samples_data['cpu_obs'],
             # self._cpu_action_var: samples_data['cpu_act'],
             # self._cpu_advantage_var: samples_data['cpu_adv'],
-            self.policy.onehot_input_var:
+            self.policy.task_input_var:
             tasks,
             self.policy.env_input_var:
             obs,
@@ -877,6 +880,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('MeanKL', mean_kl)
         logger.record_tabular('dLoss', loss_before - loss_after)
 
+        summary = tf.Summary()
+        summary.value.add(tag='train/loss_after', simple_value=float(loss_after))
+        print("loss = ",loss_after)
+        self._summary_writer.add_summary(summary, self._step)
+
         # Optimize trajectory encoder
         logger.log("Optimizing trajectory encoder...")
         logger.log("Computing loss before")
@@ -900,6 +908,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
         # latent_mean_kl = f_gpu['task_enc_mean_kl']
         # logger.record_tabular('TaskEncoder/MeanKL', latent_mean_kl)
+
+        summary = tf.Summary()
+        summary.value.add(tag='traj/loss_after', simple_value=float(loss_after))
+        print("loss = ",loss_after)
+        self._summary_writer.add_summary(summary, self._step)
+        self._step += 1
+
 
         return dict()
 
