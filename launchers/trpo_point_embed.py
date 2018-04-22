@@ -30,7 +30,7 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
 LATENT_LENGTH = 2
-TRAJ_ENC_WINDOW = 4
+TRAJ_ENC_WINDOW = 2
 
 
 def run_task(plot=False, *_):

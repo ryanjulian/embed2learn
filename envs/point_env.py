@@ -57,7 +57,7 @@ class PointEnv(Env, Serializable):
 
         # completion bonus
         if done:
-            reward = 20.0
+            reward = 2000.0
 
         return Step(observation=np.copy(self._point), reward=reward, done=done)
 
