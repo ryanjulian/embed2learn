@@ -246,10 +246,11 @@ class TaskEmbeddingSampler(BatchSampler):
             act = tensor_utils.pad_tensor(path['actions'], max_path_length)
             obs = tensor_utils.pad_tensor(path['observations'],
                                           max_path_length)
-            act_flat = action_space.flatten_n(act)
+            # act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
             # Create a time series of stacked [act, obs] vectors
-            #act_obs = np.concatenate([act_flat, obs_flat], axis=1)
+            #XXX now the inference network only looks at obs vectors
+            #act_obs = np.concatenate([act_flat, obs_flat], axis=1)  # TODO reactivate for harder envs?
             act_obs = obs_flat
             # Calculate a forward-looking sliding window of the stacked vectors
             #

@@ -74,6 +74,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.traj_enc_step_size = float(trajectory_encoder_step_size)
 
         self.z_summary = None
+        self.z_summary_op = None
 
         sampler_cls = TaskEmbeddingSampler
         sampler_args = dict(trajectory_encoder=self.traj_encoder, )
@@ -719,6 +720,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         }
         f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
 
+        # Compute RMSE of task encoder, i.e. inferred z-value vs. actual z-value
+        # task_enc_rmse = np.sqrt(((samples_data['trajectory_infos']['mean'] - samples_data['latents']) ** 2).mean())
+        task_enc_rmse = (samples_data['trajectory_infos']['mean'] - samples_data['latents']) ** 2.
+        task_enc_rmse = np.sqrt(task_enc_rmse.mean())
+        logger.record_tabular('TrajEncoder/RMSE', task_enc_rmse)
+
         # Advantage step
         # adv_tf = sess.run(self._f_adv, feed_dict=feed)
         # adv_cpu = samples_data['cpu_adv']
@@ -868,18 +875,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         mean_kl = self.traj_enc_optimizer.constraint_val(all_input_values)
         logger.log("Computing loss after")
         loss_after = self.traj_enc_optimizer.loss(all_input_values)
-        logger.record_tabular('TrajEnc/LossBefore', loss_before)
-        logger.record_tabular('TrajEnc/LossAfter', loss_after)
-        logger.record_tabular('TrajEnc/MeanKLBefore', mean_kl_before)
-        logger.record_tabular('TrajEnc/MeanKL', mean_kl)
-        logger.record_tabular('TrajEnc/dLoss', loss_before - loss_after)
+        logger.record_tabular('TrajEncoder/LossBefore', loss_before)
+        logger.record_tabular('TrajEncoder/LossAfter', loss_after)
+        logger.record_tabular('TrajEncoder/MeanKLBefore', mean_kl_before)
+        logger.record_tabular('TrajEncoder/MeanKL', mean_kl)
+        logger.record_tabular('TrajEncoder/dLoss', loss_before - loss_after)
 
         # Compute after-optimization diagnostics
         # f_gpu, f_cpu = sess.run((gpu_steps, cpu_steps), feed_dict=feed)
         # latent_mean_kl = f_gpu['task_enc_mean_kl']
         # logger.record_tabular('TaskEncoder/MeanKL', latent_mean_kl)
 
-        # visualize task embedding distribution
+        # Visualize task embedding distributions
         #TODO(@junchao) implement logger counterpart for distribution histograms
         num_tasks = self.policy.task_space.flat_dim
         all_tasks = np.eye(num_tasks, num_tasks)
@@ -891,7 +898,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                                                              mean=latent_info["mean"][l],
                                                              stddev=np.exp(latent_info["log_std"][l])))
 
-                logger.record_tabular('TaskEnc/Std/%i/%i' % (t, l), np.exp(latent_info["log_std"][l]))
+                logger.record_tabular('TaskEncoder/Std/Task%i/%i' % (t, l), np.exp(latent_info["log_std"][l]))
             all_combined = tf.concat(latent_distributions, 0)
             if l == 0 and self.z_summary is None:
                 self.z_summary = []

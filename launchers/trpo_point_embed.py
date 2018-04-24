@@ -30,7 +30,7 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
 LATENT_LENGTH = 2
-TRAJ_ENC_WINDOW = 3
+TRAJ_ENC_WINDOW = 8
 
 
 def run_task(plot=False, *_):
@@ -78,6 +78,7 @@ def run_task(plot=False, *_):
         hidden_sizes=(20, 20),
         std_share_network=True,
         init_std=0.5,  # TODO was 100
+        max_std=0.75,  # TODO find appropriate value
     )
 
     # TODO(): rename to inference_network
