@@ -30,7 +30,7 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
 LATENT_LENGTH = 2
-TRAJ_ENC_WINDOW = 2
+TRAJ_ENC_WINDOW = 3
 
 
 def run_task(plot=False, *_):
@@ -125,4 +125,5 @@ run_experiment_lite(
     exp_prefix='trpo_point_embed',
     n_parallel=16,
     plot=True,
+    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
 )
