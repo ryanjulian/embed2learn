@@ -7,6 +7,7 @@ import rllab.misc.logger as logger
 from rllab.sampler import parallel_sampler
 from rllab.sampler.stateful_pool import singleton_pool
 from sandbox.embed2learn.embeddings.multitask_policy import MultitaskPolicy
+from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 
 from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
@@ -24,13 +25,13 @@ from rllab.misc import special  # DEBUG
 # to change the rollout process
 
 
-def rollout(env,
+def rollout(env: MultiTaskEnv,
             agent: MultitaskPolicy,
             max_path_length=np.inf,
             animated=False,
             speedup=1,
             always_return_paths=False):
-    env_observations = []
+
     observations = []
     tasks = []
     latents = []
@@ -94,7 +95,6 @@ def _worker_populate_task(G, env, policy, task_encoder, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
     G.env = pickle.loads(env)
     G.policy = pickle.loads(policy)
-    # G.task_encoder = pickle.loads(task_encoder)
 
 
 def _worker_terminate_task(G, scope=None):
@@ -121,19 +121,14 @@ def _worker_collect_one_path(G, max_path_length, scope=None):
     return path, len(path["rewards"])
 
 
-import tensorflow as tf
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
     def __init__(self,
                  *args,
-                 # task_encoder=None,
                  trajectory_encoder=None,
                  **kwargs):
         super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
-        # self.task_encoder = task_encoder
         self.traj_encoder = trajectory_encoder
-        self.summary_writer = tf.summary.FileWriter("test_guss_1008")
-        self.step = 0
 
     def populate_task(self, env, policy, scope=None):
         logger.log("Populating workers...")
@@ -194,11 +189,9 @@ class TaskEmbeddingSampler(BatchSampler):
     def obtain_samples(self, itr):
         policy_params = self.algo.policy.get_param_values()
         env_params = self.algo.env.get_param_values()
-        # task_enc_params = self.algo.task_encoder.get_param_values()
         paths = self.sample_paths(
             policy_params=policy_params,
             env_params=env_params,
-            # task_encoder_params=task_enc_params,
             max_samples=self.algo.batch_size,
             max_path_length=self.algo.max_path_length,
             scope=self.algo.scope,
@@ -212,11 +205,9 @@ class TaskEmbeddingSampler(BatchSampler):
 
     #TODO: vectorize
     def process_samples(self, itr, paths):
-        self.step = itr
 
         baselines = []
         returns = []
-        trajectories = []
 
         max_path_length = self.algo.max_path_length
         action_space = self.algo.env.action_space
@@ -255,10 +246,11 @@ class TaskEmbeddingSampler(BatchSampler):
             act = tensor_utils.pad_tensor(path['actions'], max_path_length)
             obs = tensor_utils.pad_tensor(path['observations'],
                                           max_path_length)
-            act_flat = action_space.flatten_n(act)
+            # act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
             # Create a time series of stacked [act, obs] vectors
-            #act_obs = np.concatenate([act_flat, obs_flat], axis=1)
+            #XXX now the inference network only looks at obs vectors
+            #act_obs = np.concatenate([act_flat, obs_flat], axis=1)  # TODO reactivate for harder envs?
             act_obs = obs_flat
             # Calculate a forward-looking sliding window of the stacked vectors
             #
@@ -392,15 +384,6 @@ class TaskEmbeddingSampler(BatchSampler):
         logger.record_tabular('StdReturn', np.std(undiscounted_returns))
         logger.record_tabular('MaxReturn', np.max(undiscounted_returns))
         logger.record_tabular('MinReturn', np.min(undiscounted_returns))
-
-        summary.value.add(tag='train/AverageDiscountedReturn', simple_value=float(average_discounted_return))
-        summary.value.add(tag='train/AverageReturn', simple_value=float(np.mean(undiscounted_returns)))
-        summary.value.add(tag='train/NumTrajs', simple_value=float(len(paths)))
-        summary.value.add(tag='train/Entropy', simple_value=float(ent))
-        summary.value.add(tag='train/StdReturn', simple_value=float(np.std(undiscounted_returns)))
-        summary.value.add(tag='train/MaxReturn', simple_value=float(np.max(undiscounted_returns)))
-        summary.value.add(tag='train/MinReturn', simple_value=float(np.min(undiscounted_returns)))
-        self.summary_writer.add_summary(summary, self.step)
 
         return samples_data
 

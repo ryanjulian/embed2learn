@@ -94,6 +94,11 @@ class GaussianMLPEmbedding(MLPEmbedding, StochasticEmbedding):
                 log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
                 log_std_var = tf.minimum(log_std_var, log_std_limit, name="log_std_clip")
 
+            if max_std is not None:
+                # clip log_std
+                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
+                log_std_var = tf.minimum(log_std_var, log_std_limit, name="log_std_clip")
+
             self._f_dist = tensor_utils.compile_function(
                 inputs=[in_var],
                 outputs=[mean_var, log_std_var],

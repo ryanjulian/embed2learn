@@ -88,6 +88,7 @@ class GaussianMLPMultitaskPolicy(MLPEmbedding, StochasticMultitaskPolicy):
             self.latent_mean_var = embed_dist_info_sym["mean"]
             self.latent_log_std_var = embed_dist_info_sym["log_std"]
             self.latent = L.InputLayer((None, latent_dim), self.latent_mean_var, name="latent_input")
+
             self._policy_input = L.ConcatLayer((self.latent, self.env_input))
 
             #init mlp network

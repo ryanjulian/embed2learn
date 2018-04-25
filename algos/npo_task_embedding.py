@@ -56,7 +56,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
-        assert isinstance(policy, StochasticMultitaskPolicy)  # TODO change to StochasticMultitaskPolicy
+        assert isinstance(policy, StochasticMultitaskPolicy)  
         assert isinstance(trajectory_encoder, StochasticEmbedding)
 
         self.plot_warmup_itrs = plot_warmup_itrs
@@ -75,6 +75,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.z_summary = None
         self.z_summary_op = None
 
+        self.z_summary = None
+        self.z_summary_op = None
+
         sampler_cls = TaskEmbeddingSampler
         sampler_args = dict(trajectory_encoder=self.traj_encoder, )
         super(NPOTaskEmbedding, self).__init__(
@@ -82,16 +85,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             sampler_args=sampler_args,
             policy=policy,
             **kwargs)
-        self.summary_writer = self.sampler.summary_writer
 
     @overrides
     def init_opt(self):
         loss, pol_mean_kl, traj_enc_loss, traj_enc_mean_kl, input_list = self._build_opt()
 
-        
-        # Optimize policy and task encoder jointly
-        # TODO check if this needs self.policy._embedding (it shouldn't)
-        pol_embed = JointParameterized(components=[self.policy, self.policy._embedding])
+        # Optimize policy (with embedding) and traj_encoder jointly
+        pol_embed = JointParameterized(components=[self.policy, self.policy.embedding])
+
         self.optimizer.update_opt(
             loss=loss,
             target=pol_embed,
@@ -532,6 +533,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('TrajEncoder/RMSE', task_enc_rmse)
 
         # Everything else
+
         rewards_tensor = self.f_rewards(*all_input_values)
         returns_tensor = self.f_returns(*all_input_values)
         returns_tensor = np.squeeze(returns_tensor)  
@@ -593,9 +595,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('LossAfter', loss)
         logger.record_tabular('MeanKL', mean_kl)
 
-        summary.value.add(tag='train/loss', simple_value=float(loss))
-        summary.value.add(tag='train/mean_kl', simple_value=float(mean_kl))
-
         # Optimize trajectory encoder
         logger.log("Optimizing trajectory encoder...")
         logger.log("Optimizing")
@@ -606,11 +605,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         traj_loss = self.traj_enc_optimizer.loss(all_input_values)
         logger.record_tabular('TrajEncoder/LossAfter', traj_loss)
         logger.record_tabular('TrajEncoder/MeanKL', traj_mean_kl)
-
-        summary.value.add(tag='train/loss', simple_value=float(traj_loss))
-        summary.value.add(tag='train/mean_kl', simple_value=float(traj_mean_kl))
-
-        self.summary_writer.add_summary(summary, self.sampler.step)
 
         self.visulize_distribution()
 
