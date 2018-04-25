@@ -180,11 +180,3 @@ class GaussianMLPMultitaskPolicy(MLPEmbedding, StochasticMultitaskPolicy):
         :return:
         """
         return self.get_reparam_latent_sym(obs_var, action_var, old_dist_info_vars)
-        '''
-        new_dist_info_vars = self.dist_info_sym(obs_var, action_var)
-        new_mean_var, new_log_std_var = new_dist_info_vars["mean"], new_dist_info_vars["log_std"]
-        old_mean_var, old_log_std_var = old_dist_info_vars["mean"], old_dist_info_vars["log_std"]
-        epsilon_var = (action_var - old_mean_var) / (tf.exp(old_log_std_var) + 1e-8)
-        new_action_var = new_mean_var + epsilon_var * tf.exp(new_log_std_var)
-        return new_action_var
-        '''
