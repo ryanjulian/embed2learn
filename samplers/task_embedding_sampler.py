@@ -372,8 +372,6 @@ class TaskEmbeddingSampler(BatchSampler):
             cpu_agent_infos=cpu_agent_infos,  # DEBUG
         )
 
-        summary = tf.Summary()
-
         logger.record_tabular('Iteration', itr)
         logger.record_tabular('AverageDiscountedReturn',
                               average_discounted_return)
