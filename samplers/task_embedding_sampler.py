@@ -49,7 +49,6 @@ def rollout(env,
     # timestep, since we need correlated noise.
     t = env.active_task_one_hot
     z, latent_info = agent.get_latent(t)
-
     if animated:
         env.render()
 
@@ -122,6 +121,7 @@ def _worker_collect_one_path(G, max_path_length, scope=None):
     return path, len(path["rewards"])
 
 
+import tensorflow as tf
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
     def __init__(self,
@@ -132,6 +132,8 @@ class TaskEmbeddingSampler(BatchSampler):
         super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
         # self.task_encoder = task_encoder
         self.traj_encoder = trajectory_encoder
+        self.summary_writer = tf.summary.FileWriter("test_guss_1008")
+        self.step = 0
 
     def populate_task(self, env, policy, scope=None):
         logger.log("Populating workers...")
@@ -210,6 +212,8 @@ class TaskEmbeddingSampler(BatchSampler):
 
     #TODO: vectorize
     def process_samples(self, itr, paths):
+        self.step = itr
+
         baselines = []
         returns = []
         trajectories = []
@@ -376,6 +380,8 @@ class TaskEmbeddingSampler(BatchSampler):
             cpu_agent_infos=cpu_agent_infos,  # DEBUG
         )
 
+        summary = tf.Summary()
+
         logger.record_tabular('Iteration', itr)
         logger.record_tabular('AverageDiscountedReturn',
                               average_discounted_return)
@@ -386,6 +392,15 @@ class TaskEmbeddingSampler(BatchSampler):
         logger.record_tabular('StdReturn', np.std(undiscounted_returns))
         logger.record_tabular('MaxReturn', np.max(undiscounted_returns))
         logger.record_tabular('MinReturn', np.min(undiscounted_returns))
+
+        summary.value.add(tag='train/AverageDiscountedReturn', simple_value=float(average_discounted_return))
+        summary.value.add(tag='train/AverageReturn', simple_value=float(np.mean(undiscounted_returns)))
+        summary.value.add(tag='train/NumTrajs', simple_value=float(len(paths)))
+        summary.value.add(tag='train/Entropy', simple_value=float(ent))
+        summary.value.add(tag='train/StdReturn', simple_value=float(np.std(undiscounted_returns)))
+        summary.value.add(tag='train/MaxReturn', simple_value=float(np.max(undiscounted_returns)))
+        summary.value.add(tag='train/MinReturn', simple_value=float(np.min(undiscounted_returns)))
+        self.summary_writer.add_summary(summary, self.step)
 
         return samples_data
 
