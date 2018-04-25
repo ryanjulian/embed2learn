@@ -59,7 +59,7 @@ class GaussianMLPEmbedding(MLPEmbedding, StochasticEmbedding):
         """
         Serializable.quick_init(self, locals())
         assert isinstance(embedding_spec.latent_space, Box)
-        StochasticEmbedding.__init__(self,embedding_spec)
+        StochasticEmbedding.__init__(self, embedding_spec)
 
         with tf.variable_scope(name):
 
@@ -82,22 +82,23 @@ class GaussianMLPEmbedding(MLPEmbedding, StochasticEmbedding):
                 std_network=std_network,
                 std_parameterization=std_parameterization)
 
-
             in_var = self.mean_network.input_layer.input_var
             dist_info_sym = self.dist_info_sym(
                 self.mean_network.input_layer.input_var, dict())
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
-        
-            if max_std is not None:
-                # clip log_std
-                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
-                log_std_var = tf.minimum(log_std_var, log_std_limit, name="log_std_clip")
 
             if max_std is not None:
                 # clip log_std
                 log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
-                log_std_var = tf.minimum(log_std_var, log_std_limit, name="log_std_clip")
+                log_std_var = tf.minimum(
+                    log_std_var, log_std_limit, name="log_std_clip")
+
+            if max_std is not None:
+                # clip log_std
+                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
+                log_std_var = tf.minimum(
+                    log_std_var, log_std_limit, name="log_std_clip")
 
             self._f_dist = tensor_utils.compile_function(
                 inputs=[in_var],
@@ -118,5 +119,3 @@ class GaussianMLPEmbedding(MLPEmbedding, StochasticEmbedding):
         rnd = np.random.normal(size=means.shape)
         latents = rnd * np.exp(log_stds) + means
         return latents, dict(mean=means, log_std=log_stds)
-
-

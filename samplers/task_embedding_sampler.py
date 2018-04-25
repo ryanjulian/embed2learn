@@ -123,10 +123,7 @@ def _worker_collect_one_path(G, max_path_length, scope=None):
 
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
-    def __init__(self,
-                 *args,
-                 trajectory_encoder=None,
-                 **kwargs):
+    def __init__(self, *args, trajectory_encoder=None, **kwargs):
         super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
         self.traj_encoder = trajectory_encoder
 

@@ -125,5 +125,5 @@ run_experiment_lite(
     run_task,
     exp_prefix='trpo_point_embed',
     n_parallel=16,
-    plot=False,
+    plot=True,
 )

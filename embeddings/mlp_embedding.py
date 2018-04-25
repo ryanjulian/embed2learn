@@ -19,10 +19,10 @@ from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
 class MLPEmbedding(LayersPowered, Serializable):
     def __init__(self,
                  name,
-                 embedding_spec = None,
-                 in_dim = None,
-                 latent_dim = None,
-                 input_layer = None,
+                 embedding_spec=None,
+                 in_dim=None,
+                 latent_dim=None,
+                 input_layer=None,
                  hidden_sizes=(32, 32),
                  learn_std=True,
                  init_std=1.0,
@@ -85,7 +85,7 @@ class MLPEmbedding(LayersPowered, Serializable):
                     mean_network = MLP(
                         name="mean_network",
                         input_shape=(in_dim, ),
-                        input_layer= input_layer,
+                        input_layer=input_layer,
                         output_dim=latent_dim * 2,
                         hidden_sizes=hidden_sizes,
                         hidden_nonlinearity=hidden_nonlinearity,
@@ -99,7 +99,7 @@ class MLPEmbedding(LayersPowered, Serializable):
                 else:
                     mean_network = MLP(
                         name="mean_network",
-                        input_shape=(in_dim,),
+                        input_shape=(in_dim, ),
                         input_layer=input_layer,
                         output_dim=latent_dim,
                         hidden_sizes=hidden_sizes,
@@ -112,14 +112,13 @@ class MLPEmbedding(LayersPowered, Serializable):
                 l_mean = mean_network.output_layer
             self._mean_network = mean_network
 
-
             if std_network is not None:
                 l_std_param = std_network.output_layer
             else:
                 if adaptive_std:
                     std_network = MLP(
                         name="std_network",
-                        input_shape=(in_dim,),
+                        input_shape=(in_dim, ),
                         input_layer=mean_network.input_layer,
                         output_dim=latent_dim,
                         hidden_sizes=std_hidden_sizes,
@@ -133,7 +132,7 @@ class MLPEmbedding(LayersPowered, Serializable):
                         slice(latent_dim, 2 * latent_dim),
                         name="l_std_slice")
                 else:
-                    if std_parameterization== 'exp':
+                    if std_parameterization == 'exp':
                         init_std_param = np.log(init_std)
                     elif std_parameterization == 'softplus':
                         init_std_param = np.log(np.exp(init_std) - 1)
@@ -217,20 +216,20 @@ class MLPEmbedding(LayersPowered, Serializable):
                                                  mean=means_var,
                                                  log_std=log_stds_var))
 
-
-
     def log_diagnostics(self, paths):
-        log_stds = np.vstack([path["agent_infos"]["log_std"] for path in paths])
+        log_stds = np.vstack(
+            [path["agent_infos"]["log_std"] for path in paths])
         logger.record_tabular('AveragePolicyStd', np.mean(np.exp(log_stds)))
 
     @overrides
     def dist_info_sym(self, obs_var, state_info_vars=None):
-        mean_var, std_param_var = L.get_output([self._l_mean, self._l_std_param], obs_var)
+        mean_var, std_param_var = L.get_output(
+            [self._l_mean, self._l_std_param], obs_var)
         if self.min_std_param is not None:
             std_param_var = tf.maximum(std_param_var, self.min_std_param)
-        if self.std_parameterization== 'exp':
+        if self.std_parameterization == 'exp':
             log_std_var = std_param_var
-        elif self.std_parameterization== 'softplus':
+        elif self.std_parameterization == 'softplus':
             log_std_var = tf.log(tf.log(1. + tf.exp(std_param_var)))
         else:
             raise NotImplementedError
@@ -265,4 +264,3 @@ class MLPEmbedding(LayersPowered, Serializable):
             tf.exp(old_log_std_var) + 1e-8)
         new_latent_var = new_mean_var + epsilon_var * tf.exp(new_log_std_var)
         return new_latent_var
-
