@@ -76,7 +76,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.z_summary = None
         self.z_summary_op = None
 
-
         self.z_summary = None
         self.z_summary_op = None
 
@@ -90,8 +89,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     @overrides
     def init_opt(self):
-        loss, pol_mean_kl, traj_enc_loss, traj_enc_mean_kl, input_list = self._build_opt()
-
+        loss, pol_mean_kl, traj_enc_loss, traj_enc_mean_kl, input_list = self._build_opt(
+        )
 
         # Optimize policy (with embedding) and traj_encoder jointly
         pol_embed = JointParameterized(
@@ -105,7 +104,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             constraint_name="mean_kl")
 
         # Optimize trajectory encoder separately via supervised learning
-        self.traj_enc_optimizer = tf.train.AdamOptimizer(self.traj_enc_lr).minimize(self.traj_enc_loss)
+        self.traj_enc_optimizer = tf.train.AdamOptimizer(
+            self.traj_enc_lr).minimize(self.traj_enc_loss)
 
         return dict()
 
@@ -524,13 +524,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # calculate cpu values
         np.set_printoptions(threshold=np.inf)
         return all_input_values, tasks, obs, dist_info_list, traj_enc_dist_info_list
-      
+
     def optimize(self, samples_data):
         sess = tf.get_default_session()
         all_input_values, tasks, obs, dist_info_list, traj_enc_dist_info_list = self.get_training_input(
             samples_data)
 
-        all_input_values, tasks, obs, dist_info_list, traj_enc_dist_info_list = self.get_training_input(samples_data)
+        all_input_values, tasks, obs, dist_info_list, traj_enc_dist_info_list = self.get_training_input(
+            samples_data)
 
         task_ents = self.f_task_entropies(*all_input_values)
         for i, v in enumerate(task_ents):
