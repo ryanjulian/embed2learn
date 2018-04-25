@@ -27,6 +27,7 @@ class GaussianMLPEmbedding(MLPEmbedding, StochasticEmbedding):
                  std_share_network=False,
                  std_hidden_sizes=(32, 32),
                  min_std=1e-6,
+                 max_std=None,
                  std_hidden_nonlinearity=tf.nn.tanh,
                  hidden_nonlinearity=tf.nn.tanh,
                  output_nonlinearity=None,
@@ -87,6 +88,11 @@ class GaussianMLPEmbedding(MLPEmbedding, StochasticEmbedding):
                 self.mean_network.input_layer.input_var, dict())
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
+        
+            if max_std is not None:
+                # clip log_std
+                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
+                log_std_var = tf.minimum(log_std_var, log_std_limit, name="log_std_clip")
 
             self._f_dist = tensor_utils.compile_function(
                 inputs=[in_var],

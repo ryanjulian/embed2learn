@@ -56,8 +56,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
-        assert isinstance(policy, GaussianMLPMultitaskPolicy
-                          )  # TODO change to StochasticMultitaskPolicy
+        assert isinstance(policy, StochasticMultitaskPolicy)  # TODO change to StochasticMultitaskPolicy
         assert isinstance(trajectory_encoder, StochasticEmbedding)
 
         self.plot_warmup_itrs = plot_warmup_itrs
@@ -73,6 +72,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.traj_enc_optimizer = _optimizer_or_default(
             trajectory_encoder_optimizer, trajectory_encoder_optimizer_args)
         self.traj_enc_step_size = float(trajectory_encoder_step_size)
+        self.z_summary = None
+        self.z_summary_op = None
 
         sampler_cls = TaskEmbeddingSampler
         sampler_args = dict(trajectory_encoder=self.traj_encoder, )
@@ -523,6 +524,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             logger.record_tabular('TaskEncoder/Entropy/t={}'.format(i), v)
         logger.record_tabular('TaskEncoder/Entropy', np.mean(task_ents))
         summary.value.add(tag='train/entropy_mean', simple_value=float(np.mean(task_ents)))
+        
+        # Compute RMSE of task encoder, i.e. inferred z-value vs. actual z-value
+        # task_enc_rmse = np.sqrt(((samples_data['trajectory_infos']['mean'] - samples_data['latents']) ** 2).mean())
+        task_enc_rmse = (samples_data['trajectory_infos']['mean'] - samples_data['latents']) ** 2.
+        task_enc_rmse = np.sqrt(task_enc_rmse.mean())
+        logger.record_tabular('TrajEncoder/RMSE', task_enc_rmse)
 
         # Everything else
         rewards_tensor = self.f_rewards(*all_input_values)
@@ -597,15 +604,49 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         traj_mean_kl = self.traj_enc_optimizer.constraint_val(all_input_values)
         logger.log("Computing loss after")
         traj_loss = self.traj_enc_optimizer.loss(all_input_values)
-        logger.record_tabular('TrajEnc/LossAfter', traj_loss)
-        logger.record_tabular('TrajEnc/MeanKL', traj_mean_kl)
+        logger.record_tabular('TrajEncoder/LossAfter', traj_loss)
+        logger.record_tabular('TrajEncoder/MeanKL', traj_mean_kl)
 
         summary.value.add(tag='train/loss', simple_value=float(traj_loss))
         summary.value.add(tag='train/mean_kl', simple_value=float(traj_mean_kl))
 
         self.summary_writer.add_summary(summary, self.sampler.step)
 
+        self.visulize_distribution()
+
         return loss, traj_loss, samples_data
+
+
+    # Visualize task embedding distributions
+    def visulize_distribution(self):
+        #TODO(@junchao) implement logger counterpart for distribution histograms
+        num_tasks = self.policy.task_space.flat_dim
+        all_tasks = np.eye(num_tasks, num_tasks)
+        for l in range(max(self.policy.latent_space.shape)):
+            latent_distributions = []
+            for t in range(num_tasks):
+                _, latent_info = self.policy.get_latent(all_tasks[t, :])
+                latent_distributions.append(tf.random_normal(shape=(1000,),
+                                                             mean=latent_info["mean"][l],
+                                                             stddev=np.exp(latent_info["log_std"][l])))
+
+                logger.record_tabular('TaskEncoder/Std/Task%i/%i' % (t, l), np.exp(latent_info["log_std"][l]))
+
+            all_combined = tf.concat(latent_distributions, 0)
+            if l == 0 and self.z_summary is None:
+                self.z_summary = []
+                self.z_summary_op = []
+                for i in range(max(self.policy.latent_space.shape)):
+                    self.z_summary.append(tf.Variable(all_combined))
+                    self.z_summary_op.append(tf.summary.histogram("TaskEmbedding/%i" % i, self.z_summary[-1]))
+
+            x = tf.assign(self.z_summary[l], all_combined)
+            tf.get_default_session().run(x)
+
+        z_summary = tf.summary.merge(self.z_summary_op)
+        z_summary = tf.get_default_session().run(z_summary)
+        logger._tensorboard_writer.add_summary(z_summary, global_step=logger._tensorboard_default_step)
+        logger._tensorboard_writer.flush()
 
 
     @overrides

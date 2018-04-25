@@ -19,6 +19,8 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
+import tensorflow as tf
+
 
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
@@ -29,12 +31,15 @@ TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 4
-TRAJ_ENC_WINDOW = 2
+LATENT_LENGTH = 2
+TRAJ_ENC_WINDOW = 8
 
+RANDOM_SEED = 1234
 
 def run_task(plot=False, *_):
-    set_seed(0)
+    set_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    tf.set_random_seed(RANDOM_SEED)
 
     # Environment
     env = TfEnv(
@@ -43,6 +48,8 @@ def run_task(plot=False, *_):
                 task_env_cls=PointEnv,
                 task_args=TASK_ARGS,
                 task_kwargs=TASK_KWARGS)))
+
+    #env.wrapped_env.seed(RANDOM_SEED)
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -77,7 +84,8 @@ def run_task(plot=False, *_):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=100,
+        init_std=0.5,
+        max_std=0.75,
     )
 
     # TODO(): rename to inference_network
@@ -96,7 +104,7 @@ def run_task(plot=False, *_):
         embedding=task_embedding,
         hidden_sizes=(20, 10),
         adaptive_std=True,  # Must be True for embedding learning
-        init_std=100,
+        init_std=0.5,
     )
 
     baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
@@ -115,7 +123,7 @@ def run_task(plot=False, *_):
         plot_warmup_itrs=50,
         # TODO reactivate the entropy terms!
         policy_ent_coeff=0.1,
-        task_encoder_ent_coeff=1e-2,
+        task_encoder_ent_coeff=1e-4,
         trajectory_encoder_ent_coeff=0.1,
     )
     algo.train()
