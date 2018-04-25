@@ -34,7 +34,7 @@ TRAJ_ENC_WINDOW = 8
 
 
 def run_task(plot=False, *_):
-    set_seed(0)
+    set_seed(1)
 
     # Environment
     env = TfEnv(
@@ -76,7 +76,7 @@ def run_task(plot=False, *_):
         name="task_embedding",
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
-        std_share_network=True,
+        adaptive_std=True,
         init_std=0.5,  # TODO was 100
         max_std=0.75,  # TODO find appropriate value
     )
@@ -85,8 +85,9 @@ def run_task(plot=False, *_):
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(20, 20),
-        adaptive_std=True,  # Must be True for embedding learning
+        hidden_sizes=(4, 4),
+        # adaptive_std=True,  # Must be True for embedding learning
+        std_share_network=True,
     )
 
     # Multitask policy
@@ -115,8 +116,9 @@ def run_task(plot=False, *_):
         plot=plot,
         plot_warmup_itrs=50,
         policy_ent_coeff=0.1,
-        task_encoder_ent_coeff=1e-4,
-        trajectory_encoder_ent_coeff=0.1,
+        # task_encoder_ent_coeff=1e-4,
+        task_encoder_ent_coeff=0.,
+        trajectory_encoder_ent_coeff=0.1,  # 0.1,
     )
     algo.train()
 
