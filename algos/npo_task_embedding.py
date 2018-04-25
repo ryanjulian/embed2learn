@@ -52,7 +52,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  trajectory_encoder_optimizer=None,
                  trajectory_encoder_optimizer_args=None,
                  trajectory_encoder_ent_coeff=1e-3,
-                 trajectory_encoder_step_size=0.01,
+                 trajectory_encoder_learning_rate=1e-2,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -69,11 +69,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         self.traj_encoder = trajectory_encoder
         self.traj_enc_ent_coeff = trajectory_encoder_ent_coeff
+
         self.traj_enc_optimizer = _optimizer_or_default(
             trajectory_encoder_optimizer, trajectory_encoder_optimizer_args)
         self.traj_enc_step_size = float(trajectory_encoder_step_size)
         self.z_summary = None
         self.z_summary_op = None
+
 
         self.z_summary = None
         self.z_summary_op = None
@@ -88,7 +90,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     @overrides
     def init_opt(self):
+
         loss, pol_mean_kl, traj_enc_loss, traj_enc_mean_kl, input_list = self._build_opt()
+
 
         # Optimize policy (with embedding) and traj_encoder jointly
         pol_embed = JointParameterized(components=[self.policy, self.policy.embedding])
@@ -100,14 +104,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             inputs=input_list,
             constraint_name="mean_kl")
 
-        # Optimize trajectory encoder separately
-        self.traj_enc_optimizer.update_opt(
-            loss=traj_enc_loss,
-            target=self.traj_encoder,
-            leq_constraint=(traj_enc_mean_kl, self.traj_enc_step_size),
-            inputs=input_list,
-            constraint_name="mean_kl",
-        )
+        # Optimize trajectory encoder separately via supervised learning
+        self.traj_enc_optimizer = tf.train.AdamOptimizer(self.traj_enc_lr).minimize(self.traj_enc_loss)
 
 
         return dict()
@@ -121,6 +119,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         #### Policy and loss function ##########################################
         # Input variables
+
         self._obs_var = self.policy.observation_space.new_tensor_variable( 'obs', extra_dims=1 + 1,)
         self._task_var = self.policy.task_space.new_tensor_variable( 'task', extra_dims=1 + 1,)
         self._action_var = self.env.action_space.new_tensor_variable( 'action', extra_dims=1 + 1,)
@@ -479,6 +478,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 'baselines',
                 'trajectories',
                 'tasks',
+                'latents',
                 'valids'))
         # add policy params
         agent_infos = samples_data["agent_infos"]
@@ -513,12 +513,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # calculate cpu values
         np.set_printoptions(threshold=np.inf)
         return all_input_values, tasks, obs, dist_info_list, traj_enc_dist_info_list
-
+      
     def optimize(self, samples_data):
         sess = tf.get_default_session()
         all_input_values, tasks, obs, dist_info_list, traj_enc_dist_info_list = self.get_training_input(samples_data)
-        
-        summary = tf.Summary()
 
         task_ents = self.f_task_entropies(*all_input_values)
         for i, v in enumerate(task_ents):
@@ -528,9 +526,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         
         # Compute RMSE of task encoder, i.e. inferred z-value vs. actual z-value
         # task_enc_rmse = np.sqrt(((samples_data['trajectory_infos']['mean'] - samples_data['latents']) ** 2).mean())
-        task_enc_rmse = (samples_data['trajectory_infos']['mean'] - samples_data['latents']) ** 2.
-        task_enc_rmse = np.sqrt(task_enc_rmse.mean())
-        logger.record_tabular('TrajEncoder/RMSE', task_enc_rmse)
 
         # Everything else
 
