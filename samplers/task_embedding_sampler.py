@@ -121,8 +121,6 @@ def _worker_collect_one_path(G, max_path_length, scope=None):
     return path, len(path["rewards"])
 
 
-import tensorflow as tf
-
 
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
