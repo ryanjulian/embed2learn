@@ -18,26 +18,27 @@ from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.embed2learn.embeddings.multitask_policy import StochasticMultitaskPolicy
 
 
-class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
-                                 Serializable):
-    def __init__(self,
-                 name,
-                 env_spec,
-                 embedding: StochasticEmbedding,
-                 task_space,
-                 hidden_sizes=(32, 32),
-                 learn_std=True,
-                 init_std=1.0,
-                 adaptive_std=False,
-                 std_share_network=False,
-                 std_hidden_sizes=(32, 32),
-                 min_std=1e-6,
-                 std_hidden_nonlinearity=tf.nn.tanh,
-                 hidden_nonlinearity=tf.nn.tanh,
-                 output_nonlinearity=None,
-                 mean_network=None,
-                 std_network=None,
-                 std_parametrization='exp'):
+class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered, Serializable):
+    def __init__(
+            self,
+            name,
+            env_spec,
+            embedding: StochasticEmbedding,
+            task_space,
+            hidden_sizes=(32, 32),
+            learn_std=True,
+            init_std=1.0,
+            adaptive_std=False,
+            std_share_network=False,
+            std_hidden_sizes=(32, 32),
+            min_std=1e-6,
+            std_hidden_nonlinearity=tf.nn.tanh,
+            hidden_nonlinearity=tf.nn.tanh,
+            output_nonlinearity=None,
+            mean_network=None,
+            std_network=None,
+            std_parametrization='exp'
+    ):
         """
         :param env_spec: observation space is a concatenation of task space and vanilla env observation space
         :param hidden_sizes: list of sizes for the fully-connected hidden layers
@@ -60,8 +61,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
         Serializable.quick_init(self, locals())
         assert isinstance(env_spec.action_space, Box)
 
-        super(GaussianMLPMultitaskPolicy, self).__init__(
-            env_spec, embedding, task_space)
+        super(GaussianMLPMultitaskPolicy, self).__init__(env_spec, embedding, task_space)
 
         with tf.variable_scope(name):
             task_obs_dim = self.task_observation_space.flat_dim
@@ -75,19 +75,19 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
             self.task_input = self._embedding._mean_network.input_layer
             self.task_input_var = self.task_input.input_var
 
-            self.env_input = L.InputLayer(
-                (None, obs_dim), name="policy_env_input")
+            self.env_input = L.InputLayer((None, obs_dim), name="policy_env_input")
             self.env_input_var = self.env_input.input_var
 
             embed_dist_info_sym = self._embedding.dist_info_sym(
-                self.task_input.input_var, {
+                self.task_input.input_var,
+                {
                     self.env_input.input_var: self.env_input.input_var,
                     self.task_input.input_var: self.task_input.input_var
-                })
+                }
+            )
             self.latent_mean_var = embed_dist_info_sym["mean"]
             self.latent_log_std_var = embed_dist_info_sym["log_std"]
-            self.latent = L.InputLayer(
-                (None, latent_dim), self.latent_mean_var, name="latent_input")
+            self.latent = L.InputLayer((None, latent_dim), self.latent_mean_var, name="latent_input")
 
             self._policy_input = L.ConcatLayer((self.latent, self.env_input))
 
@@ -95,7 +95,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
             if mean_network is None:
                 mean_network = MLP(
                     name="mean_network",
-                    input_shape=(latent_obs_dim, ),
+                    input_shape=(latent_obs_dim,),
                     input_layer=self._policy_input,
                     output_dim=action_dim,
                     hidden_sizes=hidden_sizes,
@@ -112,7 +112,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
                 if adaptive_std:
                     std_network = MLP(
                         name="std_network",
-                        input_shape=(latent_obs_dim, ),
+                        input_shape=(latent_obs_dim,),
                         input_layer=mean_network.input_layer,
                         output_dim=action_dim,
                         hidden_sizes=std_hidden_sizes,
@@ -160,20 +160,16 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
 
             LayersPowered.__init__(self, [l_mean, l_std_param])
 
-            dist_info_sym = self.dist_info_sym(
-                {
-                    self.env_input.input_var: self.env_input.input_var,
-                    self.task_input.input_var: self.task_input.input_var
-                }, dict())
+            dist_info_sym = self.dist_info_sym({
+                self.env_input.input_var: self.env_input.input_var,
+                self.task_input.input_var: self.task_input.input_var
+            }, dict())
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
 
             self._task_obs_action_dist = tensor_utils.compile_function(
                 inputs=[self.task_input_var, self.env_input.input_var],
-                outputs=[
-                    mean_var, log_std_var, self.latent_mean_var,
-                    self.latent_log_std_var
-                ],
+                outputs=[mean_var, log_std_var, self.latent_mean_var, self.latent_log_std_var],
             )
 
             self._latent_obs_action_dist = tensor_utils.compile_function(
@@ -187,18 +183,13 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
 
     @overrides
     def get_params_internal(self, **tags):
-        layers = L.get_all_layers(
-            self._output_layers, treat_as_input=self._input_layers)
-        layers += L.get_all_layers(
-            self._embedding._output_layers,
-            treat_as_input=self._embedding._input_layers)
-        params = itertools.chain.from_iterable(
-            l.get_params(**tags) for l in layers)
+        layers = L.get_all_layers(self._output_layers, treat_as_input=self._input_layers)
+        layers += L.get_all_layers(self._embedding._output_layers, treat_as_input=self._embedding._input_layers)
+        params = itertools.chain.from_iterable(l.get_params(**tags) for l in layers)
         return L.unique(params)
 
     def dist_info_sym(self, obs_var, state_info_vars=None):
-        mean_var, std_param_var = L.get_output(
-            [self._l_mean, self._l_std_param], obs_var)
+        mean_var, std_param_var = L.get_output([self._l_mean, self._l_std_param], obs_var)
         if self.min_std_param is not None:
             std_param_var = tf.maximum(std_param_var, self.min_std_param)
         if self.std_parametrization == 'exp':
@@ -224,8 +215,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
         rnd = np.random.normal(size=mean.shape)
         action = rnd * np.exp(log_std) + mean
         latent_info = dict(mean=latent_mean, log_std=latent_log_std)
-        return action, dict(
-            mean=mean, log_std=log_std, latent_info=latent_info)
+        return action, dict(mean=mean, log_std=log_std,
+                            latent_info=latent_info)
 
     def get_actions(self, observations):
         # TODO implement split_observation_n(...)
@@ -241,10 +232,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
         flat_obs = self.observation_space.flatten(observation)
         flat_latent = self.latent_space.flatten(latent)
         # xs = self._latent_obs_action_dist(flat_latent, flat_obs)
-        mean, log_std = [
-            x[0]
-            for x in self._latent_obs_action_dist([flat_latent], [flat_obs])
-        ]
+        mean, log_std = [x[0] for x in self._latent_obs_action_dist([flat_latent], [flat_obs])]
         rnd = np.random.normal(size=mean.shape)
         action = rnd * np.exp(log_std) + mean
         return action, dict(mean=mean, log_std=log_std)
@@ -269,18 +257,14 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
         :return:
         """
         new_dist_info_vars = self.dist_info_sym(obs_var, action_var)
-        new_mean_var, new_log_std_var = new_dist_info_vars[
-            "mean"], new_dist_info_vars["log_std"]
-        old_mean_var, old_log_std_var = old_dist_info_vars[
-            "mean"], old_dist_info_vars["log_std"]
-        epsilon_var = (action_var - old_mean_var) / (
-            tf.exp(old_log_std_var) + 1e-8)
+        new_mean_var, new_log_std_var = new_dist_info_vars["mean"], new_dist_info_vars["log_std"]
+        old_mean_var, old_log_std_var = old_dist_info_vars["mean"], old_dist_info_vars["log_std"]
+        epsilon_var = (action_var - old_mean_var) / (tf.exp(old_log_std_var) + 1e-8)
         new_action_var = new_mean_var + epsilon_var * tf.exp(new_log_std_var)
         return new_action_var
 
     def log_diagnostics(self, paths):
-        log_stds = np.vstack(
-            [path["agent_infos"]["log_std"] for path in paths])
+        log_stds = np.vstack([path["agent_infos"]["log_std"] for path in paths])
         logger.record_tabular('AveragePolicyStd', np.mean(np.exp(log_stds)))
 
     @property
