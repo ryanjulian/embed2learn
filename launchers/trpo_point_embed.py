@@ -128,5 +128,4 @@ run_experiment_lite(
     exp_prefix='trpo_point_embed',
     n_parallel=16,
     plot=True,
-    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
 )
