@@ -10,7 +10,8 @@ class MultitaskPolicy(Policy, Parameterized):
         self._env_spec = env_spec
         self._embedding = embedding
         self._task_space = task_space
-        self._task_observation_space = concat_spaces(self._task_space, self._env_spec.observation_space)
+        self._task_observation_space = concat_spaces(
+            self._task_space, self._env_spec.observation_space)
 
     # Should be implemented by all policies
 
@@ -114,11 +115,11 @@ class MultitaskPolicy(Policy, Parameterized):
         :param observation: task onehot concatenated with vanilla environment observation
         :return: tuple (task onehot, vanilla environment observation)
         """
-        return observation[:self.task_space.flat_dim], observation[self.task_space.flat_dim:]
+        return observation[:self.task_space.flat_dim], observation[
+            self.task_space.flat_dim:]
 
 
 class StochasticMultitaskPolicy(StochasticPolicy, MultitaskPolicy):
-
     def __init__(self, env_spec, embedding: StochasticEmbedding, task_space):
         super().__init__(env_spec, embedding, task_space)
         self._embedding = embedding
