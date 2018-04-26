@@ -50,6 +50,7 @@ def rollout(env: MultiTaskEnv,
     # timestep, since we need correlated noise.
     t = env.active_task_one_hot
     z, latent_info = agent.get_latent(t)
+
     if animated:
         env.render()
 
@@ -205,7 +206,6 @@ class TaskEmbeddingSampler(BatchSampler):
 
     #TODO: vectorize
     def process_samples(self, itr, paths):
-
         baselines = []
         returns = []
 
