@@ -23,6 +23,7 @@ from sandbox.embed2learn.algos.utils import flatten_batch
 from sandbox.embed2learn.algos.utils import flatten_batch_dict
 from sandbox.embed2learn.algos.utils import filter_valids
 from sandbox.embed2learn.algos.utils import filter_valids_dict
+from sandbox.rocky.tf.optimizers.first_order_optimizer import FirstOrderOptimizer
 
 
 def _optimizer_or_default(optimizer, args):
@@ -52,7 +53,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  trajectory_encoder_optimizer=None,
                  trajectory_encoder_optimizer_args=None,
                  trajectory_encoder_ent_coeff=1e-3,
-                 trajectory_encoder_learning_rate=1e-2,
+                 trajectory_encoder_learning_rate=1e-3,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -69,9 +70,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         self.traj_encoder = trajectory_encoder
         self.traj_enc_ent_coeff = trajectory_encoder_ent_coeff
-        self.traj_enc_optimizer = None
-        self.traj_enc_lr = float(trajectory_encoder_learning_rate)
-        self.traj_enc_loss = None
+        self.traj_enc_optimizer = FirstOrderOptimizer(
+            tf.train.AdamOptimizer,
+            dict(learning_rate=float(trajectory_encoder_learning_rate)))
 
         self.z_summary = None
         self.z_summary_op = None
@@ -86,22 +87,25 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     @overrides
     def init_opt(self):
-        loss, pol_mean_kl, traj_enc_loss, input_list = self._build_opt()
+        pol_loss, pol_mean_kl, input_list, traj_enc_loss, traj_enc_inputs = \
+            self._build_opt()
 
         # Optimize policy (with embedding) and traj_encoder jointly
         pol_embed = JointParameterized(
             components=[self.policy, self.policy.embedding])
 
         self.optimizer.update_opt(
-            loss=loss,
+            loss=pol_loss,
             target=pol_embed,
             leq_constraint=(pol_mean_kl, self.step_size),
             inputs=input_list,
             constraint_name="mean_kl")
 
-        self.traj_enc_loss = traj_enc_loss
-        self.traj_enc_optimizer = tf.train.AdamOptimizer(
-            self.traj_enc_lr).minimize(self.traj_enc_loss)
+        # Optimize trajectory encoder separately via supervised learning
+        self.traj_enc_optimizer.update_opt(
+            loss=traj_enc_loss,
+            target=self.traj_encoder,
+            inputs=traj_enc_inputs)
 
         return dict()
 
@@ -149,7 +153,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         self.initialize_vars()
 
-        input_list = self.build_input()
+        policy_input_list = self.build_policy_input()
         surr_loss, pol_mean_kl, traj_enc_loss, rewards = self.build_loss()
         returns = self.build_returns(rewards)
 
@@ -160,21 +164,23 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Functions
         self.f_rewards = tensor_utils.compile_function(
-            input_list, rewards, log_name="f_rewards")
+            policy_input_list, rewards, log_name="f_rewards")
         self.f_returns = tensor_utils.compile_function(
-            input_list, returns, log_name="f_returns")
+            policy_input_list, returns, log_name="f_returns")
         self.f_task_entropies = tensor_utils.compile_function(
-            input_list, self._all_task_entropies, log_name="f_task_entropies")
+            policy_input_list, self._all_task_entropies, log_name="f_task_entropies")
         self.f_policy_entropy = tensor_utils.compile_function(
-            input_list,
+            policy_input_list,
             tf.reduce_sum(self._pol_entropy * self._valid_var),
             log_name="f_policy_entropy")
         self.f_traj_cross_entropy = tensor_utils.compile_function(
-            input_list,
+            policy_input_list,
             tf.reduce_sum(self._traj_ll * self._valid_var),
             log_name="f_traj_cross_entropy")
 
-        return self._surr_loss, self._pol_mean_kl, self._traj_loss, input_list
+        traj_enc_input_list = self.build_traj_enc_input()
+
+        return self._surr_loss, self._pol_mean_kl, policy_input_list, self._traj_loss, traj_enc_input_list
 
     ############################ initialize base variables #################################
     def initialize_vars(self):
@@ -229,7 +235,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             for k, shape in self.policy.embedding.state_info_specs
         }
         self._task_enc_state_info_vars_list = [
-            task_enc_state_info_vars[k]
+            self._task_enc_state_info_vars[k]
             for k in self.policy.embedding.state_info_keys
         ]
 
@@ -275,7 +281,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         ]
 
     ############################ input variables ####################################################
-    def build_input(self):
+    def build_policy_input(self):
         input_list = [
             self.policy.task_input_var,
             self.policy.env_input_var,
@@ -290,6 +296,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         ] + self._state_info_vars_list + self._old_dist_info_vars_list \
           + self._task_enc_state_info_vars_list + self._task_enc_old_dist_info_vars_list \
           + self._traj_enc_state_info_vars_list + self._traj_enc_old_dist_info_vars_list
+
+        return input_list
+
+    def build_traj_enc_input(self):
+        input_list = [
+            self._trajectory_var,
+            self._latent_var,
+            self._valid_var,
+        ]
 
         return input_list
 
@@ -479,18 +494,25 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                            (-1, self.policy.task_space.flat_dim))
         obs = np.reshape(samples_data["observations"],
                          (-1, self.policy.observation_space.flat_dim))
-        all_input_values = (tasks, obs)
-        all_input_values += tuple(
-            ext.extract(samples_data, 'observations', 'actions', 'rewards',
-                        'baselines', 'trajectories', 'tasks', 'latents',
-                        'valids'))
+        policy_input_values = (tasks, obs)
+        policy_input_values += tuple(
+            ext.extract(
+                samples_data,
+                'observations',
+                'actions',
+                'rewards',
+                'baselines',
+                'trajectories',
+                'tasks',
+                'latents',
+                'valids'))
         # add policy params
         agent_infos = samples_data["agent_infos"]
         state_info_list = [agent_infos[k] for k in self.policy.state_info_keys]
         dist_info_list = [
             agent_infos[k] for k in self.policy.distribution.dist_info_keys
         ]
-        all_input_values += tuple(state_info_list) + tuple(dist_info_list)
+        policy_input_values += tuple(state_info_list) + tuple(dist_info_list)
         # add task encoder params
         latent_infos = samples_data["latent_infos"]
         task_enc_state_info_list = [
@@ -500,7 +522,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             latent_infos[k]
             for k in self.policy.embedding.distribution.dist_info_keys
         ]
-        all_input_values += tuple(task_enc_state_info_list) + tuple(
+        policy_input_values += tuple(task_enc_state_info_list) + tuple(
             task_enc_dist_info_list)
         # add trajectory encoder params
         trajectory_infos = samples_data["trajectory_infos"]
@@ -511,33 +533,37 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             trajectory_infos[k]
             for k in self.traj_encoder.distribution.dist_info_keys
         ]
-        all_input_values += tuple(traj_enc_state_info_list) + tuple(
+        policy_input_values += tuple(traj_enc_state_info_list) + tuple(
             traj_enc_dist_info_list)
 
-        # calculate cpu values
-        np.set_printoptions(threshold=np.inf)
-        feed = {
-            self._obs_var: samples_data['observations'],
-            self._task_var: samples_data['tasks'],
-            self._action_var: samples_data['actions'],
-            self._reward_var: samples_data['rewards'],
-            self._baseline_var: samples_data['baselines'],
-            self._trajectory_var: samples_data['trajectories'],
-            self._latent_var: samples_data['latents'],
-            self._valid_var: samples_data['valids'],
-            self.policy.task_input_var: tasks,
-            self.policy.env_input_var: obs,
-        }
-        for idx, v in enumerate(self._state_info_vars_list):
-            feed[v] = state_info_list[idx]
-        for idx, v in enumerate(self._old_dist_info_vars_list):
-            feed[v] = dist_info_list[idx]
-        for idx, v in enumerate(self._traj_enc_state_info_vars_list):
-            feed[v] = traj_enc_state_info_list[idx]
-        for idx, v in enumerate(self._traj_enc_old_dist_info_vars_list):
-            feed[v] = traj_enc_dist_info_list[idx]
+        traj_enc_input_values = [samples_data['trajectories'],
+                                 samples_data['latents'],
+                                 samples_data['valids']]
 
-        return all_input_values, feed
+        # calculate cpu values
+        # np.set_printoptions(threshold=np.inf)
+        # feed = {
+        #     self._obs_var: samples_data['observations'],
+        #     self._task_var: samples_data['tasks'],
+        #     self._action_var: samples_data['actions'],
+        #     self._reward_var: samples_data['rewards'],
+        #     self._baseline_var: samples_data['baselines'],
+        #     self._trajectory_var: samples_data['trajectories'],
+        #     self._latent_var: samples_data['latents'],
+        #     self._valid_var: samples_data['valids'],
+        #     self.policy.task_input_var: tasks,
+        #     self.policy.env_input_var: obs,
+        # }
+        # for idx, v in enumerate(self._state_info_vars_list):
+        #     feed[v] = state_info_list[idx]
+        # for idx, v in enumerate(self._old_dist_info_vars_list):
+        #     feed[v] = dist_info_list[idx]
+        # for idx, v in enumerate(self._traj_enc_state_info_vars_list):
+        #     feed[v] = traj_enc_state_info_list[idx]
+        # for idx, v in enumerate(self._traj_enc_old_dist_info_vars_list):
+        #     feed[v] = traj_enc_dist_info_list[idx]
+
+        return policy_input_values, traj_enc_input_values
 
     def get_feed(self, samples_data):
         agent_infos = samples_data["agent_infos"]
@@ -578,20 +604,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return feed
 
     def optimize(self, samples_data):
-        sess = tf.get_default_session()
+        policy_input_values, traj_enc_input_values = self.get_training_input(samples_data)
 
-        all_input_values, feed = self.get_training_input(samples_data)
+        samples_data = self.evaluate(policy_input_values, samples_data)
 
-        samples_data = self.evaluate(all_input_values, samples_data)
-
-        self.train_task(all_input_values, feed)
-        self.train_traj(all_input_values, feed)
+        self.train_task(policy_input_values)
+        self.train_traj(traj_enc_input_values)
 
         self.visulize_distribution()
 
         return samples_data
 
-    def train_task(self, all_input_values, feed):
+    def train_task(self, all_input_values):
         # Joint optimization of policy and task encoder
         logger.log("Computing loss before")
         loss_before = self.optimizer.loss(all_input_values)
@@ -608,22 +632,22 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('MeanKLBefore', mean_kl_before)
         logger.record_tabular('MeanKL', mean_kl)
         logger.record_tabular('dLoss', loss_before - loss_after)
+        logger.dump_tabular()
 
         return loss_after
 
-    def train_traj(self, all_input_values, feed):
-        sess = tf.get_default_session()
+    def train_traj(self, traj_enc_input):
         # Optimize trajectory encoder
         logger.log("Optimizing trajectory encoder...")
 
-        loss_before, = sess.run([self.traj_enc_loss], feed_dict=feed)
-        logger.record_tabular('TrajEncoder/Loss', loss_before)
-        for _ in range(10):
-            sess.run([self.traj_enc_optimizer], feed_dict=feed)
-        loss_after, = sess.run([self.traj_enc_loss], feed_dict=feed)
-        logger.record_tabular('TrajEncoder/dLoss', loss_before - loss_after)
+        traj_enc_loss_before = self.traj_enc_optimizer.loss(traj_enc_input)
+        logger.record_tabular('TrajEncoder/Loss', traj_enc_loss_before)
+        self.traj_enc_optimizer.optimize(traj_enc_input)
+        traj_enc_loss_after = self.traj_enc_optimizer.loss(traj_enc_input)
+        logger.record_tabular('TrajEncoder/dLoss', traj_enc_loss_before - traj_enc_loss_after)
+        logger.dump_tabular()
 
-        return loss_after
+        return traj_enc_loss_after
 
     def evaluate(self, all_input_values, samples_data):
         # Everything else

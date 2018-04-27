@@ -30,11 +30,11 @@ TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
 LATENT_LENGTH = 2
-TRAJ_ENC_WINDOW = 8
+TRAJ_ENC_WINDOW = 16
 
 
-def run_task(plot=False, *_):
-    set_seed(1)
+def run_task(plot=True, *_):
+    set_seed(0)
 
     # Environment
     env = TfEnv(
@@ -78,16 +78,17 @@ def run_task(plot=False, *_):
         hidden_sizes=(20, 20),
         adaptive_std=True,
         init_std=0.5,  # TODO was 100
-        max_std=0.75,  # TODO find appropriate value
+        max_std=0.6,  # TODO find appropriate value
     )
 
     # TODO(): rename to inference_network
     traj_embedding = GaussianMLPEmbedding(
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(4, 4),
+        hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         # adaptive_std=True,  # Must be True for embedding learning
         std_share_network=True,
+        init_std=0.001,
     )
 
     # Multitask policy
@@ -114,11 +115,11 @@ def run_task(plot=False, *_):
         discount=0.99,
         step_size=0.01,
         plot=plot,
-        plot_warmup_itrs=50,
-        policy_ent_coeff=0.1,
+        plot_warmup_itrs=30,
+        policy_ent_coeff=0.,  # 0.001,  #0.1,
         # task_encoder_ent_coeff=1e-4,
-        task_encoder_ent_coeff=0.,
-        trajectory_encoder_ent_coeff=0.1,  # 0.1,
+        task_encoder_ent_coeff=0.,  #0.1,
+        trajectory_encoder_ent_coeff=0.,  # 0.03,  #0.1,  # 0.1,
     )
     algo.train()
 
@@ -128,4 +129,7 @@ run_experiment_lite(
     exp_prefix='trpo_point_embed',
     n_parallel=16,
     plot=True,
+    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
 )
+
+# run_task()
