@@ -540,29 +540,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                                  samples_data['latents'],
                                  samples_data['valids']]
 
-        # calculate cpu values
-        # np.set_printoptions(threshold=np.inf)
-        # feed = {
-        #     self._obs_var: samples_data['observations'],
-        #     self._task_var: samples_data['tasks'],
-        #     self._action_var: samples_data['actions'],
-        #     self._reward_var: samples_data['rewards'],
-        #     self._baseline_var: samples_data['baselines'],
-        #     self._trajectory_var: samples_data['trajectories'],
-        #     self._latent_var: samples_data['latents'],
-        #     self._valid_var: samples_data['valids'],
-        #     self.policy.task_input_var: tasks,
-        #     self.policy.env_input_var: obs,
-        # }
-        # for idx, v in enumerate(self._state_info_vars_list):
-        #     feed[v] = state_info_list[idx]
-        # for idx, v in enumerate(self._old_dist_info_vars_list):
-        #     feed[v] = dist_info_list[idx]
-        # for idx, v in enumerate(self._traj_enc_state_info_vars_list):
-        #     feed[v] = traj_enc_state_info_list[idx]
-        # for idx, v in enumerate(self._traj_enc_old_dist_info_vars_list):
-        #     feed[v] = traj_enc_dist_info_list[idx]
-
         return policy_input_values, traj_enc_input_values
 
     def get_feed(self, samples_data):
@@ -611,7 +588,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.train_task(policy_input_values)
         self.train_traj(traj_enc_input_values)
 
-        self.visulize_distribution()
+        self.visualize_distribution()
 
         return samples_data
 
@@ -710,8 +687,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return samples_data
 
     # Visualize task embedding distributions
-    def visulize_distribution(self):
+    def visualize_distribution(self):
         #TODO(@junchao) implement logger counterpart for distribution histograms
+        if not hasattr(logger, '_tensorboard_writer') or logger._tensorboard_writer is None:
+            return
+
         num_tasks = self.policy.task_space.flat_dim
         all_tasks = np.eye(num_tasks, num_tasks)
         for l in range(max(self.policy.latent_space.shape)):
@@ -747,7 +727,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger._tensorboard_writer.flush()
 
     @overrides
-    def optimize_policy(self, itr):
+    def optimize_policy(self, itr, **kwargs):
         paths = self.obtain_samples(itr)
         samples_data = self.process_samples(itr, paths)
         self.log_diagnostics(paths)
@@ -758,6 +738,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return self.get_itr_snapshot(itr, samples_data)
 
     def train(self, sess=None):
+        created_session = True if (sess is None) else False
         if sess is None:
             sess = tf.Session()
             sess.__enter__()
@@ -769,7 +750,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         for itr in range(self.start_itr, self.n_itr):
             itr_start_time = time.time()
             with logger.prefix('itr #%d | ' % itr):
-                params = self.optimize_policy(itr)
+                params = self.optimize_policy(itr, )
                 if self.plot and itr > self.plot_warmup_itrs:
                     rollout(
                         self.env,
@@ -779,9 +760,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     if self.pause_for_plot:
                         input("Plotting evaluation run: Press Enter to "
                               "continue...")
+                logger.log("Saving snapshot...")
+                logger.save_itr_params(itr, params)
+                logger.log("Saved")
+                logger.record_tabular('IterTime', time.time() - itr_start_time)
+                logger.record_tabular('Time', time.time() - start_time)
+        self.shutdown_worker()
+        if created_session:
+            sess.close()
 
     @overrides
-    def get_itr_snapshot(self, itr, samples_data):
+    def get_itr_snapshot(self, itr, _samples_data):
         return dict(
             itr=itr,
             policy=self.policy,
