@@ -34,7 +34,7 @@ TRAJ_ENC_WINDOW = 16
 
 
 def run_task(plot=True, *_):
-    set_seed(0)
+    set_seed(1)
 
     # Environment
     env = TfEnv(
