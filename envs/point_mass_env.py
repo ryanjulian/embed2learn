@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-
 """Point-mass domain."""
 
 from __future__ import absolute_import
@@ -47,7 +46,8 @@ def _get_model_and_assets(model_filename):
 @SUITE.add('benchmarking')
 def light(goal, time_limit=_DEFAULT_TIME_LIMIT, random=None):
     """Returns the light point_mass task."""
-    physics = Physics.from_xml_string(*_get_model_and_assets("point_mass/point_mass_light.xml"))
+    physics = Physics.from_xml_string(
+        *_get_model_and_assets("point_mass/point_mass_light.xml"))
     task = PointMass(goal, random=random)
     return control.Environment(physics, task, time_limit=time_limit)
 
@@ -55,7 +55,8 @@ def light(goal, time_limit=_DEFAULT_TIME_LIMIT, random=None):
 @SUITE.add('benchmarking')
 def heavy(goal, time_limit=_DEFAULT_TIME_LIMIT, random=None):
     """Returns the light point_mass task."""
-    physics = Physics.from_xml_string(*_get_model_and_assets("point_mass/point_mass_heavy.xml"))
+    physics = Physics.from_xml_string(
+        *_get_model_and_assets("point_mass/point_mass_heavy.xml"))
     task = PointMass(goal, random=random)
     return control.Environment(physics, task, time_limit=time_limit)
 
@@ -76,7 +77,11 @@ class Physics(mujoco.Physics):
 class PointMass(base.Task):
     """A point_mass `Task` to reach target with smooth reward."""
 
-    def __init__(self, goal, randomize_gains=False, randomize_joints=False, random=None):
+    def __init__(self,
+                 goal,
+                 randomize_gains=False,
+                 randomize_joints=False,
+                 random=None):
         """Initialize an instance of `PointMass`.
 
         Args:
@@ -106,7 +111,8 @@ class PointMass(base.Task):
         physics.named.model.geom_pos['pointmass', 'y'] = 0
 
         if self._randomize_joints:
-            randomizers.randomize_limited_and_rotational_joints(physics, self.random)
+            randomizers.randomize_limited_and_rotational_joints(
+                physics, self.random)
         if self._randomize_gains:
             dir1 = self.random.randn(2)
             dir1 /= np.linalg.norm(dir1)
@@ -129,10 +135,14 @@ class PointMass(base.Task):
     def get_reward(self, physics):
         """Returns a reward to the agent."""
         target_size = physics.named.model.geom_size['target', 0]
-        near_target = rewards.tolerance(physics.mass_to_target_dist(),
-                                        bounds=(0, target_size), margin=0.25)
-        control_reward = rewards.tolerance(physics.control(), margin=1,
-                                           value_at_margin=0,
-                                           sigmoid='quadratic').mean()
+        near_target = rewards.tolerance(
+            physics.mass_to_target_dist(),
+            bounds=(0, target_size),
+            margin=0.25)
+        control_reward = rewards.tolerance(
+            physics.control(),
+            margin=1,
+            value_at_margin=0,
+            sigmoid='quadratic').mean()
         small_control = (control_reward + 4) / 5
         return near_target * small_control
