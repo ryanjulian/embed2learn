@@ -1,4 +1,21 @@
 import numpy as np
+
+
+try:
+    from dm_control.render.glfw_renderer import GLFWContext as _GLFWRenderer
+except:
+    pass
+
+try:
+    from dm_control.render.glfw_renderer import GLFWContext as _GLFWRenderer
+except:
+    pass
+
+try:
+    from dm_control.render.glfw_renderer import GLFWContext as _GLFWRenderer
+except:
+    pass
+
 from dm_control import suite
 
 from rllab.envs.base import Env
@@ -13,8 +30,8 @@ RENDER_CAMERA_ID = 0
 
 
 class DmControlEnv(Env):
-    def __init__(self, *args, **kwargs):
-        self.dm_env = suite.load(*args, **kwargs)
+    def __init__(self, *args, **task_kwargs):
+        self.dm_env = suite.load(*args, task_kwargs=task_kwargs)
         self.viewer = None
 
     @property
