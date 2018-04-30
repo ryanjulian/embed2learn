@@ -34,8 +34,9 @@ def run_task(*_):
     algo.train()
 
 
-run_experiment_lite(
-    run_task,
-    n_parallel=20,
-    plot=False,
-)
+run_task()
+# run_experiment_lite(
+#     run_task,
+#     n_parallel=20,
+#     plot=False,
+# )

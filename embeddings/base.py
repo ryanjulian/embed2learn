@@ -4,7 +4,7 @@ from sandbox.rocky.tf.core.parameterized import Parameterized
 class Embedding(Parameterized):
     def __init__(self, embedding_spec):
         Parameterized.__init__(self)
-        self._embed_spec = embedding_spec
+        self._embedding_spec = embedding_spec
 
     def get_latent(self, given):
         raise NotImplementedError
@@ -26,11 +26,11 @@ class Embedding(Parameterized):
 
     @property
     def input_space(self):
-        return self._embed_spec.input_space
+        return self._embedding_spec.input_space
 
     @property
     def latent_space(self):
-        return self._embed_spec.latent_space
+        return self._embedding_spec.latent_space
 
     @property
     def embedding_spec(self):

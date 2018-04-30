@@ -6,6 +6,8 @@ import numpy as np
 import rllab.misc.logger as logger
 from rllab.sampler import parallel_sampler
 from rllab.sampler.stateful_pool import singleton_pool
+from sandbox.embed2learn.embeddings.multitask_policy import MultitaskPolicy
+from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 
 from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
@@ -23,14 +25,13 @@ from rllab.misc import special  # DEBUG
 # to change the rollout process
 
 
-def rollout(env,
-            agent,
-            task_encoder,
+def rollout(env: MultiTaskEnv,
+            agent: MultitaskPolicy,
             max_path_length=np.inf,
             animated=False,
             speedup=1,
             always_return_paths=False):
-    env_observations = []
+
     observations = []
     tasks = []
     latents = []
@@ -40,35 +41,31 @@ def rollout(env,
     agent_infos = []
     env_infos = []
 
-    latent_obs_space = concat_spaces(task_encoder.latent_space,
-                                     env.observation_space)
-
     # Resets
     o = env.reset()
     agent.reset()
-    task_encoder.reset()
 
     # Sample embedding network
     # NOTE: it is important to do this _once per rollout_, not once per
     # timestep, since we need correlated noise.
     t = env.active_task_one_hot
-    z, latent_info = task_encoder.get_latent(t)
+    z, latent_info = agent.get_latent(t)
 
     if animated:
         env.render()
 
     path_length = 0
     while path_length < max_path_length:
-        z_o = np.concatenate([z, o])
-        a, agent_info = agent.get_action(z_o)
+        a, agent_info = agent.get_action(np.concatenate((t, o)))
+        # latent_info = agent_info["latent_info"]
         next_o, r, d, env_info = env.step(a)
-        env_observations.append(env.observation_space.flatten(o))
-        observations.append(latent_obs_space.flatten(z_o))
+        observations.append(agent.observation_space.flatten(o))
         tasks.append(t)
-        latents.append(task_encoder.latent_space.flatten(z))
+        # z = latent_info["mean"]
+        latents.append(agent.latent_space.flatten(z))
         latent_infos.append(latent_info)
         rewards.append(r)
-        actions.append(env.action_space.flatten(a))
+        actions.append(agent.action_space.flatten(a))
         agent_infos.append(agent_info)
         env_infos.append(env_info)
         path_length += 1
@@ -84,7 +81,6 @@ def rollout(env,
 
     return dict(
         observations=tensor_utils.stack_tensor_list(observations),
-        env_observations=tensor_utils.stack_tensor_list(env_observations),
         actions=tensor_utils.stack_tensor_list(actions),
         rewards=tensor_utils.stack_tensor_list(rewards),
         tasks=tensor_utils.stack_tensor_list(tasks),
@@ -100,7 +96,6 @@ def _worker_populate_task(G, env, policy, task_encoder, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
     G.env = pickle.loads(env)
     G.policy = pickle.loads(policy)
-    G.task_encoder = pickle.loads(task_encoder)
 
 
 def _worker_terminate_task(G, scope=None):
@@ -118,39 +113,32 @@ def _worker_terminate_task(G, scope=None):
 
 def _worker_set_task_encoder_params(G, params, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
-    G.task_encoder.set_param_values(params)
+    # G.task_encoder.set_param_values(params)
 
 
 def _worker_collect_one_path(G, max_path_length, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
-    path = rollout(G.env, G.policy, G.task_encoder, max_path_length)
+    path = rollout(G.env, G.policy, max_path_length)
     return path, len(path["rewards"])
 
 
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
-    def __init__(self,
-                 *args,
-                 task_encoder=None,
-                 trajectory_encoder=None,
-                 **kwargs):
+    def __init__(self, *args, trajectory_encoder=None, **kwargs):
         super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
-        self.task_encoder = task_encoder
         self.traj_encoder = trajectory_encoder
 
-    def populate_task(self, env, policy, task_encoder, scope=None):
+    def populate_task(self, env, policy, scope=None):
         logger.log("Populating workers...")
         if singleton_pool.n_parallel > 1:
             singleton_pool.run_each(_worker_populate_task,
                                     [(pickle.dumps(env), pickle.dumps(policy),
-                                      pickle.dumps(task_encoder),
                                       scope)] * singleton_pool.n_parallel)
         else:
             # avoid unnecessary copying
             G = parallel_sampler._get_scoped_G(singleton_pool.G, scope)
             G.env = env
             G.policy = policy
-            G.task_encoder = task_encoder
         logger.log("Populated")
 
     def terminate_task(self, scope=None):
@@ -161,8 +149,7 @@ class TaskEmbeddingSampler(BatchSampler):
     def start_worker(self):
         if singleton_pool.n_parallel > 1:
             singleton_pool.run_each(worker_init_tf)
-        self.populate_task(self.algo.env, self.algo.policy,
-                           self.algo.task_encoder)
+        self.populate_task(self.algo.env, self.algo.policy)
         if singleton_pool.n_parallel > 1:
             singleton_pool.run_each(worker_init_tf_vars)
 
@@ -200,11 +187,9 @@ class TaskEmbeddingSampler(BatchSampler):
     def obtain_samples(self, itr):
         policy_params = self.algo.policy.get_param_values()
         env_params = self.algo.env.get_param_values()
-        task_enc_params = self.algo.task_encoder.get_param_values()
         paths = self.sample_paths(
             policy_params=policy_params,
             env_params=env_params,
-            task_encoder_params=task_enc_params,
             max_samples=self.algo.batch_size,
             max_path_length=self.algo.max_path_length,
             scope=self.algo.scope,
@@ -220,7 +205,6 @@ class TaskEmbeddingSampler(BatchSampler):
     def process_samples(self, itr, paths):
         baselines = []
         returns = []
-        trajectories = []
 
         max_path_length = self.algo.max_path_length
         action_space = self.algo.env.action_space
@@ -257,12 +241,14 @@ class TaskEmbeddingSampler(BatchSampler):
             #
             # Pad and flatten action and observation traces
             act = tensor_utils.pad_tensor(path['actions'], max_path_length)
-            obs = tensor_utils.pad_tensor(path['env_observations'],
+            obs = tensor_utils.pad_tensor(path['observations'],
                                           max_path_length)
-            act_flat = action_space.flatten_n(act)
+            # act_flat = action_space.flatten_n(act)
             obs_flat = observation_space.flatten_n(obs)
             # Create a time series of stacked [act, obs] vectors
-            act_obs = np.concatenate([act_flat, obs_flat], axis=1)
+            #XXX now the inference network only looks at obs vectors
+            #act_obs = np.concatenate([act_flat, obs_flat], axis=1)  # TODO reactivate for harder envs?
+            act_obs = obs_flat
             # Calculate a forward-looking sliding window of the stacked vectors
             #
             # If act_obs has shape (n, d), then trajs will have shape

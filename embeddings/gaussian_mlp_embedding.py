@@ -26,6 +26,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
                  std_share_network=False,
                  std_hidden_sizes=(32, 32),
                  min_std=1e-6,
+                 max_std=None,
                  std_hidden_nonlinearity=tf.nn.tanh,
                  hidden_nonlinearity=tf.nn.tanh,
                  output_nonlinearity=None,
@@ -159,6 +160,12 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
 
+            if max_std is not None:
+                # clip log_std
+                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
+                log_std_var = tf.minimum(
+                    log_std_var, log_std_limit, name="log_std_clip")
+
             self._f_dist = tensor_utils.compile_function(
                 inputs=[in_var],
                 outputs=[mean_var, log_std_var],
@@ -208,7 +215,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         """
         new_dist_info_vars = self.dist_info_sym(in_var, latent_var)
         new_mean_var, new_log_std_var = new_dist_info_vars[
-            "mean"], new_dist_info_varsl["og_std"]
+            "mean"], new_dist_info_vars["log_std"]
         old_mean_var, old_log_std_var = old_dist_info_vars[
             "mean"], old_dist_info_vars["log_std"]
         epsilon_var = (latent_var - old_mean_var) / (

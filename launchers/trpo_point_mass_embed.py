@@ -13,7 +13,7 @@ from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
 from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
-from sandbox.embed2learn.envs.point_env import PointEnv
+from sandbox.embed2learn.envs.dm_control_env import DmControlEnv
 from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
@@ -21,8 +21,8 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 
 TASKS = {
-    '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
-    '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
+    '(-0.25, 0)': {'args': [], 'kwargs': {'goal': (-0.25, 0)}},
+    '(0.25, 0)': {'args': [], 'kwargs': {'goal': (0.25, 0)}},
 } # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
@@ -34,14 +34,17 @@ TRAJ_ENC_WINDOW = 16
 
 
 def run_task(plot=True, *_):
-    set_seed(1)
+    set_seed(0)
 
-    # Environment
+    # Environment (train on light point mass)
+    from sandbox.embed2learn.envs import point_mass_env
+    from dm_control import suite
+    suite._DOMAINS["embed_point_mass"] = point_mass_env
     env = TfEnv(
         normalize(
             MultiTaskEnv(
-                task_env_cls=PointEnv,
-                task_args=TASK_ARGS,
+                task_env_cls=DmControlEnv,
+                task_args=[["embed_point_mass", "light"]] * len(TASK_NAMES),
                 task_kwargs=TASK_KWARGS)))
 
     # Latent space and embedding specs
@@ -111,14 +114,13 @@ def run_task(plot=True, *_):
         trajectory_encoder=traj_embedding,
         batch_size=4000,
         max_path_length=100,
-        n_itr=1000,
+        n_itr=500,
         discount=0.99,
         step_size=0.01,
         plot=plot,
-        plot_warmup_itrs=30,
-        policy_ent_coeff=0.,  # 0.001,  #0.1,
-        # task_encoder_ent_coeff=1e-4,
-        task_encoder_ent_coeff=0.,  #0.1,
+        plot_warmup_itrs=20,
+        policy_ent_coeff=0.0,  # 0.001,  #0.1,
+        task_encoder_ent_coeff=0.0,  #0.1,
         trajectory_encoder_ent_coeff=0.,  # 0.03,  #0.1,  # 0.1,
     )
     algo.train()
@@ -129,7 +131,4 @@ run_experiment_lite(
     exp_prefix='trpo_point_embed',
     n_parallel=16,
     plot=True,
-    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
 )
-
-# run_task()
