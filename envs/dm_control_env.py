@@ -1,21 +1,5 @@
 import numpy as np
 
-
-try:
-    from dm_control.render.glfw_renderer import GLFWContext as _GLFWRenderer
-except:
-    pass
-
-try:
-    from dm_control.render.glfw_renderer import GLFWContext as _GLFWRenderer
-except:
-    pass
-
-try:
-    from dm_control.render.glfw_renderer import GLFWContext as _GLFWRenderer
-except:
-    pass
-
 from dm_control import suite
 
 from rllab.envs.base import Env
