@@ -168,7 +168,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.f_returns = tensor_utils.compile_function(
             policy_input_list, returns, log_name="f_returns")
         self.f_task_entropies = tensor_utils.compile_function(
-            policy_input_list, self._all_task_entropies, log_name="f_task_entropies")
+            policy_input_list,
+            self._all_task_entropies,
+            log_name="f_task_entropies")
         self.f_policy_entropy = tensor_utils.compile_function(
             policy_input_list,
             tf.reduce_sum(self._pol_entropy * self._valid_var),
@@ -496,16 +498,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                          (-1, self.policy.observation_space.flat_dim))
         policy_input_values = (tasks, obs)
         policy_input_values += tuple(
-            ext.extract(
-                samples_data,
-                'observations',
-                'actions',
-                'rewards',
-                'baselines',
-                'trajectories',
-                'tasks',
-                'latents',
-                'valids'))
+            ext.extract(samples_data, 'observations', 'actions', 'rewards',
+                        'baselines', 'trajectories', 'tasks', 'latents',
+                        'valids'))
         # add policy params
         agent_infos = samples_data["agent_infos"]
         state_info_list = [agent_infos[k] for k in self.policy.state_info_keys]
@@ -536,9 +531,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         policy_input_values += tuple(traj_enc_state_info_list) + tuple(
             traj_enc_dist_info_list)
 
-        traj_enc_input_values = [samples_data['trajectories'],
-                                 samples_data['latents'],
-                                 samples_data['valids']]
+        traj_enc_input_values = [
+            samples_data['trajectories'], samples_data['latents'],
+            samples_data['valids']
+        ]
 
         return policy_input_values, traj_enc_input_values
 
@@ -581,7 +577,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return feed
 
     def optimize(self, samples_data):
-        policy_input_values, traj_enc_input_values = self.get_training_input(samples_data)
+        policy_input_values, traj_enc_input_values = self.get_training_input(
+            samples_data)
 
         samples_data = self.evaluate(policy_input_values, samples_data)
 
@@ -621,7 +618,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         logger.record_tabular('TrajEncoder/Loss', traj_enc_loss_before)
         self.traj_enc_optimizer.optimize(traj_enc_input)
         traj_enc_loss_after = self.traj_enc_optimizer.loss(traj_enc_input)
-        logger.record_tabular('TrajEncoder/dLoss', traj_enc_loss_before - traj_enc_loss_after)
+        logger.record_tabular('TrajEncoder/dLoss',
+                              traj_enc_loss_before - traj_enc_loss_after)
         logger.dump_tabular()
 
         return traj_enc_loss_after
@@ -689,7 +687,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     # Visualize task embedding distributions
     def visualize_distribution(self):
         #TODO(@junchao) implement logger counterpart for distribution histograms
-        if not hasattr(logger, '_tensorboard_writer') or logger._tensorboard_writer is None:
+        if not hasattr(
+                logger,
+                '_tensorboard_writer') or logger._tensorboard_writer is None:
             return
 
         num_tasks = self.policy.task_space.flat_dim
