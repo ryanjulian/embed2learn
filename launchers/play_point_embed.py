@@ -57,19 +57,30 @@ def play(pkl_filename):
 
         color_maps = [matplotlib.cm.get_cmap(cm) for cm in COLOR_MAPS]
         for task, env in enumerate(task_envs):
-            plt.scatter([goals[task, 0]], [goals[task, 1]],
-                        s=50, color=color_maps[task % len(color_maps)](0),
-                        zorder=2, label="Task %i" % (task + 1))
+            plt.scatter(
+                [goals[task, 0]], [goals[task, 1]],
+                s=50,
+                color=color_maps[task % len(color_maps)](0),
+                zorder=2,
+                label="Task %i" % (task + 1))
             onehot = np.zeros(policy.task_space.shape, dtype=np.float32)
             onehot[task] = 1
             z, latent_info = policy.get_latent(onehot)
             for i, x in enumerate(SAMPLING_POSITIONS):
                 # systematic sampling of latent from embedding distribution
                 z = latent_info["mean"] + x * np.exp(latent_info["log_std"])
-                obs = rollout_given_z(TfEnv(normalize(env)), policy, z,
-                                      max_path_length=MAX_PATH_LENGTH, animated=False)
-                plt.plot(obs[:, 0], obs[:, 1], alpha=0.7,
-                         color=color_maps[task % len(color_maps)](i * 1. / len(SAMPLING_POSITIONS)))
+                obs = rollout_given_z(
+                    TfEnv(normalize(env)),
+                    policy,
+                    z,
+                    max_path_length=MAX_PATH_LENGTH,
+                    animated=False)
+                plt.plot(
+                    obs[:, 0],
+                    obs[:, 1],
+                    alpha=0.7,
+                    color=color_maps[task % len(color_maps)](
+                        i * 1. / len(SAMPLING_POSITIONS)))
         plt.grid(True)
         plt.xlim([-4, 4])
         plt.ylim([-4, 4])
