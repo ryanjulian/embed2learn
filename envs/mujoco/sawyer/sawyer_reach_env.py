@@ -54,8 +54,8 @@ class SawyerReachEnv(SawyerEnv, Serializable):
         return self.model.data.qvel.flat
 
     def finger_to_target(self):
-        return self._get_geom_pos('leftclaw_it') - self._get_geom_pos(
-            self.target)
+        return self._get_geom_pos(
+            'r_gripper_l_finger_tip') - self._get_geom_pos(self.target)
 
     def finger_to_target_dist(self):
         return np.linalg.norm(self.finger_to_target())
