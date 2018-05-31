@@ -3,14 +3,14 @@ import random
 from cached_property import cached_property
 import numpy as np
 
-from rllab.envs.normalized_env import NormalizedEnv
 from rllab import spaces
-from rllab.core.serializable import Serializable
-from rllab.envs.base import Env
-from rllab.envs.base import Step
+from rllab.core import Serializable
+from rllab.envs import Env
+from rllab.envs import NormalizedEnv
+from rllab.envs import Step
 
-from sandbox.rocky.tf.envs.base import TfEnv as BaseTfEnv
-from sandbox.rocky.tf.envs.base import to_tf_space
+from sandbox.rocky.tf.envs import TfEnv as BaseTfEnv
+from sandbox.rocky.tf.envs import to_tf_space
 
 
 class MultiTaskEnv(Env):

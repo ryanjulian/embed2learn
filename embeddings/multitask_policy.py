@@ -1,7 +1,10 @@
-from sandbox.embed2learn.embeddings.base import Embedding, StochasticEmbedding
+from sandbox.rocky.tf.core import Parameterized
+from sandbox.rocky.tf.policies import Policy
+from sandbox.rocky.tf.policies import StochasticPolicy
+
+from sandbox.embed2learn.embeddings import Embedding
+from sandbox.embed2learn.embeddings import StochasticEmbedding
 from sandbox.embed2learn.embeddings.utils import concat_spaces
-from sandbox.rocky.tf.core.parameterized import Parameterized
-from sandbox.rocky.tf.policies.base import Policy, StochasticPolicy
 
 
 class MultitaskPolicy(Policy, Parameterized):

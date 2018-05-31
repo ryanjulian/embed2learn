@@ -1,10 +1,11 @@
-from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.envs.normalized_env import normalize
-from rllab.misc.instrument import stub, run_experiment_lite
-from rllab.algos.trpo import TRPO
-from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
+from rllab.algos import TRPO
+from rllab.baselines import LinearFeatureBaseline
+from rllab.envs import normalize
+from rllab.misc.instrument import stub
+from rllab.misc.instrument import run_experiment_lite
+from rllab.policies import GaussianMLPPolicy
 
-from sandbox.embed2learn.envs.mujoco.pr2_arm_env import PR2ArmEnv
+from sandbox.embed2learn.envs.mujoco import PR2ArmEnv
 
 
 def run_task(*_):

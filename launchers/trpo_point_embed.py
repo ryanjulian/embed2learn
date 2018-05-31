@@ -1,20 +1,18 @@
 import numpy as np
 
-from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.misc.instrument import run_experiment_lite
-from rllab.misc.ext import set_seed
+from rllab.baselines import LinearFeatureBaseline
 from rllab.envs.env_spec import EnvSpec
+from rllab.misc.ext import set_seed
+from rllab.misc.instrument import run_experiment_lite
 
-from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
-from sandbox.rocky.tf.envs.base import TfEnv
-from sandbox.rocky.tf.spaces.box import Box
+from sandbox.rocky.tf.spaces import Box
 
-from sandbox.embed2learn.algos.trpo_task_embedding import TRPOTaskEmbedding
-from sandbox.embed2learn.embeddings.gaussian_mlp_embedding import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
-from sandbox.embed2learn.envs.point_env import PointEnv
-from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.algos import TRPOTaskEmbedding
+from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
+from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
+from sandbox.embed2learn.embeddings import EmbeddingSpec
+from sandbox.embed2learn.envs import PointEnv
+from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
@@ -127,9 +125,8 @@ def run_task(plot=True, *_):
 run_experiment_lite(
     run_task,
     exp_prefix='trpo_point_embed',
-    n_parallel=16,
+    n_parallel=1,  # > 1 is broken
     plot=True,
-    python_command='/home/eric/.deep-rl-docker/anaconda2/envs/rllab3/bin/python'
 )
 
 # run_task()

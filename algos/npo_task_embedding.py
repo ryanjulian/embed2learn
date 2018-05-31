@@ -3,27 +3,27 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from rllab.core.serializable import Serializable
+from rllab.core import Serializable
 from rllab.misc import ext
 from rllab.misc import special
 from rllab.misc.overrides import overrides
 import rllab.misc.logger as logger
-from sandbox.embed2learn.embeddings.gaussian_mlp_multitask_policy import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings.multitask_policy import StochasticMultitaskPolicy
 
-from sandbox.rocky.tf.algos.batch_polopt import BatchPolopt
+from sandbox.rocky.tf.algos import BatchPolopt
+from sandbox.rocky.tf.core import JointParameterized
 from sandbox.rocky.tf.misc import tensor_utils
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
-from sandbox.rocky.tf.core.parameterized import JointParameterized
+from sandbox.rocky.tf.optimizers import ConjugateGradientOptimizer
+from sandbox.rocky.tf.optimizers import FirstOrderOptimizer
 
-from sandbox.embed2learn.embeddings.base import StochasticEmbedding
-from sandbox.embed2learn.samplers.task_embedding_sampler import TaskEmbeddingSampler
-from sandbox.embed2learn.samplers.task_embedding_sampler import rollout
 from sandbox.embed2learn.algos.utils import flatten_batch
 from sandbox.embed2learn.algos.utils import flatten_batch_dict
 from sandbox.embed2learn.algos.utils import filter_valids
 from sandbox.embed2learn.algos.utils import filter_valids_dict
-from sandbox.rocky.tf.optimizers.first_order_optimizer import FirstOrderOptimizer
+from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
+from sandbox.embed2learn.embeddings import StochasticMultitaskPolicy
+from sandbox.embed2learn.embeddings import StochasticEmbedding
+from sandbox.embed2learn.samplers import TaskEmbeddingSampler
+from sandbox.embed2learn.samplers.task_embedding_sampler import rollout
 
 
 def _optimizer_or_default(optimizer, args):
@@ -42,14 +42,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     """
 
     def __init__(self,
+                 name="NPOTaskEmbedding",
                  plot_warmup_itrs=0,
                  optimizer=None,
                  optimizer_args=None,
                  step_size=0.01,
                  policy_ent_coeff=1e-2,
-                 policy: GaussianMLPMultitaskPolicy = None,
+                 policy=None,
                  task_encoder_ent_coeff=1e-5,
-                 trajectory_encoder: StochasticEmbedding = None,
+                 trajectory_encoder=None,
                  trajectory_encoder_optimizer=None,
                  trajectory_encoder_optimizer_args=None,
                  trajectory_encoder_ent_coeff=1e-3,
@@ -60,30 +61,32 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         assert isinstance(policy, StochasticMultitaskPolicy)
         assert isinstance(trajectory_encoder, StochasticEmbedding)
 
-        self.plot_warmup_itrs = plot_warmup_itrs
+        with tf.variable_scope(name):
+            self.name = name
+            self.plot_warmup_itrs = plot_warmup_itrs
 
-        # Optimizer for policy + task encoder
-        self.optimizer = _optimizer_or_default(optimizer, optimizer_args)
-        self.step_size = float(step_size)
-        self.policy_ent_coeff = float(policy_ent_coeff)
-        self.task_enc_ent_coeff = float(task_encoder_ent_coeff)
+            # Optimizer for policy + task encoder
+            self.optimizer = _optimizer_or_default(optimizer, optimizer_args)
+            self.step_size = float(step_size)
+            self.policy_ent_coeff = float(policy_ent_coeff)
+            self.task_enc_ent_coeff = float(task_encoder_ent_coeff)
 
-        self.traj_encoder = trajectory_encoder
-        self.traj_enc_ent_coeff = trajectory_encoder_ent_coeff
-        self.traj_enc_optimizer = FirstOrderOptimizer(
-            tf.train.AdamOptimizer,
-            dict(learning_rate=float(trajectory_encoder_learning_rate)))
+            self.traj_encoder = trajectory_encoder
+            self.traj_enc_ent_coeff = trajectory_encoder_ent_coeff
+            self.traj_enc_optimizer = FirstOrderOptimizer(
+                tf.train.AdamOptimizer,
+                dict(learning_rate=float(trajectory_encoder_learning_rate)))
 
-        self.z_summary = None
-        self.z_summary_op = None
+            self.z_summary = None
+            self.z_summary_op = None
 
-        sampler_cls = TaskEmbeddingSampler
-        sampler_args = dict(trajectory_encoder=self.traj_encoder, )
-        super(NPOTaskEmbedding, self).__init__(
-            sampler_cls=sampler_cls,
-            sampler_args=sampler_args,
-            policy=policy,
-            **kwargs)
+            sampler_cls = TaskEmbeddingSampler
+            sampler_args = dict(trajectory_encoder=self.traj_encoder, )
+            super(NPOTaskEmbedding, self).__init__(
+                sampler_cls=sampler_cls,
+                sampler_args=sampler_args,
+                policy=policy,
+                **kwargs)
 
     @overrides
     def init_opt(self):
@@ -110,79 +113,79 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         return dict()
 
     def _build_opt(self):
-        tf.variable_scope('npo_task_embedding').__enter__()
+        with tensor_utils.enclosing_scope(self.name, "build_opt"):
 
-        is_recurrent = int(self.policy.recurrent)
-        if is_recurrent:
-            raise NotImplementedError
+            is_recurrent = int(self.policy.recurrent)
+            if is_recurrent:
+                raise NotImplementedError
 
-        #### Policy and loss function ##########################################
-        # Input variables
-        self._obs_var = self.policy.observation_space.new_tensor_variable(
-            'obs',
-            extra_dims=1 + 1,
-        )
-        self._task_var = self.policy.task_space.new_tensor_variable(
-            'task',
-            extra_dims=1 + 1,
-        )
-        self._action_var = self.env.action_space.new_tensor_variable(
-            'action',
-            extra_dims=1 + 1,
-        )
-        self._reward_var = tensor_utils.new_tensor(
-            'reward',
-            ndim=1 + 1,
-            dtype=tf.float32,
-        )
-        self._latent_var = self.policy.latent_space.new_tensor_variable(
-            'latent',
-            extra_dims=1 + 1,
-        )
-        self._baseline_var = tensor_utils.new_tensor(
-            'baseline',
-            ndim=1 + 1,
-            dtype=tf.float32,
-        )
-        self._trajectory_var = self.traj_encoder.input_space.new_tensor_variable(
-            'trajectory',
-            extra_dims=1 + 1,
-        )
-        self._valid_var = tf.placeholder(
-            tf.float32, shape=[None, None], name="valid")
+            #### Policy and loss function ##########################################
+            # Input variables
+            self._obs_var = self.policy.observation_space.new_tensor_variable(
+                'obs',
+                extra_dims=1 + 1,
+            )
+            self._task_var = self.policy.task_space.new_tensor_variable(
+                'task',
+                extra_dims=1 + 1,
+            )
+            self._action_var = self.env.action_space.new_tensor_variable(
+                'action',
+                extra_dims=1 + 1,
+            )
+            self._reward_var = tensor_utils.new_tensor(
+                'reward',
+                ndim=1 + 1,
+                dtype=tf.float32,
+            )
+            self._latent_var = self.policy.latent_space.new_tensor_variable(
+                'latent',
+                extra_dims=1 + 1,
+            )
+            self._baseline_var = tensor_utils.new_tensor(
+                'baseline',
+                ndim=1 + 1,
+                dtype=tf.float32,
+            )
+            self._trajectory_var = self.traj_encoder.input_space.new_tensor_variable(
+                'trajectory',
+                extra_dims=1 + 1,
+            )
+            self._valid_var = tf.placeholder(
+                tf.float32, shape=[None, None], name="valid")
 
-        self.initialize_vars()
+            self.initialize_vars()
 
-        policy_input_list = self.build_policy_input()
-        surr_loss, pol_mean_kl, traj_enc_loss, rewards = self.build_loss()
-        returns = self.build_returns(rewards)
+            policy_input_list = self.build_policy_input()
+            surr_loss, pol_mean_kl, traj_enc_loss, rewards = self.build_loss()
+            returns = self.build_returns(rewards)
 
-        # Outputs
-        self._traj_loss = traj_enc_loss
-        self._pol_mean_kl = pol_mean_kl
-        self._surr_loss = surr_loss
+            # Outputs
+            self._traj_loss = traj_enc_loss
+            self._pol_mean_kl = pol_mean_kl
+            self._surr_loss = surr_loss
 
-        # Functions
-        self.f_rewards = tensor_utils.compile_function(
-            policy_input_list, rewards, log_name="f_rewards")
-        self.f_returns = tensor_utils.compile_function(
-            policy_input_list, returns, log_name="f_returns")
-        self.f_task_entropies = tensor_utils.compile_function(
-            policy_input_list,
-            self._all_task_entropies,
-            log_name="f_task_entropies")
-        self.f_policy_entropy = tensor_utils.compile_function(
-            policy_input_list,
-            tf.reduce_sum(self._pol_entropy * self._valid_var),
-            log_name="f_policy_entropy")
-        self.f_traj_cross_entropy = tensor_utils.compile_function(
-            policy_input_list,
-            tf.reduce_sum(self._traj_ll * self._valid_var),
-            log_name="f_traj_cross_entropy")
+            # Functions
+            self.f_rewards = tensor_utils.compile_function(
+                policy_input_list, rewards, log_name="f_rewards")
+            self.f_returns = tensor_utils.compile_function(
+                policy_input_list, returns, log_name="f_returns")
+            self.f_task_entropies = tensor_utils.compile_function(
+                policy_input_list,
+                self._all_task_entropies,
+                log_name="f_task_entropies")
+            self.f_policy_entropy = tensor_utils.compile_function(
+                policy_input_list,
+                tf.reduce_sum(self._pol_entropy * self._valid_var),
+                log_name="f_policy_entropy")
+            self.f_traj_cross_entropy = tensor_utils.compile_function(
+                policy_input_list,
+                tf.reduce_sum(self._traj_ll * self._valid_var),
+                log_name="f_traj_cross_entropy")
 
-        traj_enc_input_list = self.build_traj_enc_input()
+            traj_enc_input_list = self.build_traj_enc_input()
 
-        return self._surr_loss, self._pol_mean_kl, policy_input_list, self._traj_loss, traj_enc_input_list
+            return self._surr_loss, self._pol_mean_kl, policy_input_list, self._traj_loss, traj_enc_input_list
 
     ############################ initialize base variables #################################
     def initialize_vars(self):
@@ -208,16 +211,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             for k, shape in self.policy.state_info_specs
         }
 
-        with tf.variable_scope('flatten'):
-            obs_flat = flatten_batch(self._obs_var)
-            latent_flat = flatten_batch(self._latent_var)
-            self._state_info_flat = flatten_batch_dict(self._state_info_vars)
+        obs_flat = flatten_batch(self._obs_var, name="obs_flat")
+        latent_flat = flatten_batch(self._latent_var, name="latent_flat")
+        self._state_info_flat = flatten_batch_dict(
+            self._state_info_vars, name="state_info_flat")
 
         self._dist_info_vars = self.policy.dist_info_sym(
             {
                 self.policy.env_input_var: obs_flat,
                 self.policy.latent_mean_var: latent_flat
-            }, self._state_info_flat)
+            },
+            self._state_info_flat,
+            name="dist_info_vars")
 
     def initialize_dist_list_vars(self):
         dist = self.policy.distribution
@@ -324,33 +329,36 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     def get_entropy(self):
         dist = self.policy.distribution
-        with tf.variable_scope('flatten'):
-            traj_flat = flatten_batch(self._trajectory_var)
-            latent_flat = flatten_batch(self._latent_var)
+        traj_flat = flatten_batch(self._trajectory_var, name="traj_flat")
+        latent_flat = flatten_batch(self._latent_var, name="latent_flat")
 
-        with tf.variable_scope('entropies'):
-            # Calculate entropy terms
-            # 1. Task encoder total entropy
-            with tf.variable_scope('task_encoder_entropy'):
-                task_dim = self.policy.embedding.input_space.flat_dim
-                all_task_one_hots = tf.one_hot(np.arange(task_dim), task_dim)
-                all_task_dists = self.policy.embedding.dist_info_sym(
-                    all_task_one_hots)
-                all_task_entropies = self.policy.embedding.entropy_sym(
-                    all_task_dists)
-                task_enc_entropy = tf.reduce_mean(all_task_entropies)
+        # Calculate entropy terms
+        # 1. Task encoder total entropy
+        with tf.variable_scope('task_encoder_entropy'):
+            task_dim = self.policy.embedding.input_space.flat_dim
+            all_task_one_hots = tf.one_hot(
+                np.arange(task_dim), task_dim, name="all_task_one_hots")
+            all_task_dists = self.policy.embedding.dist_info_sym(
+                all_task_one_hots, name="all_task_dists")
+            all_task_entropies = self.policy.embedding.entropy_sym(
+                all_task_dists, name="all_task_entropies")
+            task_enc_entropy = tf.reduce_mean(
+                all_task_entropies, name="task_enc_entropy")
 
-            # 2. Trajectory encoder log-likelihoods (cross-entropies)
-            with tf.variable_scope('traj_encoder_ce'):
-                traj_ll_flat = self.traj_encoder.log_likelihood_sym(
-                    traj_flat, latent_flat)
-                traj_ll = tf.reshape(traj_ll_flat, [-1, self.max_path_length])
+        # 2. Trajectory encoder log-likelihoods (cross-entropies)
+        with tf.variable_scope('traj_encoder_ce'):
+            traj_ll_flat = self.traj_encoder.log_likelihood_sym(
+                traj_flat, latent_flat, name="traj_ll_flat")
+            traj_ll = tf.reshape(
+                traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
 
-            # 3. Policy path entropies
-            with tf.variable_scope('policy_entropy'):
-                pol_entropy_flat = dist.entropy_sym(self._dist_info_vars)
-                pol_entropy = tf.reshape(pol_entropy_flat,
-                                         [-1, self.max_path_length])
+        # 3. Policy path entropies
+        with tf.variable_scope('policy_entropy'):
+            pol_entropy_flat = dist.entropy_sym(
+                self._dist_info_vars, name="pol_entropy_flat")
+            pol_entropy = tf.reshape(
+                pol_entropy_flat, [-1, self.max_path_length],
+                name="pol_entropy")
 
         self._all_task_entropies = all_task_entropies
         self._all_task_one_hots = all_task_one_hots
@@ -366,61 +374,74 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     def get_task_loss(self, task_enc_entropy, traj_ll, pol_entropy, rewards):
 
         dist = self.policy.distribution
-        with tf.variable_scope('flatten'):
-            act_flat = flatten_batch(self._action_var)
-            valid_flat = flatten_batch(self._valid_var)
-            old_dist_info_flat = flatten_batch_dict(self._old_dist_info_vars)
+        act_flat = flatten_batch(self._action_var, name="act_flat")
+        valid_flat = flatten_batch(self._valid_var, name="valid_flat")
+        old_dist_info_flat = flatten_batch_dict(
+            self._old_dist_info_vars, name="old_dist_info_flat")
 
-        with tf.variable_scope('task_enc'):
-            # Prepare convolutional IIR filter to calculate advantages
-            gamma_lambda = tf.constant(
-                float(self.discount) * float(self.gae_lambda),
-                dtype=tf.float32,
-                shape=[self.max_path_length, 1, 1])
-            advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
+        with tf.variable_scope("policy_loss"):
+            with tf.variable_scope("advantages"):
+                # Prepare convolutional IIR filter to calculate advantages
+                gamma_lambda = tf.constant(
+                    float(self.discount) * float(self.gae_lambda),
+                    dtype=tf.float32,
+                    shape=[self.max_path_length, 1, 1])
+                advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
 
-            # Calculate deltas
-            pad = tf.zeros_like(self._baseline_var[:, :1])
-            baseline_shift = tf.concat([self._baseline_var[:, 1:], pad], 1)
-            deltas = rewards + \
-                     (self.discount * baseline_shift) - \
-                     self._baseline_var
-            # Convolve deltas with the discount filter to get advantages
-            deltas_pad = tf.expand_dims(
-                tf.concat([deltas, tf.zeros_like(deltas[:, :-1])], axis=1),
-                axis=2)
-            adv = tf.nn.conv1d(
-                deltas_pad, advantage_filter, stride=1, padding='VALID')
-            advantages = tf.reshape(adv, [-1])
-            adv_flat = flatten_batch(advantages)
+                # Calculate deltas
+                pad = tf.zeros_like(self._baseline_var[:, :1])
+                baseline_shift = tf.concat([self._baseline_var[:, 1:], pad], 1)
+                deltas = rewards + \
+                         (self.discount * baseline_shift) - \
+                         self._baseline_var
+                # Convolve deltas with the discount filter to get advantages
+                deltas_pad = tf.expand_dims(
+                    tf.concat([deltas, tf.zeros_like(deltas[:, :-1])], axis=1),
+                    axis=2)
+                adv = tf.nn.conv1d(
+                    deltas_pad, advantage_filter, stride=1, padding='VALID')
+                advantages = tf.reshape(adv, [-1])
+            adv_flat = flatten_batch(advantages, name="adv_flat")
 
             # Filter valid timesteps
-            action_valid = filter_valids(act_flat, valid_flat)
-            state_info_valid = filter_valids_dict(self._state_info_vars,
-                                                  valid_flat)
+            action_valid = filter_valids(
+                act_flat, valid_flat, name="action_valid")
+            state_info_valid = filter_valids_dict(
+                self._state_info_vars, valid_flat, name="state_info_valid")
             old_dist_info_vars_valid = filter_valids_dict(
-                old_dist_info_flat, valid_flat)
-            adv_valid = filter_valids(adv_flat, valid_flat)
-            dist_info_vars_valid = filter_valids_dict(self._dist_info_vars,
-                                                      valid_flat)
+                old_dist_info_flat,
+                valid_flat,
+                name="old_dist_info_vars_valid")
+            adv_valid = filter_valids(adv_flat, valid_flat, name="adv_valid")
+            dist_info_vars_valid = filter_valids_dict(
+                self._dist_info_vars, valid_flat, name="dist_info_vars_valid")
 
             # Optionally normalize advantages
             eps = tf.constant(1e-8, dtype=tf.float32)
             if self.center_adv:
-                mean, var = tf.nn.moments(adv_valid, axes=[0])
-                adv_valid = tf.nn.batch_normalization(adv_valid, mean, var, 0,
-                                                      1, eps)
+                with tf.variable_scope("center_adv"):
+                    mean, var = tf.nn.moments(adv_valid, axes=[0])
+                    adv_valid = tf.nn.batch_normalization(
+                        adv_valid, mean, var, 0, 1, eps)
             if self.positive_adv:
-                m = tf.reduce_min(adv_valid)
-                adv_valid = (adv_valid - m) + eps
+                with tf.variable_scope("positive_adv"):
+                    m = tf.reduce_min(adv_valid)
+                    adv_valid = (adv_valid - m) + eps
 
             # Calculate loss function and KL divergence
-            kl = dist.kl_sym(old_dist_info_vars_valid, dist_info_vars_valid)
-            lr = dist.likelihood_ratio_sym(
-                action_valid, old_dist_info_vars_valid, dist_info_vars_valid)
-            pol_mean_kl = tf.reduce_mean(kl)
-            surr_loss = -tf.reduce_mean(lr * adv_valid) - \
-                        (self.task_enc_ent_coeff * task_enc_entropy)
+            with tf.variable_scope("kl"):
+                kl = dist.kl_sym(old_dist_info_vars_valid,
+                                 dist_info_vars_valid)
+                pol_mean_kl = tf.reduce_mean(kl)
+
+            with tf.variable_scope("surr_loss"):
+                lr = dist.likelihood_ratio_sym(
+                    action_valid,
+                    old_dist_info_vars_valid,
+                    dist_info_vars_valid,
+                    name="lr")
+                surr_loss = -tf.reduce_mean(lr * adv_valid) - \
+                            (self.task_enc_ent_coeff * task_enc_entropy)
 
             self._dist_info_vars_valid = dist_info_vars_valid
             self._kl = kl
@@ -430,44 +451,58 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     def get_traj_loss(self, task_encoder_entropy, traj_ll, pol_entropy):
         traj_enc_dist = self.traj_encoder.distribution
-        with tf.variable_scope('flatten'):
-            traj_flat = flatten_batch(self._trajectory_var)
-            valid_flat = flatten_batch(self._valid_var)
-        with tf.variable_scope('traj_enc'):
+
+        traj_flat = flatten_batch(self._trajectory_var, name="traj_flat")
+        valid_flat = flatten_batch(self._valid_var, name="valid_flat")
+
+        with tf.variable_scope("traj_enc_loss"):
             # Calculate loss
             traj_gammas = tf.constant(
                 float(self.discount),
                 dtype=tf.float32,
                 shape=[self.max_path_length])
-            traj_discounts = tf.cumprod(traj_gammas, exclusive=True)
+            traj_discounts = tf.cumprod(
+                traj_gammas, exclusive=True, name="traj_discounts")
             discount_traj_ll = traj_discounts * traj_ll
-            discount_traj_ll_flat = flatten_batch(discount_traj_ll)
-            discount_traj_ll_valid = filter_valids(discount_traj_ll_flat,
-                                                   valid_flat)
+            discount_traj_ll_flat = flatten_batch(
+                discount_traj_ll, name="discount_traj_ll_flat")
+            discount_traj_ll_valid = filter_valids(
+                discount_traj_ll_flat,
+                valid_flat,
+                name="discount_traj_ll_valid")
 
-            traj_enc_loss = -tf.reduce_mean(discount_traj_ll_valid)
+            traj_enc_loss = -tf.reduce_mean(
+                discount_traj_ll_valid, name="traj_enc_loss")
 
             # Flatten input variables
             traj_enc_state_info_flat = flatten_batch_dict(
-                self._traj_enc_state_info_vars)
+                self._traj_enc_state_info_vars,
+                name="traj_enc_state_info_flat")
             traj_enc_old_dist_info_flat = flatten_batch_dict(
-                self._traj_enc_old_dist_info_vars)
+                self._traj_enc_old_dist_info_vars,
+                name="traj_enc_old_dist_info_flat")
 
             # Calculate task encoder distributions for each timestep
             traj_enc_dist_info_vars = self.traj_encoder.dist_info_sym(
-                traj_flat, traj_enc_state_info_flat)
+                traj_flat,
+                traj_enc_state_info_flat,
+                name="traj_enc_dist_info_vars")
 
             # Filter for valid time steps
             traj_enc_old_dist_info_valid = filter_valids_dict(
-                traj_enc_old_dist_info_flat, valid_flat)
+                traj_enc_old_dist_info_flat,
+                valid_flat,
+                name="traj_enc_old_dist_info_valid")
             traj_enc_dist_info_vars_valid = filter_valids_dict(
-                traj_enc_dist_info_vars, valid_flat)
+                traj_enc_dist_info_vars,
+                valid_flat,
+                name="traj_enc_dist_info_vars_valid")
 
             # Calculate KL divergence
         return traj_enc_loss
 
     def get_rewards(self, task_encoder_entropy, traj_ll, pol_entropy):
-        with tf.variable_scope('advantages'):
+        with tf.variable_scope("rewards"):
             # Augment the path rewards with entropy terms
             rewards = self._reward_var + \
                       (self.traj_enc_ent_coeff * traj_ll) + \
@@ -477,7 +512,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     ############################ return variables #########################################
     def build_returns(self, rewards):
-        with tf.variable_scope('returns'):
+        with tf.variable_scope("returns"):
             gamma = tf.constant(
                 float(self.discount),
                 dtype=tf.float32,

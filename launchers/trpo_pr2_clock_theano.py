@@ -1,13 +1,14 @@
 import numpy as np
 
-from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.envs.normalized_env import normalize
-from rllab.misc.instrument import stub, run_experiment_lite
-from rllab.algos.trpo import TRPO
-from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
+from rllab.baselines import LinearFeatureBaseline
+from rllab.envs import normalize
+from rllab.misc.instrument import stub
+from rllab.misc.instrument import run_experiment_lite
+from rllab.algos import TRPO
+from rllab.policies import GaussianMLPPolicy
 
-from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from sandbox.embed2learn.envs.one_hot_multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.envs.mujoco import PR2ArmClockEnv
+from sandbox.embed2learn.envs import MultiTaskEnv
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

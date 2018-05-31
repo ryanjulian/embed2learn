@@ -1,13 +1,13 @@
 import numpy as np
 
+from rllab.core import Serializable
 from rllab.misc.overrides import overrides
 from rllab.misc import logger
-from rllab.core.serializable import Serializable
 
-from sandbox.rocky.tf.spaces.box import Box
 from sandbox.rocky.tf.misc import tensor_utils
+from sandbox.rocky.tf.spaces import Box
 
-from sandbox.embed2learn.embeddings.base import Embedding
+from sandbox.embed2learn.embeddings import Embedding
 
 
 class OneHotEmbedding(Embedding, Serializable):

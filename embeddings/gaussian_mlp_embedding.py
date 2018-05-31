@@ -1,24 +1,24 @@
 import numpy as np
 import tensorflow as tf
 
+from rllab.core import Serializable
 from rllab.misc.overrides import overrides
 from rllab.misc import logger
-from rllab.core.serializable import Serializable
 
-from sandbox.rocky.tf.core.layers_powered import LayersPowered
+from sandbox.rocky.tf.core import LayersPowered
 import sandbox.rocky.tf.core.layers as L
 from sandbox.rocky.tf.core.network import MLP
-from sandbox.rocky.tf.spaces.box import Box
-from sandbox.rocky.tf.distributions.diagonal_gaussian import DiagonalGaussian
+from sandbox.rocky.tf.distributions import DiagonalGaussian
 from sandbox.rocky.tf.misc import tensor_utils
+from sandbox.rocky.tf.spaces import Box
 
-from sandbox.embed2learn.embeddings.base import StochasticEmbedding
+from sandbox.embed2learn.embeddings import StochasticEmbedding
 
 
 class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
     def __init__(self,
-                 name,
                  embedding_spec,
+                 name="GaussianMLPEmbedding",
                  hidden_sizes=(32, 32),
                  learn_std=True,
                  init_std=1.0,
@@ -58,6 +58,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         """
         Serializable.quick_init(self, locals())
         assert isinstance(embedding_spec.latent_space, Box)
+        self.name = name
 
         with tf.variable_scope(name):
             in_dim = embedding_spec.input_space.flat_dim
@@ -72,8 +73,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
                         init_std_param = np.log(np.exp(init_std) - 1)
                     else:
                         raise NotImplementedError
-                    # TODO(gh/): this isn't really the right way to initialize
-                    # the standard deviation
+
                     init_b = tf.constant_initializer(init_std_param)
                     mean_network = MLP(
                         name="mean_network",
@@ -175,18 +175,20 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
     def vectorized(self):
         return True
 
-    def dist_info_sym(self, in_var, state_info_vars=None):
-        mean_var, std_param_var = L.get_output(
-            [self._l_mean, self._l_std_param], in_var)
-        if self.min_std_param is not None:
-            std_param_var = tf.maximum(std_param_var, self.min_std_param)
-        if self.std_parameterization == 'exp':
-            log_std_var = std_param_var
-        elif self.std_parameterization == 'softplus':
-            log_std_var = tf.log(tf.log(1. + tf.exp(std_param_var)))
-        else:
-            raise NotImplementedError
-        return dict(mean=mean_var, log_std=log_std_var)
+    def dist_info_sym(self, in_var, state_info_vars=None,
+                      name="dist_info_sym"):
+        with tensor_utils.enclosing_scope(self.name, name):
+            mean_var, std_param_var = L.get_output(
+                [self._l_mean, self._l_std_param], in_var)
+            if self.min_std_param is not None:
+                std_param_var = tf.maximum(std_param_var, self.min_std_param)
+            if self.std_parameterization == 'exp':
+                log_std_var = std_param_var
+            elif self.std_parameterization == 'softplus':
+                log_std_var = tf.log(tf.log(1. + tf.exp(std_param_var)))
+            else:
+                raise NotImplementedError
+            return dict(mean=mean_var, log_std=log_std_var)
 
     @overrides
     def get_latent(self, an_input):
@@ -203,7 +205,11 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         latents = rnd * np.exp(log_stds) + means
         return latents, dict(mean=means, log_std=log_stds)
 
-    def get_reparam_latent_sym(self, in_var, latent_var, old_dist_info_vars):
+    def get_reparam_latent_sym(self,
+                               in_var,
+                               latent_var,
+                               old_dist_info_vars,
+                               name="get_reparam_latent_sym"):
         """
         Given inputs, old latent outputs, and a distribution of old latent
         outputs, return a symbolically reparameterized representation of the
@@ -213,14 +219,16 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         :param old_dist_info_vars:
         :return:
         """
-        new_dist_info_vars = self.dist_info_sym(in_var, latent_var)
-        new_mean_var, new_log_std_var = new_dist_info_vars[
-            "mean"], new_dist_info_vars["log_std"]
-        old_mean_var, old_log_std_var = old_dist_info_vars[
-            "mean"], old_dist_info_vars["log_std"]
-        epsilon_var = (latent_var - old_mean_var) / (
-            tf.exp(old_log_std_var) + 1e-8)
-        new_latent_var = new_mean_var + epsilon_var * tf.exp(new_log_std_var)
+        with tensor_utils.enclosing_scope(self.name, name):
+            new_dist_info_vars = self.dist_info_sym(in_var, latent_var)
+            new_mean_var, new_log_std_var = new_dist_info_vars[
+                "mean"], new_dist_info_vars["log_std"]
+            old_mean_var, old_log_std_var = old_dist_info_vars[
+                "mean"], old_dist_info_vars["log_std"]
+            epsilon_var = (latent_var - old_mean_var) / (
+                tf.exp(old_log_std_var) + 1e-8)
+            new_latent_var = new_mean_var + epsilon_var * tf.exp(
+                new_log_std_var)
         return new_latent_var
 
     def log_likelihood(self, an_input, latent):
@@ -235,19 +243,21 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         return self._dist.log_likelihood(latents,
                                          dict(mean=means, log_std=log_stds))
 
-    def log_likelihood_sym(self, input_var, latent_var):
-        dist_info = self.dist_info_sym(input_var, latent_var)
-        means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
-        return self._dist.log_likelihood_sym(latent_var,
-                                             dict(
-                                                 mean=means_var,
-                                                 log_std=log_stds_var))
+    def log_likelihood_sym(self, input_var, latent_var, name="log_likelihood"):
+        with tensor_utils.enclosing_scope(self.name, name):
+            dist_info = self.dist_info_sym(input_var, latent_var)
+            means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
+            return self._dist.log_likelihood_sym(latent_var,
+                                                 dict(
+                                                     mean=means_var,
+                                                     log_std=log_stds_var))
 
     def entropy(self, dist_info):
         return self.distribution.entropy(dist_info)
 
-    def entropy_sym(self, dist_info_var):
-        return self.distribution.entropy_sym(dist_info_var)
+    def entropy_sym(self, dist_info_var, name="entropy_sym"):
+        with tensor_utils.enclosing_scope(self.name, name):
+            return self.distribution.entropy_sym(dist_info_var)
 
     def log_diagnostics(self):
         log_stds = np.vstack(

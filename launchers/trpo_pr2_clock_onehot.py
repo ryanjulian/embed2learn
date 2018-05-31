@@ -1,17 +1,16 @@
 import numpy as np
 
-from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.envs.normalized_env import normalize
-from rllab.misc.instrument import stub, run_experiment_lite
+from rllab.baselines import LinearFeatureBaseline
+from rllab.envs import normalize
+from rllab.misc.instrument import stub
+from rllab.misc.instrument import run_experiment_lite
 
-from sandbox.rocky.tf.algos.trpo import TRPO
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDifferenceHvp
-from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
-from sandbox.rocky.tf.envs.base import TfEnv
+from sandbox.rocky.tf.algos import TRPO
+from sandbox.rocky.tf.policies import GaussianMLPPolicy
+from sandbox.rocky.tf.envs import TfEnv
 
-from sandbox.embed2learn.envs.mujoco.pr2_arm_clock_env import PR2ArmClockEnv
-from sandbox.embed2learn.envs.one_hot_multi_task_env import OneHotMultiTaskEnv
+from sandbox.embed2learn.envs.mujoco import PR2ArmClockEnv
+from sandbox.embed2learn.envs import OneHotMultiTaskEnv
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

@@ -3,11 +3,11 @@ import random
 import numpy as np
 
 from rllab import spaces
-from rllab.core.serializable import Serializable
-from rllab.envs.base import Step
+from rllab.core import Serializable
+from rllab.envs import Step
 from rllab.misc.overrides import overrides
 
-from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
+from sandbox.embed2learn.envs import MultiTaskEnv
 
 
 class OneHotMultiTaskEnv(MultiTaskEnv, Serializable):

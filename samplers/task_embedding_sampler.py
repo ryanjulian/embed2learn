@@ -1,25 +1,24 @@
-import time
 import pickle
+import time
 
 import numpy as np
 
+from rllab.sampler import utils  # DEBUG
+from rllab.misc import special  # DEBUG
 import rllab.misc.logger as logger
 from rllab.sampler import parallel_sampler
 from rllab.sampler.stateful_pool import singleton_pool
-from sandbox.embed2learn.embeddings.multitask_policy import MultitaskPolicy
-from sandbox.embed2learn.envs.multi_task_env import MultiTaskEnv
 
 from sandbox.rocky.tf.misc import tensor_utils
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
 from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf
 from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf_vars
-from sandbox.rocky.tf.spaces.box import Box
+from sandbox.rocky.tf.spaces import Box
 
+from sandbox.embed2learn.embeddings import MultitaskPolicy
 from sandbox.embed2learn.embeddings.utils import concat_spaces
+from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.samplers.utils import sliding_window
-
-from rllab.algos import util  # DEBUG
-from rllab.misc import special  # DEBUG
 
 # TODO: improvements to rllab so that you don't need to rwrite a whole sampler
 # to change the rollout process
@@ -282,10 +281,10 @@ class TaskEmbeddingSampler(BatchSampler):
             [path["agent_infos"] for path in paths])
 
         if self.algo.center_adv:
-            cpu_adv = util.center_advantages(cpu_adv)
+            cpu_adv = utils.center_advantages(cpu_adv)
 
         if self.algo.positive_adv:
-            cpu_adv = util.shift_advantages_to_positive(cpu_adv)
+            cpu_adv = utils.shift_advantages_to_positive(cpu_adv)
         #####################################
 
         # make all paths the same length

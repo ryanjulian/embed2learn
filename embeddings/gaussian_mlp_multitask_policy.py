@@ -1,30 +1,30 @@
+import itertools
+
 import numpy as np
 import tensorflow as tf
 
-import itertools
-
-from sandbox.embed2learn.embeddings.base import StochasticEmbedding
-from sandbox.rocky.tf.core.layers_powered import LayersPowered
-import sandbox.rocky.tf.core.layers as L
-from sandbox.rocky.tf.core.network import MLP
-from sandbox.rocky.tf.spaces.box import Box
-
-from rllab.core.serializable import Serializable
-from sandbox.rocky.tf.distributions.diagonal_gaussian import DiagonalGaussian
+from rllab.core import Serializable
 from rllab.misc.overrides import overrides
 from rllab.misc import logger
-from sandbox.rocky.tf.misc import tensor_utils
 
-from sandbox.embed2learn.embeddings.multitask_policy import StochasticMultitaskPolicy
+from sandbox.rocky.tf.core import LayersPowered
+import sandbox.rocky.tf.core.layers as L
+from sandbox.rocky.tf.core.network import MLP
+from sandbox.rocky.tf.distributions import DiagonalGaussian
+from sandbox.rocky.tf.misc import tensor_utils
+from sandbox.rocky.tf.spaces import Box
+
+from sandbox.embed2learn.embeddings import StochasticEmbedding
+from sandbox.embed2learn.embeddings import StochasticMultitaskPolicy
 
 
 class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
                                  Serializable):
     def __init__(self,
-                 name,
                  env_spec,
-                 embedding: StochasticEmbedding,
+                 embedding,
                  task_space,
+                 name="GaussianMLPMultitaskPolicy",
                  hidden_sizes=(32, 32),
                  learn_std=True,
                  init_std=1.0,
@@ -59,6 +59,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
         """
         Serializable.quick_init(self, locals())
         assert isinstance(env_spec.action_space, Box)
+        self.name = name
 
         super(GaussianMLPMultitaskPolicy, self).__init__(
             env_spec, embedding, task_space)
@@ -196,18 +197,22 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
             l.get_params(**tags) for l in layers)
         return L.unique(params)
 
-    def dist_info_sym(self, obs_var, state_info_vars=None):
-        mean_var, std_param_var = L.get_output(
-            [self._l_mean, self._l_std_param], obs_var)
-        if self.min_std_param is not None:
-            std_param_var = tf.maximum(std_param_var, self.min_std_param)
-        if self.std_parametrization == 'exp':
-            log_std_var = std_param_var
-        elif self.std_parametrization == 'softplus':
-            log_std_var = tf.log(tf.log(1. + tf.exp(std_param_var)))
-        else:
-            raise NotImplementedError
-        return dict(mean=mean_var, log_std=log_std_var)
+    def dist_info_sym(self,
+                      obs_var,
+                      state_info_vars=None,
+                      name="dist_info_sym"):
+        with tensor_utils.enclosing_scope(self.name, name):
+            mean_var, std_param_var = L.get_output(
+                [self._l_mean, self._l_std_param], obs_var)
+            if self.min_std_param is not None:
+                std_param_var = tf.maximum(std_param_var, self.min_std_param)
+            if self.std_parametrization == 'exp':
+                log_std_var = std_param_var
+            elif self.std_parametrization == 'softplus':
+                log_std_var = tf.log(tf.log(1. + tf.exp(std_param_var)))
+            else:
+                raise NotImplementedError
+            return dict(mean=mean_var, log_std=log_std_var)
 
     @overrides
     def get_action(self, observation):
@@ -259,7 +264,11 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
     def get_actions_from_latent(self, observations, latents):
         raise NotImplementedError
 
-    def get_reparam_action_sym(self, obs_var, action_var, old_dist_info_vars):
+    def get_reparam_action_sym(self,
+                               obs_var,
+                               action_var,
+                               old_dist_info_vars,
+                               name="get_reparam_action_sym"):
         """
         Given observations, old actions, and distribution of old actions, return a symbolically reparameterized
         representation of the actions in terms of the policy parameters
@@ -268,15 +277,17 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
         :param old_dist_info_vars:
         :return:
         """
-        new_dist_info_vars = self.dist_info_sym(obs_var, action_var)
-        new_mean_var, new_log_std_var = new_dist_info_vars[
-            "mean"], new_dist_info_vars["log_std"]
-        old_mean_var, old_log_std_var = old_dist_info_vars[
-            "mean"], old_dist_info_vars["log_std"]
-        epsilon_var = (action_var - old_mean_var) / (
-            tf.exp(old_log_std_var) + 1e-8)
-        new_action_var = new_mean_var + epsilon_var * tf.exp(new_log_std_var)
-        return new_action_var
+        with tensor_utils.enclosing_scope(self.name, name):
+            new_dist_info_vars = self.dist_info_sym(obs_var, action_var)
+            new_mean_var, new_log_std_var = new_dist_info_vars[
+                "mean"], new_dist_info_vars["log_std"]
+            old_mean_var, old_log_std_var = old_dist_info_vars[
+                "mean"], old_dist_info_vars["log_std"]
+            epsilon_var = (action_var - old_mean_var) / (
+                tf.exp(old_log_std_var) + 1e-8)
+            new_action_var = new_mean_var + epsilon_var * tf.exp(
+                new_log_std_var)
+            return new_action_var
 
     def log_diagnostics(self, paths):
         log_stds = np.vstack(

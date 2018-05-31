@@ -1,12 +1,12 @@
 import sys
 import time
 
+import joblib
 import numpy as np
-import tensorflow as tf
-import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import cm
-import joblib
+import matplotlib.pyplot as plt
+import tensorflow as tf
 
 from sandbox.embed2learn.envs.multi_task_env import normalize, TfEnv
 

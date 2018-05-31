@@ -3,10 +3,11 @@ from collections import deque
 import numpy as np
 import pygame
 
-from rllab.core.serializable import Serializable
-from rllab.envs.base import Env, Step
+from rllab.core import Serializable
+from rllab.envs import Env
+from rllab.envs import Step
 from rllab.misc.overrides import overrides
-from rllab.spaces.box import Box
+from rllab.spaces import Box
 
 MAX_SHOWN_TRACES = 10
 TRACE_COLORS = [

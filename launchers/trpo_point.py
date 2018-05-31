@@ -1,14 +1,13 @@
-from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
-from rllab.envs.normalized_env import normalize
-from rllab.misc.instrument import stub, run_experiment_lite
+from rllab.baselines import LinearFeatureBaseline
+from rllab.envs import normalize
+from rllab.misc.instrument import stub
+from rllab.misc.instrument import run_experiment_lite
 
-from sandbox.rocky.tf.algos.trpo import TRPO
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
-from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import FiniteDifferenceHvp
-from sandbox.rocky.tf.policies.gaussian_mlp_policy import GaussianMLPPolicy
-from sandbox.rocky.tf.envs.base import TfEnv
+from sandbox.rocky.tf.algos import TRPO
+from sandbox.rocky.tf.policies import GaussianMLPPolicy
+from sandbox.rocky.tf.envs import TfEnv
 
-from sandbox.embed2learn.envs.point_env import PointEnv
+from sandbox.embed2learn.envs import PointEnv
 
 
 def run_task(*_):
