@@ -1,10 +1,10 @@
-from rllab.baselines import LinearFeatureBaseline
-from rllab.envs import normalize
-from rllab.envs.mujoco.sawyer import SawyerEnv
+from garage.baselines import LinearFeatureBaseline
+from garage.envs import normalize
+from garage.envs.mujoco.sawyer import SawyerEnv
 
-from sandbox.rocky.tf.algos import TRPO
-from sandbox.rocky.tf.policies import GaussianMLPPolicy
-from sandbox.rocky.tf.envs import TfEnv
+from garage.tf.algos import TRPO
+from garage.tf.policies import GaussianMLPPolicy
+from garage.tf.envs import TfEnv
 
 env = TfEnv(normalize(SawyerEnv()))
 

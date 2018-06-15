@@ -1,6 +1,6 @@
 import numpy as np
 
-from sandbox.rocky.tf.spaces import Box
+from garage.tf.spaces import Box
 
 
 def concat_spaces(top, bottom):

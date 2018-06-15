@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-# TODO(gh/17): these should either be in sandbox.rocky.tf.misc.tensor_utils or
+# TODO(gh/17): these should either be in garage.tf.misc.tensor_utils or
 # replaced by the equivalents there.
 
 

@@ -1,16 +1,16 @@
 import numpy as np
 import tensorflow as tf
 
-from rllab.core import Serializable
-from rllab.misc.overrides import overrides
-from rllab.misc import logger
+from garage.core import Serializable
+from garage.misc.overrides import overrides
+from garage.misc import logger
 
-from sandbox.rocky.tf.core import LayersPowered
-import sandbox.rocky.tf.core.layers as L
-from sandbox.rocky.tf.core.network import MLP
-from sandbox.rocky.tf.distributions import DiagonalGaussian
-from sandbox.rocky.tf.misc import tensor_utils
-from sandbox.rocky.tf.spaces import Box
+from garage.tf.core import LayersPowered
+import garage.tf.core.layers as L
+from garage.tf.core.network import MLP
+from garage.tf.distributions import DiagonalGaussian
+from garage.tf.misc import tensor_utils
+from garage.tf.spaces import Box
 
 from sandbox.embed2learn.embeddings import StochasticEmbedding
 
@@ -247,10 +247,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         with tensor_utils.enclosing_scope(self.name, name):
             dist_info = self.dist_info_sym(input_var, latent_var)
             means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
-            return self._dist.log_likelihood_sym(latent_var,
-                                                 dict(
-                                                     mean=means_var,
-                                                     log_std=log_stds_var))
+            return self._dist.log_likelihood_sym(
+                latent_var, dict(mean=means_var, log_std=log_stds_var))
 
     def entropy(self, dist_info):
         return self.distribution.entropy(dist_info)

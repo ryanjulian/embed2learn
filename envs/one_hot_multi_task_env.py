@@ -2,10 +2,10 @@ import random
 
 import numpy as np
 
-from rllab import spaces
-from rllab.core import Serializable
-from rllab.envs import Step
-from rllab.misc.overrides import overrides
+from garage import spaces
+from garage.core import Serializable
+from garage.envs import Step
+from garage.misc.overrides import overrides
 
 from sandbox.embed2learn.envs import MultiTaskEnv
 

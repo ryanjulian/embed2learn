@@ -1,5 +1,5 @@
-from rllab.core import Serializable
-from rllab.spaces import Space
+from garage.core import Serializable
+from garage.spaces import Space
 
 
 class EmbeddingSpec(Serializable):

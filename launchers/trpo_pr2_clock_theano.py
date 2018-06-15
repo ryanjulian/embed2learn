@@ -1,11 +1,11 @@
 import numpy as np
 
-from rllab.baselines import LinearFeatureBaseline
-from rllab.envs import normalize
-from rllab.misc.instrument import stub
-from rllab.misc.instrument import run_experiment_lite
-from rllab.algos import TRPO
-from rllab.policies import GaussianMLPPolicy
+from garage.baselines import LinearFeatureBaseline
+from garage.envs import normalize
+from garage.misc.instrument import stub
+from garage.misc.instrument import run_experiment_lite
+from garage.algos import TRPO
+from garage.policies import GaussianMLPPolicy
 
 from sandbox.embed2learn.envs.mujoco import PR2ArmClockEnv
 from sandbox.embed2learn.envs import MultiTaskEnv

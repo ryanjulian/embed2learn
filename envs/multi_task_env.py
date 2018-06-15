@@ -1,21 +1,24 @@
 import random
 
 from cached_property import cached_property
+import gym
 import numpy as np
 
-from rllab import spaces
-from rllab.core import Serializable
-from rllab.envs import Env
-from rllab.envs import NormalizedEnv
-from rllab.envs import Step
+from garage import spaces
+from garage.core import Parameterized
+from garage.core import Serializable
+from garage.envs import NormalizedEnv
+from garage.envs import Step
 
-from sandbox.rocky.tf.envs import TfEnv as BaseTfEnv
-from sandbox.rocky.tf.envs import to_tf_space
+from garage.tf.envs import TfEnv as BaseTfEnv
+from garage.tf.envs import to_tf_space
 
 
-class MultiTaskEnv(Env):
+class MultiTaskEnv(gym.Env, Parameterized):
     def __init__(self, task_env_cls=None, task_args=None, task_kwargs=None):
         Serializable.quick_init(self, locals())
+        Parameterized.__init__(self)
+
         self._task_envs = [
             task_env_cls(*t_args, **t_kwargs)
             for t_args, t_kwargs in zip(task_args, task_kwargs)
@@ -51,22 +54,22 @@ class MultiTaskEnv(Env):
     def horizon(self):
         return self._task_envs[0].horizon
 
-    def terminate(self):
+    def close(self):
         for env in self._task_envs:
-            env.terminate()
+            env.close()
 
-    def get_param_values(self):
-        return self._active_env.get_param_values()
+    def get_params_internal(self, **tags):
+        return self._active_env.get_params_internal(**tags)
 
-    def set_param_values(self, params):
-        self._active_env.set_param_values(params)
+    # def set_param_values(self, params):
+    #     self._active_env.set_param_values(params)
 
     @property
     def task_space(self):
         n = len(self._task_envs)
         one_hot_ub = np.ones(n)
         one_hot_lb = np.zeros(n)
-        return spaces.Box(one_hot_lb, one_hot_ub)
+        return gym.spaces.Box(one_hot_lb, one_hot_ub, dtype=np.float32)
 
     @property
     def active_task(self):
@@ -90,8 +93,8 @@ class MultiTaskEnv(Env):
         if self._active_env is None:
             self._active_env = self._task_envs[0]
         else:
-            self._active_env = self._task_envs[(
-                self.active_task + 1) % self.num_tasks]
+            self._active_env = self._task_envs[(self.active_task + 1) %
+                                               self.num_tasks]
 
 
 class TfEnv(BaseTfEnv):

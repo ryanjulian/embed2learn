@@ -1,9 +1,9 @@
-from rllab.algos import TRPO
-from rllab.baselines import LinearFeatureBaseline
-from rllab.envs import normalize
-from rllab.policies import GaussianMLPPolicy
-from rllab.misc.instrument import stub
-from rllab.misc.instrument import run_experiment_lite
+from garage.algos import TRPO
+from garage.baselines import LinearFeatureBaseline
+from garage.envs import normalize
+from garage.policies import GaussianMLPPolicy
+from garage.misc.instrument import stub
+from garage.misc.instrument import run_experiment_lite
 
 from sandbox.embed2learn.envs import DmControlEnv
 

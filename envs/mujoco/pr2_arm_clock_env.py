@@ -4,13 +4,13 @@ import tempfile
 from mujoco_py import MjViewer
 import numpy as np
 
-from rllab import spaces
-from rllab.core import Serializable
-from rllab.envs import Step
-from rllab.envs.mujoco import MujocoEnv
-from rllab.misc import autoargs
-from rllab.misc import logger
-from rllab.misc.overrides import overrides
+from garage import spaces
+from garage.core import Serializable
+from garage.envs import Step
+from garage.envs.mujoco import MujocoEnv
+from garage.misc import autoargs
+from garage.misc import logger
+from garage.misc.overrides import overrides
 
 from sandbox.embed2learn.envs.mujoco.utils import mujoco_model_path
 

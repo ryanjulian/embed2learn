@@ -2,13 +2,13 @@ import multiprocessing as mp
 
 import numpy as np
 
-from rllab.baselines import LinearFeatureBaseline
-from rllab.envs import EnvSpec
-from rllab.misc.instrument import run_experiment_lite
+from garage.baselines import LinearFeatureBaseline
+from garage.envs import EnvSpec
+from garage.misc.instrument import run_experiment_lite
 
-from sandbox.rocky.tf.algos import TRPO
-from sandbox.rocky.tf.policies import GaussianMLPPolicy
-from sandbox.rocky.tf.spaces import Box
+from garage.tf.algos import TRPO
+from garage.tf.policies import GaussianMLPPolicy
+from garage.tf.spaces import Box
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding

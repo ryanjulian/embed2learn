@@ -1,11 +1,10 @@
 import numpy as np
 
-from rllab.baselines import LinearFeatureBaseline
-from rllab.envs.env_spec import EnvSpec
-from rllab.misc.ext import set_seed
-from rllab.misc.instrument import run_experiment_lite
-
-from sandbox.rocky.tf.spaces import Box
+from garage.baselines import LinearFeatureBaseline
+from garage.envs.env_spec import EnvSpec
+from garage.misc.ext import set_seed
+from garage.misc.instrument import run_experiment_lite
+from garage.tf.spaces import Box
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
@@ -36,11 +35,10 @@ def run_task(plot=True, *_):
 
     # Environment
     env = TfEnv(
-        normalize(
-            MultiTaskEnv(
-                task_env_cls=PointEnv,
-                task_args=TASK_ARGS,
-                task_kwargs=TASK_KWARGS)))
+        MultiTaskEnv(
+            task_env_cls=PointEnv,
+            task_args=TASK_ARGS,
+            task_kwargs=TASK_KWARGS))
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -125,8 +123,10 @@ def run_task(plot=True, *_):
 run_experiment_lite(
     run_task,
     exp_prefix='trpo_point_embed',
-    n_parallel=1,  # > 1 is broken
+    n_parallel=16,  # > 1 is broken
     plot=True,
+    use_gpu=True,
+    use_tf=True,
 )
 
 # run_task()

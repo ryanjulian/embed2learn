@@ -1,13 +1,13 @@
 import numpy as np
 
-from rllab.baselines import LinearFeatureBaseline
-from rllab.misc.instrument import run_experiment_lite
-from rllab.misc.ext import set_seed
-from rllab.envs import EnvSpec
+from garage.baselines import LinearFeatureBaseline
+from garage.misc.instrument import run_experiment_lite
+from garage.misc.ext import set_seed
+from garage.envs import EnvSpec
 
-from sandbox.rocky.tf.policies import GaussianMLPPolicy
-from sandbox.rocky.tf.envs import TfEnv
-from sandbox.rocky.tf.spaces import Box
+from garage.tf.policies import GaussianMLPPolicy
+from garage.tf.envs import TfEnv
+from garage.tf.spaces import Box
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding

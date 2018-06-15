@@ -1,10 +1,10 @@
-from rllab.algos import DDPG
-from rllab.envs.box2d import CartpoleEnv
-from rllab.envs import normalize
-from rllab.misc.instrument import run_experiment_lite
-from rllab.exploration_strategies import OUStrategy
-from rllab.policies import DeterministicMLPPolicy
-from rllab.q_functions import ContinuousMLPQFunction
+from garage.algos import DDPG
+from garage.envs.box2d import CartpoleEnv
+from garage.envs import normalize
+from garage.misc.instrument import run_experiment_lite
+from garage.exploration_strategies import OUStrategy
+from garage.policies import DeterministicMLPPolicy
+from garage.q_functions import ContinuousMLPQFunction
 
 from sandbox.embed2learn.envs.mujoco import PR2ArmClockEnv
 from sandbox.embed2learn.envs import OneHotMultiTaskEnv

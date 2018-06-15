@@ -1,11 +1,11 @@
 import numpy as np
 
-from rllab.core import Serializable
-from rllab.misc.overrides import overrides
-from rllab.misc import logger
+from garage.core import Serializable
+from garage.misc.overrides import overrides
+from garage.misc import logger
 
-from sandbox.rocky.tf.misc import tensor_utils
-from sandbox.rocky.tf.spaces import Box
+from garage.tf.misc import tensor_utils
+from garage.tf.spaces import Box
 
 from sandbox.embed2learn.embeddings import Embedding
 

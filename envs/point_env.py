@@ -1,13 +1,14 @@
 from collections import deque
 
+import gym
 import numpy as np
 import pygame
 
-from rllab.core import Serializable
-from rllab.envs import Env
-from rllab.envs import Step
-from rllab.misc.overrides import overrides
-from rllab.spaces import Box
+from garage.core import Parameterized
+from garage.core import Serializable
+from garage.envs import Step
+from garage.misc.overrides import overrides
+from garage.spaces import Box
 
 MAX_SHOWN_TRACES = 10
 TRACE_COLORS = [
@@ -21,9 +22,10 @@ BRIGHT_COLOR = (200, 200, 200)
 DARK_COLOR = (150, 150, 150)
 
 
-class PointEnv(Env, Serializable):
+class PointEnv(gym.Env, Parameterized):
     def __init__(self, goal=(1, 1), show_traces=True):
         Serializable.quick_init(self, locals())
+        Parameterized.__init__(self)
 
         self._goal = np.array(goal, dtype=np.float32)
         self._point = np.zeros(2)
@@ -36,13 +38,18 @@ class PointEnv(Env, Serializable):
 
         self._traces = deque(maxlen=MAX_SHOWN_TRACES)
 
+    def get_params_internal(self, **tags):
+        return []
+
     @property
     def observation_space(self):
-        return Box(low=-np.inf, high=np.inf, shape=(2, ))
+        return gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(2, ), dtype=np.float32)
 
     @property
     def action_space(self):
-        return Box(low=-0.1, high=0.1, shape=(2, ))
+        return gym.spaces.Box(
+            low=-0.1, high=0.1, shape=(2, ), dtype=np.float32)
 
     def reset(self):
         self._point = np.zeros_like(self._goal)
@@ -115,6 +122,9 @@ class PointEnv(Env, Serializable):
 
         pygame.display.flip()
 
-    def terminate(self):
+    def log_diagnostics(self, paths):
+        pass
+
+    def close(self):
         if self.screen:
             pygame.quit()

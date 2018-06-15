@@ -1,4 +1,4 @@
-from sandbox.rocky.tf.core import Parameterized
+from garage.tf.core import Parameterized
 
 
 class Embedding(Parameterized):

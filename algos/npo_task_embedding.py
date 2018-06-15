@@ -3,17 +3,17 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from rllab.core import Serializable
-from rllab.misc import ext
-from rllab.misc import special
-from rllab.misc.overrides import overrides
-import rllab.misc.logger as logger
+from garage.core import Serializable
+from garage.misc import ext
+from garage.misc import special
+from garage.misc.overrides import overrides
+import garage.misc.logger as logger
 
-from sandbox.rocky.tf.algos import BatchPolopt
-from sandbox.rocky.tf.core import JointParameterized
-from sandbox.rocky.tf.misc import tensor_utils
-from sandbox.rocky.tf.optimizers import ConjugateGradientOptimizer
-from sandbox.rocky.tf.optimizers import FirstOrderOptimizer
+from garage.tf.algos import BatchPolopt
+from garage.tf.core import JointParameterized
+from garage.tf.misc import tensor_utils
+from garage.tf.optimizers import ConjugateGradientOptimizer
+from garage.tf.optimizers import FirstOrderOptimizer
 
 from sandbox.embed2learn.algos.utils import flatten_batch
 from sandbox.embed2learn.algos.utils import flatten_batch_dict
@@ -119,7 +119,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             if is_recurrent:
                 raise NotImplementedError
 
-            #### Policy and loss function ##########################################
+            #### Policy and loss function #####################################
             # Input variables
             self._obs_var = self.policy.observation_space.new_tensor_variable(
                 'obs',
@@ -187,7 +187,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
             return self._surr_loss, self._pol_mean_kl, policy_input_list, self._traj_loss, traj_enc_input_list
 
-    ############################ initialize base variables #################################
+    ############################ initialize base variables ####################
     def initialize_vars(self):
         self.initialize_dist_vars()
         self.initialize_dist_list_vars()
@@ -287,7 +287,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             for k in self._traj_enc_dist.dist_info_keys
         ]
 
-    ############################ input variables ####################################################
+    ############################ input variables ##############################
     def build_policy_input(self):
         input_list = [
             self.policy.task_input_var,
@@ -300,9 +300,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._task_var,
             self._latent_var,
             self._valid_var,
-        ] + self._state_info_vars_list + self._old_dist_info_vars_list \
-          + self._task_enc_state_info_vars_list + self._task_enc_old_dist_info_vars_list \
-          + self._traj_enc_state_info_vars_list + self._traj_enc_old_dist_info_vars_list
+        ] + self._state_info_vars_list \
+          + self._old_dist_info_vars_list \
+          + self._task_enc_state_info_vars_list \
+          + self._task_enc_old_dist_info_vars_list \
+          + self._traj_enc_state_info_vars_list \
+          + self._traj_enc_old_dist_info_vars_list
 
         return input_list
 
@@ -315,7 +318,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         return input_list
 
-    ############################ loss ####################################################
+    ############################ loss #########################################
     def build_loss(self):
         task_enc_entropy, traj_ll, pol_entropy = self.get_entropy()
 
@@ -488,17 +491,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 traj_enc_state_info_flat,
                 name="traj_enc_dist_info_vars")
 
-            # Filter for valid time steps
-            traj_enc_old_dist_info_valid = filter_valids_dict(
-                traj_enc_old_dist_info_flat,
-                valid_flat,
-                name="traj_enc_old_dist_info_valid")
-            traj_enc_dist_info_vars_valid = filter_valids_dict(
-                traj_enc_dist_info_vars,
-                valid_flat,
-                name="traj_enc_dist_info_vars_valid")
+            # # Filter for valid time steps
+            # traj_enc_old_dist_info_valid = filter_valids_dict(
+            #     traj_enc_old_dist_info_flat,
+            #     valid_flat,
+            #     name="traj_enc_old_dist_info_valid")
+            # traj_enc_dist_info_vars_valid = filter_valids_dict(
+            #     traj_enc_dist_info_vars,
+            #     valid_flat,
+            #     name="traj_enc_dist_info_vars_valid")
 
-            # Calculate KL divergence
+            # # Calculate KL divergence
+
         return traj_enc_loss
 
     def get_rewards(self, task_encoder_entropy, traj_ll, pol_entropy):
@@ -510,7 +514,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         return rewards
 
-    ############################ return variables #########################################
+    ############################ return variables #############################
     def build_returns(self, rewards):
         with tf.variable_scope("returns"):
             gamma = tf.constant(
@@ -525,7 +529,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 rewards_pad, return_filter, stride=1, padding='VALID')
         return returns
 
-    ############################ train ####################################################
+    ############################ train ########################################
     def get_training_input(self, samples_data):
         tasks = np.reshape(samples_data["tasks"],
                            (-1, self.policy.task_space.flat_dim))
@@ -780,7 +784,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         sess.run(tf.global_variables_initializer())
 
-        self.start_worker()
+        self.start_worker(sess)
         start_time = time.time()
         for itr in range(self.start_itr, self.n_itr):
             itr_start_time = time.time()

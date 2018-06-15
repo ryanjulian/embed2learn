@@ -1,4 +1,4 @@
-from sandbox.rocky.tf.optimizers import ConjugateGradientOptimizer
+from garage.tf.optimizers import ConjugateGradientOptimizer
 
 from sandbox.embed2learn.algos import NPOTaskEmbedding
 

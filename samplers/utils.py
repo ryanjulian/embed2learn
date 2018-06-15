@@ -1,6 +1,6 @@
 import numpy as np
 
-from rllab.misc import tensor_utils
+from garage.misc import tensor_utils
 
 
 # Given a numpy ndarray of shape (n, d_1, ..., d_k), returns a sliding-window

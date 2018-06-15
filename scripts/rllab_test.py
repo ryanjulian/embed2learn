@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-from rllab.baselines import LinearFeatureBaseline
-from rllab.envs import normalize
-from rllab.envs.box2d import CartpoleEnv
-from rllab.misc.instrument import stub
-from rllab.misc.instrument import run_experiment_lite
+from garage.baselines import LinearFeatureBaseline
+from garage.envs import normalize
+from garage.envs.box2d import CartpoleEnv
+from garage.misc.instrument import stub
+from garage.misc.instrument import run_experiment_lite
 
-from sandbox.rocky.tf.algos import TRPO
-from sandbox.rocky.tf.policies import GaussianMLPPolicy
-from sandbox.rocky.tf.envs import TfEnv
+from garage.tf.algos import TRPO
+from garage.tf.policies import GaussianMLPPolicy
+from garage.tf.envs import TfEnv
 
 env = TfEnv(normalize(CartpoleEnv()))
 

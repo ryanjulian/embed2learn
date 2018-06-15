@@ -3,24 +3,24 @@ import time
 
 import numpy as np
 
-from rllab.sampler import utils  # DEBUG
-from rllab.misc import special  # DEBUG
-import rllab.misc.logger as logger
-from rllab.sampler import parallel_sampler
-from rllab.sampler.stateful_pool import singleton_pool
+from garage.sampler import utils  # DEBUG
+from garage.misc import special  # DEBUG
+import garage.misc.logger as logger
+from garage.sampler import parallel_sampler
+from garage.sampler.stateful_pool import singleton_pool
 
-from sandbox.rocky.tf.misc import tensor_utils
-from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
-from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf
-from sandbox.rocky.tf.samplers.batch_sampler import worker_init_tf_vars
-from sandbox.rocky.tf.spaces import Box
+from garage.tf.misc import tensor_utils
+from garage.tf.samplers.batch_sampler import BatchSampler
+from garage.tf.samplers.batch_sampler import worker_init_tf
+from garage.tf.samplers.batch_sampler import worker_init_tf_vars
+from garage.tf.spaces import Box
 
 from sandbox.embed2learn.embeddings import MultitaskPolicy
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.samplers.utils import sliding_window
 
-# TODO: improvements to rllab so that you don't need to rwrite a whole sampler
+# TODO: improvements to garage so that you don't need to rwrite a whole sampler
 # to change the rollout process
 
 
@@ -130,9 +130,9 @@ class TaskEmbeddingSampler(BatchSampler):
     def populate_task(self, env, policy, scope=None):
         logger.log("Populating workers...")
         if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(_worker_populate_task,
-                                    [(pickle.dumps(env), pickle.dumps(policy),
-                                      scope)] * singleton_pool.n_parallel)
+            singleton_pool.run_each(_worker_populate_task, [
+                (pickle.dumps(env), pickle.dumps(policy), scope)
+            ] * singleton_pool.n_parallel)
         else:
             # avoid unnecessary copying
             G = parallel_sampler._get_scoped_G(singleton_pool.G, scope)
@@ -343,8 +343,8 @@ class TaskEmbeddingSampler(BatchSampler):
         undiscounted_returns = [sum(path["rewards"]) for path in paths]
 
         ent = np.sum(
-            self.algo.policy.distribution.entropy(agent_infos) * valids
-        ) / np.sum(valids)
+            self.algo.policy.distribution.entropy(agent_infos) *
+            valids) / np.sum(valids)
 
         samples_data = dict(
             observations=obs,

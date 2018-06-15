@@ -1,6 +1,6 @@
-from sandbox.rocky.tf.core import Parameterized
-from sandbox.rocky.tf.policies import Policy
-from sandbox.rocky.tf.policies import StochasticPolicy
+from garage.tf.core import Parameterized
+from garage.tf.policies import Policy
+from garage.tf.policies import StochasticPolicy
 
 from sandbox.embed2learn.embeddings import Embedding
 from sandbox.embed2learn.embeddings import StochasticEmbedding
