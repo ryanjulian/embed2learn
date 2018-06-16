@@ -10,14 +10,17 @@ from garage.envs import Step
 from garage.misc.overrides import overrides
 from garage.spaces import Box
 
+from sandbox.embed2learn.envs.util import colormap
+
 MAX_SHOWN_TRACES = 10
-TRACE_COLORS = [
-    (80, 150, 0),
-    (100, 180, 10),
-    (100, 210, 30),
-    (140, 230, 50),
-    (180, 250, 150)
-] # yapf: disable
+# TRACE_COLORS = [
+#     (80, 150, 0),
+#     (100, 180, 10),
+#     (100, 210, 30),
+#     (140, 230, 50),
+#     (180, 250, 150)
+# ]  # yapf: disable
+TRACE_COLORS = colormap(MAX_SHOWN_TRACES)
 BRIGHT_COLOR = (200, 200, 200)
 DARK_COLOR = (150, 150, 150)
 
@@ -53,19 +56,33 @@ class PointEnv(gym.Env, Parameterized):
 
     def reset(self):
         self._point = np.zeros_like(self._goal)
-        self._traces.append([])
+        self._traces.append([tuple(self._point)])
         return np.copy(self._point)
 
     def step(self, action):
+        # enforce action space
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        # action = np.sign(action) * self.action_space.high
+
         self._point = self._point + action
         self._traces[-1].append(tuple(self._point))
 
-        done = np.linalg.norm(self._point - self._goal, ord=np.inf) < 0.1
-        reward = -np.linalg.norm(self._point - self._goal)
+        dist = np.linalg.norm(self._point - self._goal)
+        done = dist < np.linalg.norm(self.action_space.low)
+
+        # dense reward
+        #reward = -np.exp(dist)
+        reward = -dist
+
+        # alive penalty
+        # reward -= 10.0
 
         # completion bonus
         if done:
-            reward = 2000.0
+            reward = 100
+
+        # reward scaling
+        # reward *= 10.0
 
         return Step(observation=np.copy(self._point), reward=reward, done=done)
 

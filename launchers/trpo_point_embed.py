@@ -20,17 +20,19 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-} # yapf: disable
+    # '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
+    # '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
+}  # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 2
-TRAJ_ENC_WINDOW = 16
+LATENT_LENGTH = 1
+TRAJ_ENC_WINDOW = 1
 
 
-def run_task(plot=True, *_):
+def run_task(*_):
     set_seed(1)
 
     # Environment
@@ -72,9 +74,8 @@ def run_task(plot=True, *_):
         name="task_embedding",
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
-        adaptive_std=True,
-        init_std=0.5,  # TODO was 100
-        max_std=0.6,  # TODO find appropriate value
+        std_share_network=True,
+        init_std=0.1,  # 1.0 # 0.3
     )
 
     # TODO(): rename to inference_network
@@ -82,9 +83,7 @@ def run_task(plot=True, *_):
         name="traj_embedding",
         embedding_spec=traj_embed_spec,
         hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
-        # adaptive_std=True,  # Must be True for embedding learning
         std_share_network=True,
-        init_std=0.001,
     )
 
     # Multitask policy
@@ -94,8 +93,8 @@ def run_task(plot=True, *_):
         task_space=env.task_space,
         embedding=task_embedding,
         hidden_sizes=(20, 10),
-        adaptive_std=True,  # Must be True for embedding learning
-        init_std=0.5,  # TODO was 100
+        std_share_network=True,  # Must be True for embedding learning
+        init_std=6.0,
     )
 
     baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
@@ -110,23 +109,26 @@ def run_task(plot=True, *_):
         n_itr=1000,
         discount=0.99,
         step_size=0.01,
-        plot=plot,
-        plot_warmup_itrs=30,
+        plot=True,
         policy_ent_coeff=0.,  # 0.001,  #0.1,
-        # task_encoder_ent_coeff=1e-4,
-        task_encoder_ent_coeff=0.,  #0.1,
-        trajectory_encoder_ent_coeff=0.,  # 0.03,  #0.1,  # 0.1,
+        task_encoder_ent_coeff=1e-5,  # 1e-4,
+        trajectory_encoder_ent_coeff=0.5,  # 0.3 # 0.03
     )
+    # import tensorflow as tf
+    # from tensorflow.python import debug as tf_debug
+    # sess = tf.Session()
+    # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+    # sess.as_default().__enter__()
+    # algo.train(sess=sess)
+
     algo.train()
 
 
 run_experiment(
     run_task,
     exp_prefix='trpo_point_embed',
-    n_parallel=16,  # > 1 is broken
+    n_parallel=16,
     plot=True,
-    use_gpu=True,
-    use_tf=True,
 )
 
 # run_task()

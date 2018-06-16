@@ -4,6 +4,7 @@ import time
 import numpy as np
 
 from garage.sampler import utils  # DEBUG
+from garage.misc import ext
 from garage.misc import special  # DEBUG
 import garage.misc.logger as logger
 from garage.sampler import parallel_sampler
@@ -24,8 +25,8 @@ from sandbox.embed2learn.samplers.utils import sliding_window
 # to change the rollout process
 
 
-def rollout(env: MultiTaskEnv,
-            agent: MultitaskPolicy,
+def rollout(env,
+            agent,
             max_path_length=np.inf,
             animated=False,
             speedup=1,
@@ -55,7 +56,8 @@ def rollout(env: MultiTaskEnv,
 
     path_length = 0
     while path_length < max_path_length:
-        a, agent_info = agent.get_action(np.concatenate((t, o)))
+        #a, agent_info = agent.get_action(np.concatenate((t, o)))
+        a, agent_info = agent.get_action_from_latent(z, o)
         # latent_info = agent_info["latent_info"]
         next_o, r, d, env_info = env.step(a)
         observations.append(agent.observation_space.flatten(o))
@@ -138,6 +140,7 @@ class TaskEmbeddingSampler(BatchSampler):
             G = parallel_sampler._get_scoped_G(singleton_pool.G, scope)
             G.env = env
             G.policy = policy
+        parallel_sampler.set_seed(ext.get_seed())
         logger.log("Populated")
 
     def terminate_task(self, scope=None):

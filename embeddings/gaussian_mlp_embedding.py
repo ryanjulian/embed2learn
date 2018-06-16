@@ -2,20 +2,20 @@ import numpy as np
 import tensorflow as tf
 
 from garage.core import Serializable
-from garage.misc.overrides import overrides
+from garage.misc import ext
 from garage.misc import logger
-
-from garage.tf.core import LayersPowered
-import garage.tf.core.layers as L
-from garage.tf.core.network import MLP
-from garage.tf.distributions import DiagonalGaussian
+from garage.misc.overrides import overrides
+from garage.tf.core import Parameterized
 from garage.tf.misc import tensor_utils
 from garage.tf.spaces import Box
 
 from sandbox.embed2learn.embeddings import StochasticEmbedding
+from sandbox.embed2learn.tf.distributions import DiagonalGaussian
+from sandbox.embed2learn.tf.network_utils import mlp
+from sandbox.embed2learn.tf.network_utils import parameter
 
 
-class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
+class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
     def __init__(self,
                  embedding_spec,
                  name="GaussianMLPEmbedding",
@@ -35,7 +35,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
                  std_parameterization='exp'):
         """
         :param embedding_spec:
-        :param hidden_sizes: list of sizes for the fully-connected hidden layers
+        :param hidden_sizes: list of sizes for the fully-connected hidden
+          layers
         :param learn_std: Is std trainable?
         :param init_std: Inital std
         :param adaptive_std:
@@ -56,160 +57,243 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
             -softplus: the std will be computed as log(1+exp(x))
         :return:
         """
-        Serializable.quick_init(self, locals())
         assert isinstance(embedding_spec.latent_space, Box)
+        StochasticEmbedding.__init__(self, embedding_spec)
+        Parameterized.__init__(self)
+        Serializable.quick_init(self, locals())
+
+        if mean_network or std_network:
+            raise NotImplementedError
+
         self.name = name
+        self._variable_scope = tf.variable_scope(
+            self.name, reuse=tf.AUTO_REUSE)
+        self._name_scope = tf.name_scope(self.name)
 
-        with tf.variable_scope(name):
-            in_dim = embedding_spec.input_space.flat_dim
-            latent_dim = embedding_spec.latent_space.flat_dim
+        # TODO: eliminate
+        self._dist = DiagonalGaussian(self.latent_space.flat_dim)
 
-            # create network
-            if mean_network is None:
-                if std_share_network:
-                    if std_parameterization == 'exp':
-                        init_std_param = np.log(init_std)
-                    elif std_parameterization == 'softplus':
-                        init_std_param = np.log(np.exp(init_std) - 1)
-                    else:
-                        raise NotImplementedError
+        # Network parameters
+        self._hidden_sizes = hidden_sizes
+        self._learn_std = learn_std
+        self._init_std = init_std
+        self._adaptive_std = adaptive_std
+        self._std_share_network = std_share_network
+        self._std_hidden_sizes = std_hidden_sizes
+        self._min_std = min_std
+        self._max_std = max_std
+        self._std_hidden_nonlinearity = std_hidden_nonlinearity
+        self._hidden_nonlinearity = hidden_nonlinearity
+        self._output_nonlinearity = output_nonlinearity
+        self._mean_network = mean_network
+        self._std_network = std_network
+        self._std_parameterization = std_parameterization
 
-                    init_b = tf.constant_initializer(init_std_param)
-                    mean_network = MLP(
-                        name="mean_network",
-                        input_shape=(in_dim, ),
+        # Tranform std arguments to parameterized space
+        self._init_std_param = None
+        self._min_std_param = None
+        self._max_std_param = None
+        if std_parameterization == 'exp':
+            self._init_std_param = np.log(init_std)
+            if min_std:
+                self._min_std_param = np.log(min_std)
+            if max_std:
+                self._max_std_param = np.log(max_std)
+        elif std_parameterization == 'softplus':
+            self._init_std_param = np.log(np.exp(init_std) - 1)
+            if min_std:
+                self._min_std_param = np.log(np.exp(min_std) - 1)
+            if max_std:
+                self._max_std_param = np.log(np.exp(max_std) - 1)
+        else:
+            raise NotImplementedError
+
+        # Build default graph
+        with self._name_scope:
+            # inputs
+            self._input = self.input_space.new_tensor_variable(
+                name="input", extra_dims=1)
+
+            with tf.name_scope("default", values=[self._input]):
+                # network
+                latent_var, mean_var, std_param_var, dist = self._build_graph(
+                    self._input)
+
+            # outputs
+            self._latent = tf.identity(latent_var, name="latent")
+            self._latent_mean = tf.identity(mean_var, name="latent_mean")
+            self._latent_std_param = tf.identity(std_param_var,
+                                                 "latent_std_param")
+            self._latent_distribution = dist
+
+            # compiled functions
+            with tf.variable_scope("f_dist"):
+                self._f_dist = tensor_utils.compile_function(
+                    inputs=[self._input],
+                    outputs=[
+                        self._latent, self._latent_mean, self._latent_std_param
+                    ],
+                )
+
+    @property
+    def inputs(self):
+        return self._input
+
+    @property
+    def outputs(self):
+        return (self._latent, self._latent_mean, self._latent_std_param,
+                self._latent_distribution)
+
+    def _build_graph(self, from_input):
+        latent_dim = self.latent_space.flat_dim
+        with self._variable_scope:
+            with tf.variable_scope("dist_params"):
+                if self._std_share_network:
+                    # mean and std networks share an MLP
+                    b = tf.zeros_initializer()
+                    if self._init_std_param:
+                        b = np.concatenate(
+                            [
+                                np.zeros(latent_dim),
+                                np.full(latent_dim, self._init_std_param)
+                            ],
+                            axis=0)
+                        b = tf.constant_initializer(b)
+                    mean_std_network = mlp(
+                        with_input=from_input,
                         output_dim=latent_dim * 2,
-                        hidden_sizes=hidden_sizes,
-                        hidden_nonlinearity=hidden_nonlinearity,
-                        output_nonlinearity=output_nonlinearity,
-                        output_b_init=init_b,
-                    )
-                    l_mean = L.SliceLayer(
-                        mean_network.output_layer,
-                        slice(latent_dim),
-                        name="mean_slice")
+                        hidden_sizes=self._hidden_sizes,
+                        hidden_nonlinearity=self._hidden_nonlinearity,
+                        output_nonlinearity=self._output_nonlinearity,
+                        output_b_init=b,
+                        name="mean_std_network")
+                    with tf.variable_scope("mean_network"):
+                        mean_network = mean_std_network[..., :latent_dim]
+                    with tf.variable_scope("std_network"):
+                        std_network = mean_std_network[..., latent_dim:]
                 else:
-                    mean_network = MLP(
-                        name="mean_network",
-                        input_shape=(in_dim, ),
+                    # separate MLPs for mean and std networks
+                    # mean network
+                    mean_network = mlp(
+                        with_input=from_input,
                         output_dim=latent_dim,
-                        hidden_sizes=hidden_sizes,
-                        hidden_nonlinearity=hidden_nonlinearity,
-                        output_nonlinearity=output_nonlinearity,
-                    )
-                    l_mean = mean_network.output_layer
-            self._mean_network = mean_network
+                        hidden_sizes=self._hidden_sizes,
+                        hidden_nonlinearity=self._hidden_nonlinearity,
+                        output_nonlinearity=self._output_nonlinearity,
+                        name="mean_network")
 
-            in_var = mean_network.input_layer.input_var
-
-            if std_network is not None:
-                l_std_param = std_network.output_layer
-            else:
-                if adaptive_std:
-                    std_network = MLP(
-                        name="std_network",
-                        input_shape=(in_dim, ),
-                        input_layer=mean_network.input_layer,
-                        output_dim=latent_dim,
-                        hidden_sizes=std_hidden_sizes,
-                        hidden_nonlinearity=std_hidden_nonlinearity,
-                        output_nonlinearity=None,
-                    )
-                    l_std_param = std_network.output_layer
-                elif std_share_network:
-                    l_std_param = L.SliceLayer(
-                        mean_network.output_layer,
-                        slice(latent_dim, 2 * latent_dim),
-                        name="l_std_slice")
-                else:
-                    if std_parameterization == 'exp':
-                        init_std_param = np.log(init_std)
-                    elif std_parameterization == 'softplus':
-                        init_std_param = np.log(np.exp(init_std) - 1)
+                    # std network
+                    if self._adaptive_std:
+                        b = tf.constant_initializer(self._init_std_param)
+                        std_network = mlp(
+                            with_input=from_input,
+                            output_dim=latent_dim,
+                            hidden_sizes=self._std_hidden_sizes,
+                            hidden_nonlinearity=self._std_hidden_nonlinearity,
+                            output_nonlinearity=self._output_nonlinearity,
+                            output_b_init=b,
+                            name="std_network")
                     else:
-                        raise NotImplementedError
-                    l_std_param = L.ParamLayer(
-                        mean_network.input_layer,
-                        num_units=latent_dim,
-                        param=tf.constant_initializer(init_std_param),
-                        name="output_std_param",
-                        trainable=learn_std,
-                    )
+                        p = tf.constant_initializer(self._init_std_param)
+                        std_network = parameter(
+                            with_input=from_input,
+                            length=latent_dim,
+                            initializer=p,
+                            trainable=self._learn_std,
+                            name="std_network")
 
-            self.std_parameterization = std_parameterization
+                mean_var = mean_network
+                std_param_var = std_network
 
-            if std_parameterization == 'exp':
-                min_std_param = np.log(min_std)
-            elif std_parameterization == 'softplus':
-                min_std_param = np.log(np.exp(min_std) - 1)
-            else:
-                raise NotImplementedError
+                with tf.variable_scope("std_limits"):
+                    if self._min_std_param:
+                        std_param_var = tf.maximum(std_param_var,
+                                                   self._min_std_param)
+                    if self._max_std_param:
+                        std_param_var = tf.minimum(std_param_var,
+                                                   self._max_std_param)
 
-            self.min_std_param = min_std_param
+            with tf.variable_scope("std_parameterization"):
+                # build std_var with std parameterization
+                if self._std_parameterization == "exp":
+                    std_var = tf.exp(std_param_var)
+                elif std_parameterization == "softplus":
+                    std_var = tf.log(1. + tf.exp(std_param_var))
+                else:
+                    raise NotImplementedError
 
-            self._l_mean = l_mean
-            self._l_std_param = l_std_param
+            dist = tf.contrib.distributions.MultivariateNormalDiag(
+                mean_var, std_var)
 
-            self._dist = DiagonalGaussian(latent_dim)
+            latent_var = dist.sample(seed=ext.get_seed())
 
-            LayersPowered.__init__(self, [l_mean, l_std_param])
-            super(GaussianMLPEmbedding, self).__init__(embedding_spec)
+            return latent_var, mean_var, std_param_var, dist
 
-            dist_info_sym = self.dist_info_sym(
-                mean_network.input_layer.input_var, dict())
-            mean_var = dist_info_sym["mean"]
-            log_std_var = dist_info_sym["log_std"]
+    @overrides
+    def get_params_internal(self, **tags):
+        if tags.get("trainable"):
+            params = [v for v in tf.trainable_variables(scope=self.name)]
+        else:
+            params = [v for v in tf.global_variables(scope=self.name)]
 
-            if max_std is not None:
-                # clip log_std
-                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
-                log_std_var = tf.minimum(
-                    log_std_var, log_std_limit, name="log_std_clip")
-
-            self._f_dist = tensor_utils.compile_function(
-                inputs=[in_var],
-                outputs=[mean_var, log_std_var],
-            )
+        return params
 
     @property
     def vectorized(self):
         return True
 
-    def dist_info_sym(self, in_var, state_info_vars=None,
-                      name="dist_info_sym"):
-        with tensor_utils.enclosing_scope(self.name, name):
-            mean_var, std_param_var = L.get_output(
-                [self._l_mean, self._l_std_param], in_var)
-            if self.min_std_param is not None:
-                std_param_var = tf.maximum(std_param_var, self.min_std_param)
-            if self.std_parameterization == 'exp':
-                log_std_var = std_param_var
-            elif self.std_parameterization == 'softplus':
-                log_std_var = tf.log(tf.log(1. + tf.exp(std_param_var)))
-            else:
-                raise NotImplementedError
-            return dict(mean=mean_var, log_std=log_std_var)
+    def dist_info_sym(self, input_var, state_info_vars=None, name=None):
+        with tf.name_scope(name, "dist_info_sym",
+                           [input_var, state_info_vars]):
+            _, mean, log_std, _ = self._build_graph(input_var)
+
+            return dict(mean=mean, log_std=log_std)
+
+    @property
+    def latent(self):
+        return self._latent
+
+    @property
+    def latent_mean(self):
+        return self._latent_mean
+
+    @property
+    def latent_std_param(self):
+        return self._latent_std_param
+
+    def latent_sym(self, input_var, name=None):
+        # with tf.name_scope(name, "latent_sym", [input_var]):
+        #     dist = self._build_graph(input_var)
+
+        #     return dist.sample(seed=ext.get_seed())
+        raise NotImplementedError
 
     @overrides
     def get_latent(self, an_input):
+        # flat_in = self.input_space.flatten(an_input)
+        # mean, log_std = [x[0] for x in self._f_dist([flat_in])]
+        # rnd = np.random.normal(size=mean.shape)
+        # latent = rnd * np.exp(log_std) + mean
+        # return latent, dict(mean=mean, log_std=log_std)
         flat_in = self.input_space.flatten(an_input)
-        mean, log_std = [x[0] for x in self._f_dist([flat_in])]
-        rnd = np.random.normal(size=mean.shape)
-        latent = rnd * np.exp(log_std) + mean
+        latent, mean, log_std = [x[0] for x in self._f_dist([flat_in])]
         return latent, dict(mean=mean, log_std=log_std)
 
     def get_latents(self, inputs):
+        # flat_in = self.input_space.flatten_n(inputs)
+        # means, log_stds = self._f_dist(flat_in)
+        # rnd = np.random.normal(size=means.shape)
+        # latents = rnd * np.exp(log_stds) + means
+        # return latents, dict(mean=means, log_std=log_stds)
         flat_in = self.input_space.flatten_n(inputs)
-        means, log_stds = self._f_dist(flat_in)
-        rnd = np.random.normal(size=means.shape)
-        latents = rnd * np.exp(log_stds) + means
+        latents, means, log_stds = self._f_dist(flat_in)
         return latents, dict(mean=means, log_std=log_stds)
 
     def get_reparam_latent_sym(self,
-                               in_var,
+                               input_var,
                                latent_var,
                                old_dist_info_vars,
-                               name="get_reparam_latent_sym"):
+                               name=None):
         """
         Given inputs, old latent outputs, and a distribution of old latent
         outputs, return a symbolically reparameterized representation of the
@@ -219,8 +303,9 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
         :param old_dist_info_vars:
         :return:
         """
-        with tensor_utils.enclosing_scope(self.name, name):
-            new_dist_info_vars = self.dist_info_sym(in_var, latent_var)
+        with tf.name_scope(name, "get_reparam_latent_sym",
+                           [input_var, latent_var, old_dist_info_vars]):
+            new_dist_info_vars = self.dist_info_sym(input_var, latent_var)
             new_mean_var, new_log_std_var = new_dist_info_vars[
                 "mean"], new_dist_info_vars["log_std"]
             old_mean_var, old_log_std_var = old_dist_info_vars[
@@ -233,35 +318,36 @@ class GaussianMLPEmbedding(StochasticEmbedding, LayersPowered, Serializable):
 
     def log_likelihood(self, an_input, latent):
         flat_in = self.input_space.flatten(an_input)
-        mean, log_std = [x[0] for x in self._f_dist([flat_in])]
+        _, mean, log_std = [x[0] for x in self._f_dist([flat_in])]
         return self._dist.log_likelihood(latent,
                                          dict(mean=mean, log_std=log_std))
 
     def log_likelihoods(self, inputs, latents):
         flat_in = self.input_space.flatten_n(inputs)
-        means, log_stds = self._f_dist(flat_in)
+        _, means, log_stds = self._f_dist(flat_in)
         return self._dist.log_likelihood(latents,
                                          dict(mean=means, log_std=log_stds))
 
-    def log_likelihood_sym(self, input_var, latent_var, name="log_likelihood"):
-        with tensor_utils.enclosing_scope(self.name, name):
-            dist_info = self.dist_info_sym(input_var, latent_var)
-            means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
-            return self._dist.log_likelihood_sym(
-                latent_var, dict(mean=means_var, log_std=log_stds_var))
+    def log_likelihood_sym(self, input_var, latent_var, name=None):
+        with tf.name_scope(name, "log_likelihood_sym",
+                           [input_var, latent_var]):
+            # dist_info = self.dist_info_sym(input_var, latent_var)
+            # means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
+            # return self._dist.log_likelihood_sym(
+            #     latent_var, dict(mean=means_var, log_std=log_stds_var))
+            _, _, _, dist = self._build_graph(input_var)
+            return dist.log_prob(latent_var)
 
-    def entropy(self, dist_info):
-        return self.distribution.entropy(dist_info)
+    def entropy_sym(self, input_var, name=None):
+        with tf.name_scope(name, "entropy_sym", [input_var]):
+            _, _, _, dist = self._build_graph(input_var)
+            return dist.entropy()
 
-    def entropy_sym(self, dist_info_var, name="entropy_sym"):
-        with tensor_utils.enclosing_scope(self.name, name):
-            return self.distribution.entropy_sym(dist_info_var)
+    def entropy_sym_sampled(self, dist_info_vars, name=None):
+        with tf.name_scope(name, "entropy_sym_sampled", [dist_info_vars]):
+            return self._dist.entropy_sym(dist_info_vars)
 
     def log_diagnostics(self):
         log_stds = np.vstack(
             [path["agent_infos"]["log_std"] for path in paths])
         logger.record_tabular('AverageEmbeddingStd', np.mean(np.exp(log_stds)))
-
-    @property
-    def distribution(self):
-        return self._dist
