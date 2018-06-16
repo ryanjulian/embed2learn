@@ -114,7 +114,7 @@ def run_task(plot=True, *_):
         plot_warmup_itrs=30,
         policy_ent_coeff=0.,  # 0.001,  #0.1,
         # task_encoder_ent_coeff=1e-4,
-        task_encoder_ent_coeff=0.,  #0.1,
+        task_encoder_ent_coeff=0.1,  #0.1,
         trajectory_encoder_ent_coeff=0.,  # 0.03,  #0.1,  # 0.1,
     )
     algo.train()
@@ -123,10 +123,8 @@ def run_task(plot=True, *_):
 run_experiment_lite(
     run_task,
     exp_prefix='trpo_point_embed',
-    n_parallel=16,  # > 1 is broken
+    n_parallel=1,
     plot=True,
-    use_gpu=True,
-    use_tf=True,
 )
 
 # run_task()

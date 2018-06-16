@@ -1,4 +1,4 @@
-from garage.tf.core import Parameterized
+#from garage.tf.core import Parameterized
 from garage.tf.policies import Policy
 from garage.tf.policies import StochasticPolicy
 
@@ -7,9 +7,9 @@ from sandbox.embed2learn.embeddings import StochasticEmbedding
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 
-class MultitaskPolicy(Policy, Parameterized):
-    def __init__(self, env_spec, embedding: Embedding, task_space):
-        Parameterized.__init__(self)
+class MultitaskPolicy(Policy):
+    def __init__(self, env_spec, embedding, task_space):
+        #Parameterized.__init__(self)
         self._env_spec = env_spec
         self._embedding = embedding
         self._task_space = task_space

@@ -94,8 +94,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._build_opt()
 
         # Optimize policy (with embedding) and traj_encoder jointly
-        pol_embed = JointParameterized(
-            components=[self.policy, self.policy.embedding])
+        # pol_embed = JointParameterized(
+        #     components=[self.policy, self.policy.embedding])
+        pol_embed = self.policy
 
         self.optimizer.update_opt(
             loss=pol_loss,
@@ -216,9 +217,16 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._state_info_flat = flatten_batch_dict(
             self._state_info_vars, name="state_info_flat")
 
+        # self._dist_info_vars = self.policy.dist_info_sym(
+        #     {
+        #         self.policy.env_input_var: obs_flat,
+        #         self.policy.latent_mean_var: latent_flat
+        #     },
+        #     self._state_info_flat,
+        #     name="dist_info_vars")
         self._dist_info_vars = self.policy.dist_info_sym(
             {
-                self.policy.env_input_var: obs_flat,
+                self.policy.env_input: obs_flat,
                 self.policy.latent_mean_var: latent_flat
             },
             self._state_info_flat,
@@ -291,7 +299,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     def build_policy_input(self):
         input_list = [
             self.policy.task_input_var,
-            self.policy.env_input_var,
+            self.policy.env_input,
             self._obs_var,
             self._action_var,
             self._reward_var,
@@ -384,6 +392,33 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         with tf.variable_scope("policy_loss"):
             with tf.variable_scope("advantages"):
+                # Calculate advantages
+                #
+                # Advantages are a discounted cumulative sum.
+                #
+                # The discount cumulative sum can be represented as an IIR
+                # filter ob the reversed input vectors, i.e.
+                #    y[t] - discount*y[t+1] = x[t]
+                #        or
+                #    rev(y)[t] - discount*rev(y)[t-1] = rev(x)[t]
+                #
+                # Given the time-domain IIR filter step response, we can
+                # calculate the filter response to our signal by convolving the
+                # signal with the filter response function. The time-domain IIR
+                # step response is calculated below as discount_filter:
+                #     discount_filter =
+                #         [1, discount, discount^2, ..., discount^N-1]
+                #         where the epsiode length is N.
+                #
+                # We convolve discount_filter with the reversed time-domain
+                # signal deltas to calculate the reversed advantages:
+                #     rev(advantages) = discount_filter (X) rev(deltas)
+                #
+                # TensorFlow's tf.nn.conv1d op is not a true convolution, but
+                # actually a cross-correlation, so its input and output are
+                # already implicitly reversed for us.
+                #    advantages = discount_filter (tf.nn.conv1d) deltas
+
                 # Prepare convolutional IIR filter to calculate advantages
                 gamma_lambda = tf.constant(
                     float(self.discount) * float(self.gae_lambda),
@@ -404,6 +439,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 adv = tf.nn.conv1d(
                     deltas_pad, advantage_filter, stride=1, padding='VALID')
                 advantages = tf.reshape(adv, [-1])
+
             adv_flat = flatten_batch(advantages, name="adv_flat")
 
             # Filter valid timesteps
@@ -477,19 +513,19 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             traj_enc_loss = -tf.reduce_mean(
                 discount_traj_ll_valid, name="traj_enc_loss")
 
-            # Flatten input variables
-            traj_enc_state_info_flat = flatten_batch_dict(
-                self._traj_enc_state_info_vars,
-                name="traj_enc_state_info_flat")
-            traj_enc_old_dist_info_flat = flatten_batch_dict(
-                self._traj_enc_old_dist_info_vars,
-                name="traj_enc_old_dist_info_flat")
+            # # Flatten input variables
+            # traj_enc_state_info_flat = flatten_batch_dict(
+            #     self._traj_enc_state_info_vars,
+            #     name="traj_enc_state_info_flat")
+            # traj_enc_old_dist_info_flat = flatten_batch_dict(
+            #     self._traj_enc_old_dist_info_vars,
+            #     name="traj_enc_old_dist_info_flat")
 
-            # Calculate task encoder distributions for each timestep
-            traj_enc_dist_info_vars = self.traj_encoder.dist_info_sym(
-                traj_flat,
-                traj_enc_state_info_flat,
-                name="traj_enc_dist_info_vars")
+            # # Calculate task encoder distributions for each timestep
+            # traj_enc_dist_info_vars = self.traj_encoder.dist_info_sym(
+            #     traj_flat,
+            #     traj_enc_state_info_flat,
+            #     name="traj_enc_dist_info_vars")
 
             # # Filter for valid time steps
             # traj_enc_old_dist_info_valid = filter_valids_dict(
@@ -502,6 +538,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             #     name="traj_enc_dist_info_vars_valid")
 
             # # Calculate KL divergence
+            # kl = dist.kl_sym(traj_enc_old_dist_info_vars_valid,
+            #                  traj_enc_dist_info_vars_valid)
+            # traj_enc_kl = tf.reduce_mean(kl, "traj_enc_kl")
 
         return traj_enc_loss
 
@@ -726,10 +765,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     # Visualize task embedding distributions
     def visualize_distribution(self):
         #TODO(@junchao) implement logger counterpart for distribution histograms
-        if not hasattr(
-                logger,
-                '_tensorboard_writer') or logger._tensorboard_writer is None:
-            return
+        # if not hasattr(
+        #         logger,
+        #         '_tensorboard_writer') or logger._tensorboard_writer is None:
+        #     return
 
         num_tasks = self.policy.task_space.flat_dim
         all_tasks = np.eye(num_tasks, num_tasks)
@@ -759,11 +798,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             x = tf.assign(self.z_summary[l], all_combined)
             tf.get_default_session().run(x)
 
-        z_summary = tf.summary.merge(self.z_summary_op)
-        z_summary = tf.get_default_session().run(z_summary)
-        logger._tensorboard_writer.add_summary(
-            z_summary, global_step=logger._tensorboard_default_step)
-        logger._tensorboard_writer.flush()
+        # z_summary = tf.summary.merge(self.z_summary_op)
+        # z_summary = tf.get_default_session().run(z_summary)
+        # logger._tensorboard_writer.add_summary(
+        #     z_summary, global_step=logger._tensorboard_default_step)
+        # logger._tensorboard_writer.flush()
 
     @overrides
     def optimize_policy(self, itr, **kwargs):

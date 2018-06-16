@@ -3,12 +3,13 @@ import itertools
 import numpy as np
 import tensorflow as tf
 
+#from garage.core import Parameterized
 from garage.core import Serializable
 from garage.misc.overrides import overrides
 from garage.misc import logger
 
-from garage.tf.core import LayersPowered
-import garage.tf.core.layers as L
+#from garage.tf.core import LayersPowered
+#import garage.tf.core.layers as L
 from garage.tf.core.network import MLP
 from garage.tf.distributions import DiagonalGaussian
 from garage.tf.misc import tensor_utils
@@ -18,8 +19,7 @@ from sandbox.embed2learn.embeddings import StochasticEmbedding
 from sandbox.embed2learn.embeddings import StochasticMultitaskPolicy
 
 
-class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
-                                 Serializable):
+class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Serializable):
     def __init__(self,
                  env_spec,
                  embedding,
@@ -76,51 +76,104 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
             self.task_input = self._embedding._mean_network.input_layer
             self.task_input_var = self.task_input.input_var
 
-            self.env_input = L.InputLayer(
-                (None, obs_dim), name="policy_env_input")
-            self.env_input_var = self.env_input.input_var
+            # self.env_input = L.InputLayer(
+            #     (None, obs_dim), name="policy_env_input")
+            # self.env_input_var = self.env_input.input_var
+            self.env_input = self.observation_space.new_tensor_variable(
+                name="env_input", extra_dims=1
+            )
 
             embed_dist_info_sym = self._embedding.dist_info_sym(
-                self.task_input.input_var, {
-                    self.env_input.input_var: self.env_input.input_var,
-                    self.task_input.input_var: self.task_input.input_var
-                })
+                self.task_input.input_var)
             self.latent_mean_var = embed_dist_info_sym["mean"]
             self.latent_log_std_var = embed_dist_info_sym["log_std"]
-            self.latent = L.InputLayer(
-                (None, latent_dim), self.latent_mean_var, name="latent_input")
+            # self.latent = L.InputLayer(
+            #     (None, latent_dim), self.latent_mean_var, name="latent_input")
+            self.latent = self._embedding.latent_space.new_tensor_variable(
+                name="latent_input",
+                extra_dims=1
+            )
 
-            self._policy_input = L.ConcatLayer((self.latent, self.env_input))
+            #self._policy_input = L.ConcatLayer((self.latent, self.env_input))
+            self._policy_input = tf.concat(
+                [self.latent, self.env_input], axis=1)
 
             # create network
-            if mean_network is None:
-                mean_network = MLP(
-                    name="mean_network",
-                    input_shape=(latent_obs_dim, ),
-                    input_layer=self._policy_input,
-                    output_dim=action_dim,
-                    hidden_sizes=hidden_sizes,
-                    hidden_nonlinearity=hidden_nonlinearity,
-                    output_nonlinearity=output_nonlinearity,
-                )
-            self._mean_network = mean_network
+            # if mean_network is None:
+            #     mean_network = MLP(
+            #         name="mean_network",
+            #         input_shape=(latent_obs_dim, ),
+            #         input_layer=self._policy_input,
+            #         output_dim=action_dim,
+            #         hidden_sizes=hidden_sizes,
+            #         hidden_nonlinearity=hidden_nonlinearity,
+            #         output_nonlinearity=output_nonlinearity,
+            #     )
+            #self._mean_network = mean_network
 
-            l_mean = mean_network.output_layer
+            # create network
+            l_mean = None
+            if mean_network is None:
+                with tf.variable_scope("mean_network"):
+                    prev = self._policy_input
+                    for i, h in enumerate(hidden_sizes):
+                        prev = tf.layers.dense(
+                            prev,
+                            h,
+                            activation=hidden_nonlinearity,
+                            name="fc{}".format(i))
+                    out = tf.layers.dense(
+                        prev,
+                        action_dim,
+                        activation=output_nonlinearity,
+                        name="out")
+                l_mean = out
+            else:
+                l_mean = mean_network
+
+            # if std_network is not None:
+            #     l_std_param = std_network.output_layer
+            # else:
+            #     if adaptive_std:
+            #         std_network = MLP(
+            #             name="std_network",
+            #             input_shape=(latent_obs_dim, ),
+            #             input_layer=mean_network.input_layer,
+            #             output_dim=action_dim,
+            #             hidden_sizes=std_hidden_sizes,
+            #             hidden_nonlinearity=std_hidden_nonlinearity,
+            #             output_nonlinearity=None,
+            #         )
+            #         l_std_param = std_network.output_layer
+            #     else:
+            #         if std_parametrization == 'exp':
+            #             init_std_param = np.log(init_std)
+            #         elif std_parametrization == 'softplus':
+            #             init_std_param = np.log(np.exp(init_std) - 1)
+            #         else:
+            #             raise NotImplementedError
+            #         l_std_param = L.ParamLayer(
+            #             mean_network.input_layer,
+            #             num_units=action_dim,
+            #             param=tf.constant_initializer(init_std_param),
+            #             name="output_std_param",
+            #             trainable=learn_std,
+            #         )
 
             if std_network is not None:
-                l_std_param = std_network.output_layer
+                l_std_param = std_network
             else:
                 if adaptive_std:
-                    std_network = MLP(
-                        name="std_network",
-                        input_shape=(latent_obs_dim, ),
-                        input_layer=mean_network.input_layer,
-                        output_dim=action_dim,
-                        hidden_sizes=std_hidden_sizes,
-                        hidden_nonlinearity=std_hidden_nonlinearity,
-                        output_nonlinearity=None,
-                    )
-                    l_std_param = std_network.output_layer
+                    with tf.variable_scope("std_network"):
+                        prev = self._policy_input
+                        for i, h in enumerate(std_hidden_sizes):
+                            prev = tf.layers.dense(
+                                prev,
+                                h,
+                                activation=std_hidden_nonlinearity,
+                                name="fc{}".format(i))
+                        out = tf.layers.dense(prev, action_dim, name="out")
+                    l_std_param = out
                 else:
                     if std_parametrization == 'exp':
                         init_std_param = np.log(init_std)
@@ -128,13 +181,11 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
                         init_std_param = np.log(np.exp(init_std) - 1)
                     else:
                         raise NotImplementedError
-                    l_std_param = L.ParamLayer(
-                        mean_network.input_layer,
-                        num_units=action_dim,
-                        param=tf.constant_initializer(init_std_param),
-                        name="output_std_param",
+                    l_std_param = tf.Variable(
+                        initial_value=init_std_param,
+                        expected_shape=(action_dim),
                         trainable=learn_std,
-                    )
+                        name="output_std_param")
 
             self.std_parametrization = std_parametrization
 
@@ -159,26 +210,38 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
 
             self._dist = DiagonalGaussian(action_dim)
 
-            LayersPowered.__init__(self, [l_mean, l_std_param])
+            #LayersPowered.__init__(self, [l_mean, l_std_param])
 
-            dist_info_sym = self.dist_info_sym(
-                {
-                    self.env_input.input_var: self.env_input.input_var,
-                    self.task_input.input_var: self.task_input.input_var
-                }, dict())
+            # dist_info_sym = self.dist_info_sym(
+            #     {
+            #         self.env_input.input_var: self.env_input.input_var,
+            #         self.task_input.input_var: self.task_input.input_var
+            #     }, dict())
+            dist_info_sym = self.dist_info_sym(self._policy_input)
             mean_var = dist_info_sym["mean"]
             log_std_var = dist_info_sym["log_std"]
 
+            # self._task_obs_action_dist = tensor_utils.compile_function(
+            #     inputs=[self.task_input_var, self.env_input.input_var],
+            #     outputs=[
+            #         mean_var, log_std_var, self.latent_mean_var,
+            #         self.latent_log_std_var
+            #     ],
+            # )
             self._task_obs_action_dist = tensor_utils.compile_function(
-                inputs=[self.task_input_var, self.env_input.input_var],
+                inputs=[self.task_input_var, self.env_input],
                 outputs=[
                     mean_var, log_std_var, self.latent_mean_var,
                     self.latent_log_std_var
                 ],
             )
 
+            # self._latent_obs_action_dist = tensor_utils.compile_function(
+            #     inputs=[self.latent_mean_var, self.env_input.input_var],
+            #     outputs=[mean_var, log_std_var],
+            # )
             self._latent_obs_action_dist = tensor_utils.compile_function(
-                inputs=[self.latent_mean_var, self.env_input.input_var],
+                inputs=[self.latent_mean_var, self.env_input],
                 outputs=[mean_var, log_std_var],
             )
 
@@ -186,24 +249,31 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, LayersPowered,
     def vectorized(self):
         return True
 
+    # @overrides
+    # def get_params_internal(self, **tags):
+    #     layers = L.get_all_layers(
+    #         self._output_layers, treat_as_input=self._input_layers)
+    #     layers += L.get_all_layers(
+    #         self._embedding._output_layers,
+    #         treat_as_input=self._embedding._input_layers)
+    #     params = itertools.chain.from_iterable(
+    #         l.get_params(**tags) for l in layers)
+    #     return L.unique(params)
+
     @overrides
-    def get_params_internal(self, **tags):
-        layers = L.get_all_layers(
-            self._output_layers, treat_as_input=self._input_layers)
-        layers += L.get_all_layers(
-            self._embedding._output_layers,
-            treat_as_input=self._embedding._input_layers)
-        params = itertools.chain.from_iterable(
-            l.get_params(**tags) for l in layers)
-        return L.unique(params)
+    def get_params(self, trainable=False):
+        return tf.trainable_variables(scope=self.name)
+
 
     def dist_info_sym(self,
                       obs_var,
                       state_info_vars=None,
                       name="dist_info_sym"):
         with tensor_utils.enclosing_scope(self.name, name):
-            mean_var, std_param_var = L.get_output(
-                [self._l_mean, self._l_std_param], obs_var)
+            # mean_var, std_param_var = L.get_output(
+            #     [self._l_mean, self._l_std_param], obs_var)
+            mean_var = self._l_mean
+            std_param_var = self._l_std_param
             if self.min_std_param is not None:
                 std_param_var = tf.maximum(std_param_var, self.min_std_param)
             if self.std_parametrization == 'exp':
