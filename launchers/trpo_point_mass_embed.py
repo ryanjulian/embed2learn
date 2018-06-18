@@ -1,7 +1,7 @@
 import numpy as np
 
 from garage.baselines import LinearFeatureBaseline
-from garage.misc.instrument import run_experiment_lite
+from garage.misc.instrument import run_experiment
 from garage.misc.ext import set_seed
 from garage.envs import EnvSpec
 
@@ -126,7 +126,7 @@ def run_task(plot=True, *_):
     algo.train()
 
 
-run_experiment_lite(
+run_experiment(
     run_task,
     exp_prefix='trpo_point_embed',
     n_parallel=16,

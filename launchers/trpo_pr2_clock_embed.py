@@ -4,7 +4,7 @@ import numpy as np
 
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import EnvSpec
-from garage.misc.instrument import run_experiment_lite
+from garage.misc.instrument import run_experiment
 
 from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
@@ -121,7 +121,7 @@ def run_task(*_):
     algo.train()
 
 
-run_experiment_lite(
+run_experiment(
     run_task,
     exp_prefix='trpo_pr2_clock_embed',
     n_parallel=N_PARALLEL,

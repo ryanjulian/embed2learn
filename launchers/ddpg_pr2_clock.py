@@ -1,7 +1,7 @@
 from garage.algos import DDPG
 from garage.envs.box2d import CartpoleEnv
 from garage.envs import normalize
-from garage.misc.instrument import run_experiment_lite
+from garage.misc.instrument import run_experiment
 from garage.exploration_strategies import OUStrategy
 from garage.policies import DeterministicMLPPolicy
 from garage.q_functions import ContinuousMLPQFunction
@@ -65,7 +65,7 @@ def run_task(*_):
     algo.train()
 
 
-run_experiment_lite(
+run_experiment(
     run_task,
     # Number of parallel workers for sampling
     n_parallel=1,

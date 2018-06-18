@@ -3,7 +3,7 @@ import numpy as np
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
 from garage.misc.instrument import stub
-from garage.misc.instrument import run_experiment_lite
+from garage.misc.instrument import run_experiment
 
 from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
