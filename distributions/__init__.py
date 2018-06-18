@@ -1,0 +1,1 @@
+from sandbox.embed2learn.distributions.diagonal_guassian import DiagonalGaussian
