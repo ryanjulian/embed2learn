@@ -46,7 +46,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
                     else:
                         raise NotImplementedError
 
-                    init_b = tf.constant_initializer(init_std_param)
+                    init_b = init_std_param
                     mean_network = MLP(
                         input_dim=in_dim,
                         output_dim=2 * latent_dim,
@@ -56,7 +56,9 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
                         output_b_init=init_b,
                         name="mean_network",
                     )
-                    l_mean = tf.slice(mean_network.output_op, 0, latent_dim, name="mean_slice")
+                    print(mean_network.output_op)
+                    l_mean, l_std_param = tf.split(mean_network.output_op, 2, axis=1, name="mean_slice")
+                    print(l_mean)
                 else:
                     mean_network = MLP(
                         input_dim=in_dim,
@@ -88,9 +90,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
                         name="std_network",
                     )
                     l_std_param = std_network.output_op
-                    self._std_input = std_network.input_ph
                 elif std_share_network:
-                    l_std_param = tf.slice(mean_network.output_op, latent_dim, latent_dim, name="std_slice")
+                    pass
                 else:
                     if std_parameterization == 'exp':
                         init_std_param = np.log(init_std)
@@ -113,21 +114,16 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
 
             self._l_mean = l_mean
             self._l_std_param = l_std_param
-
-            self._dist = DiagonalGaussian(l_mean, l_std_param, latent_dim)
+            print(l_mean, l_std_param)
+            if max_std:
+                log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
+                self._l_std_param = tf.minimum(self._l_std_param, log_std_limit, name="log_std_clip")
+            self._dist = DiagonalGaussian(self._l_mean, self._l_std_param, latent_dim)
 
         super(GaussianMLPEmbedding, self).__init__(embedding_spec)
 
-        if max_std:
-            log_std_limit = tf.constant(np.log(max_std), dtype=tf.float32)
-            self._l_std_param = tf.minimum(self._l_std_param, log_std_limit, name="log_std_clip")
-
     def _get_feed_dict(self, inputs):
-        feeds = {}
-        if self._mean_input:
-            feeds[self._mean_input] = inputs
-        if self._std_input:
-            feeds[self._std_input] = inputs
+        feeds = {self._mean_input: inputs}
         return feeds
 
     def get_latent(self, an_input):
@@ -161,3 +157,10 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
     @property
     def distribution(self):
         return self._dist
+
+    @property
+    def input_ph(self):
+        return self._mean_input
+
+    def entropy(self, name=None):
+        return self._dist.entropy(name)

@@ -17,7 +17,7 @@ class MLP(Serializable):
                  name='multi_layers_perceptrons'):
         super(MLP, self).__init__()
         Serializable.quick_init(self, locals())
-        if input_ph:
+        if input_ph is not None:
             self._input_ph = input_ph
         else:
             self._input_ph = tf.placeholder(
@@ -32,10 +32,10 @@ class MLP(Serializable):
         self.output_b_init = output_b_init
         self._output_op = self.feedforward(self.input_ph)
 
-    def feedforward(self, input_phs, return_preactivations=False, resuse=False):
-        with tf.variable_scope(self.name, reuse=resuse):
+    def feedforward(self, input_ph, return_preactivations=False, reuse=False):
+        with tf.variable_scope(self.name, reuse=reuse):
             preactivation = mlp_feedforward_op(
-                inputs=[input_phs],
+                inputs=[input_ph],
                 layer_sizes=self.layer_sizes,
                 activation_fn=self.activation_fn,
                 output_nonlinearity=None,
