@@ -71,16 +71,16 @@ def run_task(*_):
 
     # Embeddings
     task_embedding = GaussianMLPEmbedding(
-        name="task_embedding",
+        name="embedding",
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=0.1,  # 1.0 # 0.3
+        init_std=0.1,  # 0.1 1.0 # 0.3
     )
 
     # TODO(): rename to inference_network
     traj_embedding = GaussianMLPEmbedding(
-        name="traj_embedding",
+        name="inference",
         embedding_spec=traj_embed_spec,
         hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         std_share_network=True,
@@ -103,7 +103,7 @@ def run_task(*_):
         env=env,
         policy=policy,
         baseline=baseline,
-        trajectory_encoder=traj_embedding,
+        inference=traj_embedding,
         batch_size=4000,
         max_path_length=100,
         n_itr=1000,
@@ -111,18 +111,10 @@ def run_task(*_):
         step_size=0.01,
         plot=True,
         policy_ent_coeff=0.,  # 0.001,  #0.1,
-        task_encoder_ent_coeff=1e-5,  # 1e-4,
-        trajectory_encoder_ent_coeff=0.5,  # 0.3 # 0.03
+        embedding_ent_coeff=0.,  # 1e-5 1e-4,
+        inference_ce_coeff=0.5,  # 0.5 0.3 # 0.03
     )
-    # import tensorflow as tf
-    # from tensorflow.python import debug as tf_debug
-    # sess = tf.Session()
-    # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-    # sess.as_default().__enter__()
-    # algo.train(sess=sess)
-
     algo.train()
-
 
 run_experiment(
     run_task,

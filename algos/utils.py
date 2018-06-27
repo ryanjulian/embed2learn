@@ -1,3 +1,7 @@
+from collections import Iterable
+from collections import namedtuple
+
+import numpy as np
 import tensorflow as tf
 
 # TODO(gh/17): these should either be in garage.tf.misc.tensor_utils or
@@ -29,3 +33,20 @@ def filter_valids_dict(d, valid, name=None):
         for k, v in d.items():
             d_valid[k] = tf.boolean_mask(v, valid)
         return d_valid
+
+
+def namedtuple_singleton(name, **kwargs):
+    Singleton = namedtuple(name, kwargs.keys())
+    return Singleton(**kwargs)
+
+
+def flatten_inputs(deep):
+    def flatten(deep):
+        for d in deep:
+            if isinstance(d, Iterable) and not isinstance(
+                    d, (str, bytes, tf.Tensor, np.ndarray)):
+                yield from flatten(d)
+            else:
+                yield d
+
+    return list(flatten(deep))

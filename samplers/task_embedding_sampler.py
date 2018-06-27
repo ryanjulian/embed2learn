@@ -93,7 +93,7 @@ def rollout(env,
 
 
 # parallel_sampler worker API
-def _worker_populate_task(G, env, policy, task_encoder, scope=None):
+def _worker_populate_task(G, env, policy, inference, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
     G.env = pickle.loads(env)
     G.policy = pickle.loads(policy)
@@ -107,14 +107,14 @@ def _worker_terminate_task(G, scope=None):
     if getattr(G, "policy", None):
         G.policy.terminate()
         G.policy = None
-    if getattr(G, "task_encoder", None):
-        G.task_encoder.terminate()
-        G.task_encoder = None
+    if getattr(G, "inference", None):
+        G.inference.terminate()
+        G.inference = None
 
 
-def _worker_set_task_encoder_params(G, params, scope=None):
+def _worker_set_inference_params(G, params, scope=None):
     G = parallel_sampler._get_scoped_G(G, scope)
-    # G.task_encoder.set_param_values(params)
+    # G.inference.set_param_values(params)
 
 
 def _worker_collect_one_path(G, max_path_length, scope=None):
@@ -125,9 +125,9 @@ def _worker_collect_one_path(G, max_path_length, scope=None):
 
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
-    def __init__(self, *args, trajectory_encoder=None, **kwargs):
+    def __init__(self, *args, inference=None, **kwargs):
         super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
-        self.traj_encoder = trajectory_encoder
+        self.inference = inference
 
     def populate_task(self, env, policy, scope=None):
         logger.log("Populating workers...")
@@ -163,15 +163,15 @@ class TaskEmbeddingSampler(BatchSampler):
                      max_samples,
                      max_path_length,
                      env_params=None,
-                     task_encoder_params=None,
+                     inference_params=None,
                      scope=None):
         singleton_pool.run_each(
             parallel_sampler._worker_set_policy_params,
             [(policy_params, scope)] * singleton_pool.n_parallel,
         )
         singleton_pool.run_each(
-            _worker_set_task_encoder_params,
-            [(task_encoder_params, scope)] * singleton_pool.n_parallel,
+            _worker_set_inference_params,
+            [(inference_params, scope)] * singleton_pool.n_parallel,
         )
         if env_params:
             singleton_pool.run_each(
@@ -257,15 +257,15 @@ class TaskEmbeddingSampler(BatchSampler):
             # (n, window, d)
             #
             # The length of the sliding window is determined by the trajectory
-            # encoder spec. We smear the last few elements to preserve the time
-            # dimension.
-            window = self.traj_encoder.input_space.shape[0]
+            # inference spec. We smear the last few elements to preserve the
+            # time dimension.
+            window = self.inference.input_space.shape[0]
             trajs = sliding_window(act_obs, window, 1, smear=True)
-            trajs_flat = self.traj_encoder.input_space.flatten_n(trajs)
+            trajs_flat = self.inference.input_space.flatten_n(trajs)
             path['trajectories'] = trajs_flat
 
             # trajectory infos
-            _, traj_infos = self.traj_encoder.get_latents(trajs)
+            _, traj_infos = self.inference.get_latents(trajs)
             path['trajectory_infos'] = traj_infos
 
         ev = special.explained_variance_1d(

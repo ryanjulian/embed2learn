@@ -111,7 +111,7 @@ def run_task(plot=True, *_):
         env=env,
         policy=policy,
         baseline=baseline,
-        trajectory_encoder=traj_embedding,
+        inference=traj_embedding,
         batch_size=4000,
         max_path_length=100,
         n_itr=500,
@@ -120,8 +120,8 @@ def run_task(plot=True, *_):
         plot=plot,
         plot_warmup_itrs=20,
         policy_ent_coeff=0.0,  # 0.001,  #0.1,
-        task_encoder_ent_coeff=0.0,  #0.1,
-        trajectory_encoder_ent_coeff=0.,  # 0.03,  #0.1,  # 0.1,
+        embedding_ent_coeff=0.0,  #0.1,
+        inference_ce_ent_coeff=0.,  # 0.03,  #0.1,  # 0.1,
     )
     algo.train()
 
