@@ -8,11 +8,22 @@ from garage.misc import ext
 from garage.misc.overrides import overrides
 from garage.tf.algos import BatchPolopt
 from garage.tf.optimizers import FirstOrderOptimizer
+from garage.tf.optimizers import ConjugateGradientOptimizer
 
-from sandbox.embed2learn.algos.utils import flatten_batch, filter_valids, flatten_batch_dict, filter_valids_dict
+from sandbox.embed2learn.algos.utils import flatten_batch, filter_valids
 from sandbox.embed2learn.embeddings import StochasticMultitaskPolicy
 from sandbox.embed2learn.embeddings import StochasticEmbedding
 from sandbox.embed2learn.samplers.task_embedding_sampler import TaskEmbeddingSampler
+
+
+def _optimizer_or_default(optimizer, args):
+    use_optimizer = optimizer
+    use_args = args
+    if use_optimizer is None:
+        if use_args is None:
+            use_args = dict()
+        use_optimizer = ConjugateGradientOptimizer(**use_args)
+    return use_optimizer
 
 
 class NPOTaskEmbedding(BatchPolopt, Serializable):
@@ -41,6 +52,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._name_scope = tf.name_scope(self.name)
 
         with tf.name_scope(self.name):
+            self.optimizer = _optimizer_or_default(optimizer, optimizer_args)
             self.step_size = float(step_size)
             self.policy_ent_coeff = float(policy_ent_coeff)
             self.task_enc_ent_coeff = float(task_encoder_ent_coeff)
@@ -61,7 +73,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 **kwargs)
 
     def init_opt(self):
-        surr_loss, pol_mean_kl, traj_enc_loss = self._build_opt()
+        pol_loss, pol_mean_kl, traj_enc_loss, pol_inputs = self._build_opt()
+
+        self.optimizer.update_opt(
+            loss=pol_loss,
+            target=self.policy,
+            leq_constraint=(pol_mean_kl, self.step_size),
+            inputs=pol_inputs,
+            constraint_name="mean_kl",
+        )
 
     def _build_opt(self):
         with tf.name_scope("build_opt"):
@@ -87,7 +107,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._old_dist_mean = tf.placeholder(tf.float32, shape=[None, self.env.action_space.flat_dim], name="old_dist_mean_ph")
             self._old_dist_stds = tf.placeholder(tf.float32, shape=[None, self.env.action_space.flat_dim], name="old_dist_stds_ph")
             self._old_dist = dist_type(self._old_dist_mean, self._old_dist_stds, self.policy.dist.dim)
-            self._old_dist_vars = {'mean': self._old_dist.means, 'log_stds': self._old_dist.log_stds}
+            self._old_dist_vars_list = [self._old_dist.means, self._old_dist.log_stds]
 
             surr_loss, pol_mean_kl, traj_enc_loss, rewards = self.build_loss()
 
@@ -96,15 +116,31 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._traj_enc_loss = traj_enc_loss
             self._rewards = rewards
 
-        return self._surr_loss, self._pol_mean_kl, self._traj_enc_loss
+            policy_input_list = self._build_policy_input()
+
+        return self._surr_loss, self._pol_mean_kl, self._traj_enc_loss, policy_input_list
+
+    def _build_policy_input(self):
+        input_list = [
+            self._obs_ph,
+            self._action_ph,
+            self._reward_ph,
+            self._reward_ph,
+            self._baseline_ph,
+            self._trajectory_ph,
+            self._task_ph,
+            self._latents_ph,  # TODO check if we actually need this for policy+embedding optimization
+            self._valid_ph,
+        ] + self._old_dist_vars_list
+        return input_list
+
 
     def build_loss(self):
         task_enc_entropy, traj_ll, pol_entropy = self.get_entropy()
         rewards = self.get_rewards(task_enc_entropy, traj_ll, pol_entropy)
         surr_loss, pol_mean_kl = self.get_task_loss(task_enc_entropy, traj_ll,
                                                     pol_entropy, rewards)
-        traj_enc_loss = self.get_traj_loss(task_enc_entropy, traj_ll,
-                                           pol_entropy)
+        traj_enc_loss = self.get_traj_loss(task_enc_entropy, traj_ll, pol_entropy)
         return surr_loss, pol_mean_kl, traj_enc_loss, rewards
 
     def get_entropy(self):
@@ -113,7 +149,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         latent_flat = flatten_batch(self._latent_bp)
 
         with tf.name_scope("task_encoder_entropy"):
-            all_task_entropies = self.policy.embedding.entropy()  # TODO make an auxilary tensor for all task
+            all_task_entropies = self.policy.embedding.entropy()
             task_enc_entropy = tf.reduce_mean(
                 all_task_entropies, name="task_enc_entropy")
 
@@ -177,8 +213,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._old_dist.flatten_valid_filter(valid_flat)
 
             adv_valid = filter_valids(adv_flat, valid_flat, name="adv_valid")
-            # dist_info_vars_valid = filter_valids_dict(
-            #     self._dist_info_vars, valid_flat, name="dist_info_vars_valid")  #TODO
+
             dist.flatten_valid_filter(valid_flat)
             eps = tf.constant(1e-8, dtype=tf.float32)
             if self.center_adv:
@@ -192,7 +227,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     adv_valid = (adv_valid - m) + eps
 
             with tf.name_scope("kl"):
-                kl = dist.kl_divergence(self._old_dist)  #TODO need a filtered version...?
+                kl = dist.flat_kl_divergence(self._old_dist)
                 pol_mean_kl = tf.reduce_mean(kl)
 
             with tf.name_scope("surr_loss"):
@@ -242,7 +277,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         if created_session:
             sess.close()
 
-
     @overrides
     def optimize_policy(self, itr, **kwargs):
         paths = self.obtain_samples(itr)
@@ -256,22 +290,27 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                         'baselines', 'trajectories', 'tasks', 'latents',
                         'valids'))
         agent_infos = samples_data["agent_infos"]
-        state_info_list = [agent_infos[k] for k in self.policy.state_info_keys]  # TODO fix state info
+        # state_info_list = [agent_infos[k] for k in self.policy.state_info_keys]  # TODO fix state info
         dist_info_list = [
             agent_infos[k] for k in self.policy._dist.dist_info_keys
         ]
 
-        policy_input_values += tuple(state_info_list) + tuple(dist_info_list)
+        # policy_input_values += tuple(state_info_list) + tuple(dist_info_list)
+        policy_input_values += tuple(dist_info_list)  # It might be old dist TODO check this ..
+
         latent_infos = samples_data['latent_info']
 
-        task_enc_state_info_list = [
-            latent_infos[k] for k in self.policy.embedding.state_info_keys
-        ]
+        # task_enc_state_info_list = [
+        #     latent_infos[k] for k in self.policy.embedding.state_info_keys
+        # ]
         task_enc_dist_info_list = [
             latent_infos[k] for k in self.policy.embedding._dist.dist_info_keys
         ]
-        policy_input_values += tuple(task_enc_state_info_list) + tuple(
-            task_enc_dist_info_list)
+        # policy_input_values += tuple(task_enc_state_info_list) + tuple(
+        #     task_enc_dist_info_list)
+        policy_input_values += tuple(task_enc_dist_info_list)
+
+
         # add trajectory encoder params
         trajectory_infos = samples_data["trajectory_infos"]
         traj_enc_state_info_list = [
@@ -298,8 +337,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         return None
 
-    def get_feeddict(self, values):
-        raise NotImplementedError
+    def get_feeds(self, samples_data):
+        agent_infos = samples_data['agent_infos']
+        trajectory_infos = samples_data['trajectory_infos']
 
     def train_task(self, all_input_values):
         pass
@@ -316,6 +356,5 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self._valid_ph,
         ]
         return input_list
-
 
 

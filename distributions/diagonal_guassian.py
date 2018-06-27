@@ -41,10 +41,32 @@ class DiagonalGaussian(Distribution):
 
     @overrides
     def kl_divergence(self, other, name="kl_divergence"):
-        old_means = self.means
-        old_log_stds = self.log_stds
-        new_means = other.means
-        new_log_stds = other.log_stds
+        old_means = other.means
+        old_log_stds = other.log_stds
+        new_means = self.means
+        new_log_stds = self.log_stds
+        """
+        Compute the KL divergence of two multivariate Gaussian distribution with
+        diagonal covariance matrices
+        """
+        old_std = tf.exp(old_log_stds)
+        new_std = tf.exp(new_log_stds)
+        # means: (N*A)
+        # std: (N*A)
+        # formula:
+        # { (\mu_1 - \mu_2)^2 + \sigma_1^2 - \sigma_2^2 } / (2\sigma_2^2) +
+        # ln(\sigma_2/\sigma_1)
+        numerator = tf.square(old_means - new_means) + \
+                    tf.square(old_std) - tf.square(new_std)
+        denominator = 2 * tf.square(new_std) + 1e-8
+        return tf.reduce_sum(
+            numerator / denominator + new_log_stds - old_log_stds, axis=-1)
+
+    def flat_kl_divergence(self, other):
+        old_means = other.flatten_valid_means
+        old_log_stds = other.flatten_valid_stds
+        new_means = self.flatten_valid_means
+        new_log_stds = self.flatten_valid_stds
         """
         Compute the KL divergence of two multivariate Gaussian distribution with
         diagonal covariance matrices

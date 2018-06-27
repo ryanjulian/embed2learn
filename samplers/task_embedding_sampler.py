@@ -294,7 +294,7 @@ class TaskEmbeddingSampler(BatchSampler):
         actions = [path["actions"] for path in paths]
         actions = tensor_utils.pad_tensor_n(actions, max_path_length)
 
-        tasks = [path["tasks"] for path in paths]
+        tasks = [paths[0]["tasks"]]      # Modification: One task for each batch
         tasks = tensor_utils.pad_tensor_n(tasks, max_path_length)
 
         latents = [path['latents'] for path in paths]

@@ -2,13 +2,14 @@ import numpy as np
 import tensorflow as tf
 
 from garage.core import Serializable
+from garage.tf.core import Parameterized
 from garage.tf.spaces import Box
 from sandbox.embed2learn.core.networks import MLP
 from sandbox.embed2learn.distributions import DiagonalGaussian
 from sandbox.embed2learn.embeddings import StochasticMultitaskPolicy
 
 
-class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Serializable):
+class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized, Serializable):
 
     def __init__(self,
                  env_spec,
@@ -30,20 +31,15 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Serializable):
                  std_network=None,
                  std_parameterization='exp',
                  n_itr=500):
-        # print('init start')
-        # print(embedding)
-        # sample = embedding.distribution.sample()
-        # obs_ph = tf.placeholder(tf.float32, shape=[None, 2])
-        # input_layer = tf.concat([sample, obs_ph], axis=1)
-        # print(input_layer)
-
+        StochasticMultitaskPolicy.__init__(self, env_spec, embedding,
+                                           task_space)
+        Parameterized.__init__(self)
         Serializable.quick_init(self, locals())
         assert isinstance(env_spec.action_space, Box)
         self.name = name
 
         super(GaussianMLPMultitaskPolicy, self).__init__(
             env_spec, embedding, task_space)
-
 
         with tf.variable_scope(name):
             task_obs_dim = self.task_observation_space.flat_dim
@@ -56,21 +52,19 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Serializable):
             self.task_input_ph = self._embedding.input_ph
 
             bp_latents = self._embedding.distribution.sample(name='latent_samples_bp', seed=sample_seed)
-            # Tile for [n*m, latent_flat_dim], currently we only do one rollout so n=1, m = n_itr
-            print(bp_latents)
-
             bp_latents_tiled = tf.tile(tf.expand_dims(bp_latents, 1),
                                  [1, n_itr, 1])
-            print(bp_latents_tiled)
             self.bp_latents = tf.reshape(bp_latents_tiled, shape=[-1, latent_dim])
-            print(self.bp_latents)
-            self.ff_latents = self._embedding.distribution.sample(name='latent_samples_ff', seed=sample_seed)
 
+            self.ff_latents = self._embedding.distribution.sample(name='latent_samples_ff', seed=sample_seed)
+            self.ff_latents_ph = tf.placeholder(tf.float32, shape=[None, latent_dim], name="ff_latent_ph")
             self._obs_ph = tf.placeholder(tf.float32, shape=[None, obs_dim], name='obs_ph')
-            print(self._obs_ph)
-            ff_input_layer = tf.concat([self._obs_ph, self.ff_latents], axis=1, name='ff_input_layer')
+
+            ff_input_layer = tf.concat([self._obs_ph, self.ff_latents_ph], axis=1, name='ff_input_layer')
             input_layer = tf.concat([self._obs_ph, self.bp_latents], axis=1, name='bp_input_layer')
-            print(input_layer)
+
+            self._ff_input = ff_input_layer
+            self._bp_input = input_layer
 
             # Create the mean and std networks
             if mean_network is None:
@@ -159,6 +153,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Serializable):
             self._l_mean = l_mean
             self._l_std_param = l_std_param
             self._dist = DiagonalGaussian(l_mean, l_std_param, action_dim)
+            self._ff_dist = DiagonalGaussian(self.ff_mean_op, self.ff_std_op, action_dim)
+            self._get_action_op()
 
     @property
     def vectorized(self):
@@ -183,3 +179,34 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Serializable):
     def get_latent(self, task_one_hot):
         sess = tf.get_default_session()
         sess.run(self.ff_latents, feed_dict={self.task_ph: task_one_hot})
+
+    def _get_action_op(self):
+        with tf.name_scope("get_action"):
+            self._action_op = self._ff_dist.sample()
+
+    def get_action(self, observation):
+
+        flat_task_obs = self.task_observation_space.flatten(observation)
+        flat_task, flat_obs = self.split_observation(flat_task_obs)
+
+        sess = tf.get_default_session()
+        feed_dict = {self.task_ph: flat_task}
+        latent_info = sess.run([self.ff_latents, self._embedding.means, self._embedding.stds], feed_dict=feed_dict)
+
+        feed_dict = {self.obs_ph: flat_obs, self.ff_latents_ph: latent_info}
+
+        action, mean, std = sess.run([self._action_op, self.ff_mean_op, self.ff_std_op], feed_dict=feed_dict)
+
+
+    def get_params_internal(self, **tags):
+
+        if tags.get("trainable"):
+            params = [v for v in tf.trainable_variables(scope=self.name)]
+        else:
+            params = [v for v in tf.global_variables(scope=self.name)]
+
+        embed_params = self._embedding.get_params(**tags)
+        params.extend(embed_params)
+        return params
+
+

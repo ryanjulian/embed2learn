@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from garage.core import Serializable
+from garage.misc.overrides import overrides
 from garage.tf.spaces import Box
 from sandbox.embed2learn.core.networks import MLP
 from sandbox.embed2learn.distributions import DiagonalGaussian
@@ -25,7 +26,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
                  hidden_nonlinearity=tf.nn.tanh,
                  output_nonlinearity=None,
                  mean_network=None,
-                 std_network:MLP=None,
+                 std_network=None,
                  std_parameterization='exp'):
         Serializable.quick_init(self, locals())
 
@@ -34,8 +35,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
 
         # Create mean network and std network
         with tf.variable_scope(name):
-            in_dim = (embedding_spec.input_space.flat_dim)
-            latent_dim = (embedding_spec.latent_space.flat_dim)
+            in_dim = embedding_spec.input_space.flat_dim
+            latent_dim = embedding_spec.latent_space.flat_dim
 
             if mean_network is None:
                 if std_share_network:
@@ -135,8 +136,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
     def get_latents(self, inputs):
         feed_dict = self._get_feed_dict(inputs)
         sess = tf.get_default_session()
-        latents = sess.run(self._dist.sample(), feed_dict=feed_dict)
-        return latents
+        latents, means, stds = sess.run([self._dist.sample(), self._l_mean, self._l_std_param], feed_dict=feed_dict)
+        return latents, dict(mean=means, log_std=stds)
 
     def log_likelihood(self, an_input, latent):
         feed_dict = self._get_feed_dict(an_input)
@@ -164,3 +165,12 @@ class GaussianMLPEmbedding(StochasticEmbedding, Serializable):
 
     def entropy(self, name=None):
         return self._dist.entropy(name)
+
+    @overrides
+    def get_params_internal(self, **tags):
+        if tags.get("trainable"):
+            params = [v for v in tf.trainable_variables(scope=self.name)]
+        else:
+            params = [v for v in tf.global_variables(scope=self.name)]
+
+        return params
