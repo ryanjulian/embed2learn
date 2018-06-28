@@ -136,6 +136,22 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                 )
 
     @property
+    def input(self):
+        return self._input
+
+    @property
+    def latent(self):
+        return self._latent
+
+    @property
+    def latent_mean(self):
+        return self._latent_mean
+
+    @property
+    def latent_std_param(self):
+        return self._latent_std_param
+
+    @property
     def inputs(self):
         return self._input
 
@@ -146,19 +162,21 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
 
     def _build_graph(self, from_input):
         latent_dim = self.latent_space.flat_dim
+        small = 1e-5
+
         with self._variable_scope:
             with tf.variable_scope("dist_params"):
                 if self._std_share_network:
                     # mean and std networks share an MLP
-                    b = tf.zeros_initializer()
-                    if self._init_std_param:
-                        b = np.concatenate(
-                            [
-                                np.zeros(latent_dim),
-                                np.full(latent_dim, self._init_std_param)
-                            ],
-                            axis=0)
-                        b = tf.constant_initializer(b)
+                    b = np.concatenate(
+                        [
+                            np.zeros(latent_dim),
+                            np.full(latent_dim, self._init_std_param)
+                        ],
+                        axis=0)
+                    b = tf.constant_initializer(b)
+                    # b = tf.truncated_normal_initializer(
+                    #     mean=b, stddev=small)
                     mean_std_network = mlp(
                         with_input=from_input,
                         output_dim=latent_dim * 2,
@@ -185,6 +203,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                     # std network
                     if self._adaptive_std:
                         b = tf.constant_initializer(self._init_std_param)
+                        # b = tf.truncated_normal_initializer(
+                        #     mean=self._init_std_param, stddev=small)
                         std_network = mlp(
                             with_input=from_input,
                             output_dim=latent_dim,
@@ -195,6 +215,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                             name="std_network")
                     else:
                         p = tf.constant_initializer(self._init_std_param)
+                        # p = tf.truncated_normal_initializer(
+                        #     mean=self._init_std_param, stddev=small)
                         std_network = parameter(
                             with_input=from_input,
                             length=latent_dim,
@@ -249,24 +271,11 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
 
             return dict(mean=mean, log_std=log_std)
 
-    @property
-    def latent(self):
-        return self._latent
-
-    @property
-    def latent_mean(self):
-        return self._latent_mean
-
-    @property
-    def latent_std_param(self):
-        return self._latent_std_param
-
     def latent_sym(self, input_var, name=None):
-        # with tf.name_scope(name, "latent_sym", [input_var]):
-        #     dist = self._build_graph(input_var)
+        with tf.name_scope(name, "latent_sym", [input_var]):
+            latent, _, _, _ = self._build_graph(input_var)
 
-        #     return dist.sample(seed=ext.get_seed())
-        raise NotImplementedError
+            return latent
 
     @overrides
     def get_latent(self, an_input):

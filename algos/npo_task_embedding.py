@@ -111,8 +111,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._inference_opt_inputs = infer_opt_inputs
 
         # Jointly optimize policy and embedding network
-        pol_loss, pol_kl, embed_kl = self._build_policy_loss(
-            pol_loss_inputs)
+        pol_loss, pol_kl, embed_kl = self._build_policy_loss(pol_loss_inputs)
         self.optimizer.update_opt(
             loss=pol_loss,
             target=self.policy,
@@ -121,8 +120,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             constraint_name="mean_kl")
 
         # Optimize inference distribution separately (supervised learning)
-        infer_loss, infer_kl = self._build_inference_loss(
-            infer_loss_inputs)
+        infer_loss, infer_kl = self._build_inference_loss(infer_loss_inputs)
         self.inference_optimizer.update_opt(
             loss=infer_loss,
             target=self.inference,
@@ -475,8 +473,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 adv_valid = filter_valids(
                     adv_flat, i.flat.valid_var, name="adv_valid")
 
-            policy_dist_info_flat = self.policy.dist_info_sym_from_latent(
-                i.flat.latent_var,
+            # policy_dist_info_flat = self.policy.dist_info_sym_from_latent(
+            #     i.flat.latent_var,
+            #     i.flat.obs_var,
+            #     i.flat.policy_state_info_vars,
+            #     name="policy_dist_info_flat")
+            policy_dist_info_flat = self.policy.dist_info_sym(
+                i.flat.task_var,
                 i.flat.obs_var,
                 i.flat.policy_state_info_vars,
                 name="policy_dist_info_flat")
@@ -546,9 +549,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
             # 2. Infernece distribution cross-entropy (log-likelihood)
             with tf.name_scope('inference_ce'):
+                # traj_ll_flat = self.inference.log_likelihood_sym(
+                #     i.flat.trajectory_var,
+                #     i.flat.latent_var,
+                #     name="traj_ll_flat")
                 traj_ll_flat = self.inference.log_likelihood_sym(
                     i.flat.trajectory_var,
-                    i.flat.latent_var,
+                    self.policy._embedding.latent_sym(i.flat.task_var),
                     name="traj_ll_flat")
                 traj_ll = tf.reshape(
                     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
@@ -556,8 +563,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
             # 3. Policy path entropies
             with tf.name_scope('policy_entropy'):
+                # policy_entropy_flat = self.policy.entropy_sym_from_latent(
+                #     i.latent_var, i.obs_var, name="policy_entropy_flat")
                 policy_entropy_flat = self.policy.entropy_sym_from_latent(
-                    i.latent_var, i.obs_var, name="policy_entropy_flat")
+                    self.policy._embedding.latent_sym(i.task_var),
+                    i.obs_var,
+                    name="policy_entropy_flat")
                 policy_entropy = tf.reshape(
                     policy_entropy_flat, [-1, self.max_path_length],
                     name="policy_entropy")
@@ -778,6 +789,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                           samples_data['latents'])**2.
         inference_rmse = np.sqrt(inference_rmse.mean())
         logger.record_tabular('Inference/RMSE', inference_rmse)
+
+        embed_ent = self.f_embedding_entropy(*policy_opt_input_values)
+        logger.record_tabular('Embedding/Entropy', embed_ent)
+
+        infer_ce = self.f_inference_ce(*policy_opt_input_values)
+        logger.record_tabular('Inference/CrossEntropy', infer_ce)
+
+        pol_ent = self.f_policy_entropy(*policy_opt_input_values)
+        logger.record_tabular('Policy/Entropy', pol_ent)
 
         return samples_data
 

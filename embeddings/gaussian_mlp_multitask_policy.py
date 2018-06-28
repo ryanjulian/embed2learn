@@ -183,6 +183,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
     def _build_graph(self, from_latent_input, from_obs_input):
         action_dim = self.action_space.flat_dim
+        small = 1e-5
+
         with self._variable_scope:
 
             with tf.variable_scope("concat_latent_obs"):
@@ -192,15 +194,15 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
             with tf.variable_scope("dist_params"):
                 if self._std_share_network:
                     # mean and std networks share an MLP
-                    b = tf.zeros_initializer()
-                    if self._init_std_param:
-                        b = np.concatenate(
-                            [
-                                np.zeros(action_dim),
-                                np.full(action_dim, self._init_std_param)
-                            ],
-                            axis=0)
-                        b = tf.constant_initializer(b)
+                    b = np.concatenate(
+                        [
+                            np.zeros(action_dim),
+                            np.full(action_dim, self._init_std_param)
+                        ],
+                        axis=0)
+                    b = tf.constant_initializer(b)
+                    # b = tf.truncated_normal_initializer(
+                    #     mean=b, stddev=small)
                     mean_std_network = mlp(
                         with_input=latent_obs_input,
                         output_dim=action_dim * 2,
@@ -227,6 +229,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                     # std network
                     if self._adaptive_std:
                         b = tf.constant_initializer(self._init_std_param)
+                        # b = tf.truncated_normal_initializer(
+                        #     mean=self._init_std_param, stddev=small)
                         std_network = mlp(
                             with_input=latent_obs_input,
                             output_dim=action_dim,
@@ -237,6 +241,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                             name="std_network")
                     else:
                         p = tf.constant_initializer(self._init_std_param)
+                        # p = tf.truncated_normal_initializer(
+                        #     mean=self._init_std_param, stddev=small)
                         std_network = parameter(
                             with_input=latent_obs_input,
                             length=action_dim,
@@ -287,13 +293,17 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
         return params
 
-    def dist_info_sym(self, obs_var, state_info_vars=None, name=None):
+    def dist_info_sym(self, task_var, obs_var, state_info_vars=None,
+                      name=None):
         with tf.name_scope(name, "dist_info_sym", [obs_var, state_info_vars]):
             task_dim = self.task_space.flat_dim
             with tf.variable_scope("task"):
                 task = obs_var[::, :task_dim]
             with tf.variable_scope("obs"):
                 obs = obs_var[::, task_dim:]
+
+            task = task_var
+            obs = obs_var
 
             latent = self._embedding.latent_sym(task)
             _, mean_var, log_std_var, _ = self._build_graph(latent, obs)

@@ -75,7 +75,7 @@ def run_task(*_):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=0.1,  # 0.1 1.0 # 0.3
+        init_std=0.1,  # 0.1
     )
 
     # TODO(): rename to inference_network
@@ -94,7 +94,7 @@ def run_task(*_):
         embedding=task_embedding,
         hidden_sizes=(20, 10),
         std_share_network=True,  # Must be True for embedding learning
-        init_std=6.0,
+        init_std=3.0,  # 3.0
     )
 
     baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
@@ -110,9 +110,9 @@ def run_task(*_):
         discount=0.99,
         step_size=0.01,
         plot=True,
-        policy_ent_coeff=0.,  # 0.001,  #0.1,
-        embedding_ent_coeff=0.,  # 1e-5 1e-4,
-        inference_ce_coeff=0.5,  # 0.5 0.3 # 0.03
+        policy_ent_coeff=11e-7,  # 11e-7
+        embedding_ent_coeff=100e-5,  # 1e-5
+        inference_ce_coeff=5e-8,  # 11e-8
     )
     algo.train()
 
