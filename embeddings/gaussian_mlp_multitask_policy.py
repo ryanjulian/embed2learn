@@ -296,17 +296,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
     def dist_info_sym(self, task_var, obs_var, state_info_vars=None,
                       name=None):
         with tf.name_scope(name, "dist_info_sym", [obs_var, state_info_vars]):
-            task_dim = self.task_space.flat_dim
-            with tf.variable_scope("task"):
-                task = obs_var[::, :task_dim]
-            with tf.variable_scope("obs"):
-                obs = obs_var[::, task_dim:]
-
-            task = task_var
-            obs = obs_var
-
-            latent = self._embedding.latent_sym(task)
-            _, mean_var, log_std_var, _ = self._build_graph(latent, obs)
+            latent = self._embedding.latent_sym(task_var)
+            _, mean_var, log_std_var, _ = self._build_graph(latent, obs_var)
 
             return dict(mean=mean_var, log_std=log_std_var)
 
@@ -321,6 +312,12 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                 latent_var, obs_var)
 
             return dict(mean=mean_var, log_std=log_std_var)
+
+    def entropy_sym(self, task_var, obs_var, name=None):
+        with tf.name_scope(name, "entropy_sym", [obs_var]):
+            latent = self._embedding.latent_sym(task_var)
+            _, _, _, dist = self._build_graph(latent, obs_var)
+            return dist.entropy()
 
     def entropy_sym_from_latent(self, latent_var, obs_var, name=None):
         with tf.name_scope(name, "entropy_sym_from_latent",

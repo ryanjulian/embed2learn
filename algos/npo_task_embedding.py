@@ -12,8 +12,6 @@ import garage.misc.logger as logger
 from garage.tf.algos import BatchPolopt
 from garage.tf.core import JointParameterized
 from garage.tf.misc import tensor_utils
-from garage.tf.optimizers import ConjugateGradientOptimizer
-from garage.tf.optimizers import FirstOrderOptimizer
 from garage.tf.optimizers import LbfgsOptimizer
 from garage.tf.plotter import Plotter
 
@@ -36,7 +34,7 @@ def _optimizer_or_default(optimizer, args):
     if use_optimizer is None:
         if use_args is None:
             use_args = dict()
-        use_optimizer = ConjugateGradientOptimizer(**use_args)
+        use_optimizer = LbfgsOptimizer(**use_args)
     return use_optimizer
 
 
@@ -473,11 +471,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 adv_valid = filter_valids(
                     adv_flat, i.flat.valid_var, name="adv_valid")
 
-            # policy_dist_info_flat = self.policy.dist_info_sym_from_latent(
-            #     i.flat.latent_var,
-            #     i.flat.obs_var,
-            #     i.flat.policy_state_info_vars,
-            #     name="policy_dist_info_flat")
             policy_dist_info_flat = self.policy.dist_info_sym(
                 i.flat.task_var,
                 i.flat.obs_var,
@@ -549,10 +542,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
             # 2. Infernece distribution cross-entropy (log-likelihood)
             with tf.name_scope('inference_ce'):
-                # traj_ll_flat = self.inference.log_likelihood_sym(
-                #     i.flat.trajectory_var,
-                #     i.flat.latent_var,
-                #     name="traj_ll_flat")
                 traj_ll_flat = self.inference.log_likelihood_sym(
                     i.flat.trajectory_var,
                     self.policy._embedding.latent_sym(i.flat.task_var),
@@ -563,12 +552,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
             # 3. Policy path entropies
             with tf.name_scope('policy_entropy'):
-                # policy_entropy_flat = self.policy.entropy_sym_from_latent(
-                #     i.latent_var, i.obs_var, name="policy_entropy_flat")
-                policy_entropy_flat = self.policy.entropy_sym_from_latent(
-                    self.policy._embedding.latent_sym(i.task_var),
-                    i.obs_var,
-                    name="policy_entropy_flat")
+                policy_entropy_flat = self.policy.entropy_sym(
+                    i.task_var, i.obs_var, name="policy_entropy_flat")
                 policy_entropy = tf.reshape(
                     policy_entropy_flat, [-1, self.max_path_length],
                     name="policy_entropy")

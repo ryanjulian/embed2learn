@@ -5,8 +5,10 @@ from garage.envs.env_spec import EnvSpec
 from garage.misc.ext import set_seed
 from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
+from garage.tf.optimizers import PenaltyLbfgsOptimizer
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
+from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings import EmbeddingSpec
@@ -20,15 +22,15 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-    # '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
-    # '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
+    '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
+    '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
 }  # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
 # Embedding params
-LATENT_LENGTH = 1
+LATENT_LENGTH = 2
 TRAJ_ENC_WINDOW = 1
 
 
@@ -56,10 +58,12 @@ def run_task(*_):
     obs_lb, obs_ub = env.observation_space.bounds
     obs_lb_flat = env.observation_space.flatten(obs_lb)
     obs_ub_flat = env.observation_space.flatten(obs_ub)
-    #act_obs_lb = np.concatenate([act_lb_flat, obs_lb_flat])
-    #act_obs_ub = np.concatenate([act_ub_flat, obs_ub_flat])
-    act_obs_lb = obs_lb_flat
-    act_obs_ub = obs_ub_flat
+    # act_obs_lb = np.concatenate([act_lb_flat, obs_lb_flat])
+    # act_obs_ub = np.concatenate([act_ub_flat, obs_ub_flat])
+    # act_obs_lb = obs_lb_flat
+    # act_obs_ub = obs_ub_flat
+    act_obs_lb = act_lb_flat
+    act_obs_ub = act_ub_flat
     traj_lb = np.stack([act_obs_lb] * TRAJ_ENC_WINDOW)
     traj_ub = np.stack([act_obs_ub] * TRAJ_ENC_WINDOW)
     traj_space = Box(traj_lb, traj_ub)
@@ -75,7 +79,7 @@ def run_task(*_):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=0.1,  # 0.1
+        init_std=1.0,
     )
 
     # TODO(): rename to inference_network
@@ -94,10 +98,10 @@ def run_task(*_):
         embedding=task_embedding,
         hidden_sizes=(20, 10),
         std_share_network=True,  # Must be True for embedding learning
-        init_std=3.0,  # 3.0
+        init_std=6.0,  # 4.5 6.0
     )
 
-    baseline = LinearFeatureBaseline(env_spec=env_spec_embed)
+    baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
 
     algo = TRPOTaskEmbedding(
         env=env,
@@ -108,11 +112,13 @@ def run_task(*_):
         max_path_length=100,
         n_itr=1000,
         discount=0.99,
-        step_size=0.01,
+        step_size=0.05,
         plot=True,
-        policy_ent_coeff=11e-7,  # 11e-7
-        embedding_ent_coeff=100e-5,  # 1e-5
-        inference_ce_coeff=5e-8,  # 11e-8
+        policy_ent_coeff=1e-8,  # 11e-7, 11e-8
+        embedding_ent_coeff=1e-4,  # 1e-5, 100e-6
+        inference_ce_coeff=1e-5,  # 5e-8, 5e-9
+        optimizer=PenaltyLbfgsOptimizer(max_penalty=1e7),
+
     )
     algo.train()
 
