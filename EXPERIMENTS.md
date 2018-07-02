@@ -15,6 +15,12 @@
     git push origin experiments  # don't force-push!
     ```
 1. Run experiment
+1. Kill the experiment processes
+    
+    garage has an unfortunate [bug](https://github.com/rlworkgroup/garage/issues/120) which leads to `run_experiment` sometimes leaving zombie processes after termination. To close all the `run_experiment` processes, you can use this one-liner.
+    ```sh
+    ps -fu | grep run_experiment | awk '{print $2}' | xargs kill -SIGINT
+    ```
 1. Manually log the git commit hash to the experiment directory
     ```sh
     export EXP_DIR_SUFFIX="my_launcher_prefix/my_experiment"  # copied from run_experiment output
