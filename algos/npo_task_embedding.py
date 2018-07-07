@@ -1,3 +1,5 @@
+from enum import Enum
+from enum import unique
 import time
 
 import numpy as np
@@ -10,7 +12,6 @@ from garage.misc.overrides import overrides
 import garage.misc.logger as logger
 
 from garage.tf.algos import BatchPolopt
-from garage.tf.core import JointParameterized
 from garage.tf.misc import tensor_utils
 from garage.tf.optimizers import LbfgsOptimizer
 from garage.tf.plotter import Plotter
@@ -28,14 +29,12 @@ from sandbox.embed2learn.samplers import TaskEmbeddingSampler
 from sandbox.embed2learn.samplers.task_embedding_sampler import rollout
 
 
-def _optimizer_or_default(optimizer, args):
-    use_optimizer = optimizer
-    use_args = args
-    if use_optimizer is None:
-        if use_args is None:
-            use_args = dict()
-        use_optimizer = LbfgsOptimizer(**use_args)
-    return use_optimizer
+@unique
+class PGLoss(Enum):
+    # VPG and TRPO
+    VANILLA = "vanilla"
+    # PPO
+    CLIP = "clip"
 
 
 class NPOTaskEmbedding(BatchPolopt, Serializable):
@@ -45,17 +44,20 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
     def __init__(self,
                  name="NPOTaskEmbedding",
-                 optimizer=None,
-                 optimizer_args=None,
+                 pg_loss=PGLoss.VANILLA,
+                 kl_constraint=None,
+                 optimizer=LbfgsOptimizer,
+                 optimizer_args=dict(),
                  step_size=0.01,
-                 policy_ent_coeff=1e-2,
+                 num_minibatches=None,
+                 num_opt_epochs=None,
                  policy=None,
+                 policy_ent_coeff=1e-2,
                  embedding_ent_coeff=1e-5,
                  inference=None,
-                 inference_optimizer=None,
-                 inference_optimizer_args=None,
+                 inference_optimizer=LbfgsOptimizer,
+                 inference_optimizer_args=dict(),
                  inference_ce_coeff=1e-3,
-                 inference_learning_rate=1e-3,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -64,19 +66,22 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         self.name = name
         self._name_scope = tf.name_scope(self.name)
+
+        self._pg_loss = pg_loss
         self._policy_opt_inputs = None
         self._inference_opt_inputs = None
 
         with tf.name_scope(self.name):
             # Optimizer for policy and embedding networks
-            self.optimizer = _optimizer_or_default(optimizer, optimizer_args)
+            self.optimizer = optimizer(**optimizer_args)
             self.step_size = float(step_size)
             self.policy_ent_coeff = float(policy_ent_coeff)
             self.embedding_ent_coeff = float(embedding_ent_coeff)
 
             self.inference = inference
             self.inference_ce_coeff = inference_ce_coeff
-            self.inference_optimizer = LbfgsOptimizer()
+            self.inference_optimizer = inference_optimizer(
+                **inference_optimizer_args)
 
             sampler_cls = TaskEmbeddingSampler
             sampler_args = dict(inference=self.inference, )
@@ -501,18 +506,43 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 )
                 pol_mean_kl = tf.reduce_mean(kl)
 
+            # Calculate surrogate loss
             with tf.name_scope("surr_loss"):
                 lr = pol_dist.likelihood_ratio_sym(
                     i.valid.action_var,
                     i.valid.policy_old_dist_info_vars,
                     policy_dist_info_valid,
                     name="lr")
-                surr_loss = -tf.reduce_mean(lr * adv_valid) - \
-                            (self.embedding_ent_coeff * embedding_entropy)
+
+                surr_vanilla = tf.reduce_mean(
+                    lr * adv_valid, name="surr_vanilla")
+
+                if self._pg_loss == PGLoss.VANILLA:
+                    surr_loss = -surr_vanilla
+                elif self._pg_loss == PGLoss.CLIP:
+                    lr_clip = tf.clip_by_value(
+                        lr,
+                        1 - self.step_size,
+                        1 + self.step_size,
+                        name="lr_clip")
+                    surr_clip = tf.reduce_mean(lr_clip * adv_valid,
+                                               name="surr_clip")
+                    surr_loss = -tf.minimum(
+                        surr_vanilla, surr_clip, name="surr_loss")
+                else:
+                    raise NotImplementedError("Unknown PGLoss")
+
+                # Embedding entropy bonus
+                surr_loss -= self.embedding_ent_coeff * embedding_entropy
 
             embed_mean_kl = self._build_embedding_kl(i)
 
         # Diagnostic functions
+        self.f_policy_kl = tensor_utils.compile_function(
+            flatten_inputs(self._policy_opt_inputs),
+            pol_mean_kl,
+            log_name="f_policy_kl")
+
         self.f_rewards = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
             rewards,
@@ -569,11 +599,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             log_name="f_embedding_entropy")
         self.f_inference_ce = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
-            tf.reduce_sum(inference_ce * i.valid_var),
+            tf.reduce_mean(inference_ce * i.valid_var),
             log_name="f_inference_ce")
         self.f_policy_entropy = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
-            tf.reduce_sum(policy_entropy * i.valid_var),
+            tf.reduce_mean(policy_entropy * i.valid_var),
             log_name="f_policy_entropy")
 
         return embedding_entropy, inference_ce, policy_entropy
@@ -667,8 +697,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             return infer_loss, infer_kl
 
     #### Sampling and training ################################################
-    def get_optimizer_input(self, samples_data):
-        """ Map rollout samples to the optimizer inputs """
+    def _policy_opt_input_values(self, samples_data):
+        """ Map rollout samples to the policy optimizer inputs """
 
         policy_state_info_list = [
             samples_data["agent_infos"][k] for k in self.policy.state_info_keys
@@ -699,6 +729,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             embed_state_info_vars_list=embed_state_info_list,
             embed_old_dist_info_vars_list=embed_old_dist_info_list,
         )
+        return flatten_inputs(policy_opt_input_values)
+
+    def _inference_opt_input_values(self, samples_data):
+        """ Map rollout samples to the inference optimizer inputs """
 
         infer_state_info_list = [
             samples_data["trajectory_infos"][k]
@@ -716,8 +750,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             infer_old_dist_info_vars_list=infer_old_dist_info_list,
         )
 
-        return (flatten_inputs(policy_opt_input_values),
-                flatten_inputs(inference_opt_input_values))
+        return flatten_inputs(inference_opt_input_values)
 
     def evaluate(self, policy_opt_input_values, samples_data):
         # Everything else
@@ -770,11 +803,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         inference_rmse = np.sqrt(inference_rmse.mean())
         logger.record_tabular('Inference/RMSE', inference_rmse)
 
-        inference_rmse = (samples_data['trajectory_infos']['mean'] -
-                          samples_data['latents'])**2.
-        inference_rmse = np.sqrt(inference_rmse.mean())
-        logger.record_tabular('Inference/RMSE', inference_rmse)
-
         embed_ent = self.f_embedding_entropy(*policy_opt_input_values)
         logger.record_tabular('Embedding/Entropy', embed_ent)
 
@@ -783,6 +811,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         pol_ent = self.f_policy_entropy(*policy_opt_input_values)
         logger.record_tabular('Policy/Entropy', pol_ent)
+
+        tasks = samples_data["tasks"][:, 0, :]
+        _, task_indices = np.nonzero(tasks)
+        path_lengths = np.sum(samples_data["valids"], axis=1)
+        for t in range(self.policy.task_space.flat_dim):
+            lengths = path_lengths[task_indices == t]
+            completed = lengths < self.max_path_length
+            pct_completed = np.mean(completed)
+            logger.record_tabular('Tasks/EpisodeLength/t={}'.format(t),
+                                  np.mean(lengths))
+            logger.record_tabular('Tasks/CompletionRate/t={}'.format(t),
+                                  pct_completed)
 
         return samples_data
 
@@ -813,23 +853,28 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         logger.log("Computing loss before")
         loss_before = self.optimizer.loss(policy_opt_input_values)
+
         logger.log("Computing KL before")
-        mean_kl_before = self.optimizer.constraint_val(policy_opt_input_values)
-        embed_mean_kl_before = self.f_embedding_kl(*policy_opt_input_values)
+        policy_kl_before = self.f_policy_kl(*policy_opt_input_values)
+        embed_kl_before = self.f_embedding_kl(*policy_opt_input_values)
+
         logger.log("Optimizing")
         self.optimizer.optimize(policy_opt_input_values)
+
         logger.log("Computing KL after")
-        mean_kl = self.optimizer.constraint_val(policy_opt_input_values)
-        embed_mean_kl = self.f_embedding_kl(*policy_opt_input_values)
+        policy_kl = self.f_policy_kl(*policy_opt_input_values)
+        embed_kl = self.f_embedding_kl(*policy_opt_input_values)
+
         logger.log("Computing loss after")
         loss_after = self.optimizer.loss(policy_opt_input_values)
+
         logger.record_tabular('Policy/LossBefore', loss_before)
         logger.record_tabular('Policy/LossAfter', loss_after)
-        logger.record_tabular('Policy/MeanKLBefore', mean_kl_before)
-        logger.record_tabular('Policy/MeanKL', mean_kl)
+        logger.record_tabular('Policy/KLBefore', policy_kl_before)
+        logger.record_tabular('Policy/KL', policy_kl)
         logger.record_tabular('Policy/dLoss', loss_before - loss_after)
-        logger.record_tabular('Embedding/MeanKLBefore', embed_mean_kl_before)
-        logger.record_tabular('Embedding/MeanKL', embed_mean_kl)
+        logger.record_tabular('Embedding/KLBefore', embed_kl_before)
+        logger.record_tabular('Embedding/KL', embed_kl)
 
         return loss_after
 
@@ -854,8 +899,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         samples_data = self.process_samples(itr, paths)
         self.log_diagnostics(paths)
 
-        policy_opt_input_values, \
-        inference_opt_input_values = self.get_optimizer_input(samples_data)
+        policy_opt_input_values = self._policy_opt_input_values(samples_data)
+        inference_opt_input_values = self._inference_opt_input_values(
+            samples_data)
 
         self.train_policy_and_embedding_networks(policy_opt_input_values)
         self.train_inference_network(inference_opt_input_values)

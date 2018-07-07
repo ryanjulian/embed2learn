@@ -93,33 +93,33 @@ def rollout(env,
 
 
 # parallel_sampler worker API
-def _worker_populate_task(G, env, policy, inference, scope=None):
-    G = parallel_sampler._get_scoped_G(G, scope)
-    G.env = pickle.loads(env)
-    G.policy = pickle.loads(policy)
+def _worker_populate_task(g, env, policy, inference, scope=None):
+    g = parallel_sampler._get_scoped_g(g, scope)
+    g.env = pickle.loads(env)
+    g.policy = pickle.loads(policy)
 
 
-def _worker_terminate_task(G, scope=None):
-    G = parallel_sampler._get_scoped_G(G, scope)
-    if getattr(G, "env", None):
-        G.env.terminate()
-        G.env = None
-    if getattr(G, "policy", None):
-        G.policy.terminate()
-        G.policy = None
-    if getattr(G, "inference", None):
-        G.inference.terminate()
-        G.inference = None
+def _worker_terminate_task(g, scope=None):
+    g = parallel_sampler._get_scoped_g(g, scope)
+    if getattr(g, "env", None):
+        g.env.close()
+        g.env = None
+    if getattr(g, "policy", None):
+        g.policy.terminate()
+        g.policy = None
+    if getattr(g, "inference", None):
+        g.inference.terminate()
+        g.inference = None
 
 
-def _worker_set_inference_params(G, params, scope=None):
-    G = parallel_sampler._get_scoped_G(G, scope)
-    # G.inference.set_param_values(params)
+def _worker_set_inference_params(g, params, scope=None):
+    g = parallel_sampler._get_scoped_g(g, scope)
+    # g.inference.set_param_values(params)
 
 
-def _worker_collect_one_path(G, max_path_length, scope=None):
-    G = parallel_sampler._get_scoped_G(G, scope)
-    path = rollout(G.env, G.policy, max_path_length)
+def _worker_collect_one_path(g, max_path_length, scope=None):
+    g = parallel_sampler._get_scoped_g(g, scope)
+    path = rollout(g.env, g.policy, max_path_length)
     return path, len(path["rewards"])
 
 
@@ -137,9 +137,9 @@ class TaskEmbeddingSampler(BatchSampler):
             ] * singleton_pool.n_parallel)
         else:
             # avoid unnecessary copying
-            G = parallel_sampler._get_scoped_G(singleton_pool.G, scope)
-            G.env = env
-            G.policy = policy
+            g = parallel_sampler._get_scoped_g(singleton_pool.G, scope)
+            g.env = env
+            g.policy = policy
         parallel_sampler.set_seed(ext.get_seed())
         logger.log("Populated")
 
@@ -250,8 +250,8 @@ class TaskEmbeddingSampler(BatchSampler):
             # Create a time series of stacked [act, obs] vectors
             #XXX now the inference network only looks at obs vectors
             #act_obs = np.concatenate([act_flat, obs_flat], axis=1)  # TODO reactivate for harder envs?
-            # act_obs = obs_flat
-            act_obs = act_flat
+            act_obs = obs_flat
+            # act_obs = act_flat
             # Calculate a forward-looking sliding window of the stacked vectors
             #
             # If act_obs has shape (n, d), then trajs will have shape

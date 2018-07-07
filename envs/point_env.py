@@ -87,6 +87,7 @@ class PointEnv(gym.Env, Parameterized):
         return Step(observation=np.copy(self._point), reward=reward, done=done)
 
     def _to_screen(self, position):
+        position = np.nan_to_num(position)
         return (int(self.screen_width / 2 + position[0] * self.zoom),
                 int(self.screen_height / 2 - position[1] * self.zoom))
 

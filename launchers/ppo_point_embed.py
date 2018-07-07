@@ -6,7 +6,7 @@ from garage.misc.ext import set_seed
 from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
 
-from sandbox.embed2learn.algos import TRPOTaskEmbedding
+from sandbox.embed2learn.algos import PPOTaskEmbedding
 from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
 from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
@@ -79,7 +79,7 @@ def run_task(*_):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=3.0,  # 2.0
+        init_std=3.0,  # 3.0
     )
 
     # TODO(): rename to inference_network
@@ -88,6 +88,7 @@ def run_task(*_):
         embedding_spec=traj_embed_spec,
         hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         std_share_network=True,
+        init_std=1.0,
     )
 
     # Multitask policy
@@ -103,28 +104,26 @@ def run_task(*_):
 
     baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
 
-    algo = TRPOTaskEmbedding(
+    algo = PPOTaskEmbedding(
         env=env,
         policy=policy,
         baseline=baseline,
         inference=traj_embedding,
-        batch_size=20000,
+        batch_size=2048,
         max_path_length=50,
         n_itr=1000,
         discount=0.99,
         step_size=0.2,
         plot=False,
-        policy_ent_coeff=1e-7,  # 1e-7
-        embedding_ent_coeff=2e-3,  # 1e-3
+        policy_ent_coeff=1e-9,  # 1e-7
+        embedding_ent_coeff=1e-5,  # 2e-3
         inference_ce_coeff=1e-7,  # 1e-7
-        # kl_constraint=KLConstraint.SOFT,
-        # optimizer_args=dict(max_penalty=1e9),
     )
     algo.train()
 
 run_experiment(
     run_task,
-    exp_prefix='trpo_point_embed',
+    exp_prefix='ppo_point_embed',
     n_parallel=16,
     plot=False,
 )

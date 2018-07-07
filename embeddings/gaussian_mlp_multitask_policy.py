@@ -314,7 +314,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
             return dict(mean=mean_var, log_std=log_std_var)
 
     def entropy_sym(self, task_var, obs_var, name=None):
-        with tf.name_scope(name, "entropy_sym", [obs_var]):
+        with tf.name_scope(name, "entropy_sym", [task_var, obs_var]):
             latent = self._embedding.latent_sym(task_var)
             _, _, _, dist = self._build_graph(latent, obs_var)
             return dist.entropy()

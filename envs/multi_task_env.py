@@ -14,8 +14,23 @@ from garage.tf.envs import TfEnv as BaseTfEnv
 from garage.tf.envs import to_tf_space
 
 
+def round_robin(num_tasks, last_task):
+    if last_task is None:
+        return 0
+
+    return (last_task + 1) % num_tasks
+
+
+def uniform_random(num_tasks, last_task):
+    return random.randint(0, num_tasks)
+
+
 class MultiTaskEnv(gym.Env, Parameterized):
-    def __init__(self, task_env_cls=None, task_args=None, task_kwargs=None):
+    def __init__(self,
+                 task_selection_strategy=round_robin,
+                 task_env_cls=None,
+                 task_args=None,
+                 task_kwargs=None):
         Serializable.quick_init(self, locals())
         Parameterized.__init__(self)
 
@@ -23,43 +38,43 @@ class MultiTaskEnv(gym.Env, Parameterized):
             task_env_cls(*t_args, **t_kwargs)
             for t_args, t_kwargs in zip(task_args, task_kwargs)
         ]
-        self._active_env = None
-        self._choose_active_task()
+        self._task_selection_strategy = task_selection_strategy
+        self._active_task = self._task_selection_strategy(self.num_tasks, None)
 
     def reset(self, **kwargs):
-        self._choose_active_task()
-        return self._active_env.reset(**kwargs)
+        self._active_task = self._task_selection_strategy(
+            self.num_tasks, self.active_task)
+        return self.active_env.reset(**kwargs)
 
     @property
     def action_space(self):
-        return self._task_envs[0].action_space
+        return self.active_env.action_space
 
     @property
     def observation_space(self):
-        return self._task_envs[0].observation_space
+        return self.active_env.observation_space
 
     def step(self, action):
-        obs, reward, done, info = self._active_env.step(action)
-        # info['task'] = self.active_task_one_hot
-        # obs = np.concatenate((info['task'], obs))
+        obs, reward, done, info = self.active_env.step(action)
+        info['task'] = self.active_task_one_hot
         return Step(obs, reward, done, **info)
 
     def render(self, *args, **kwargs):
-        return self._active_env.render(*args, **kwargs)
+        return self.active_env.render(*args, **kwargs)
 
     def log_diagnostics(self, paths, *args, **kwargs):
-        return self._active_env.log_diagnostics(paths, *args, **kwargs)
+        return self.active_env.log_diagnostics(paths, *args, **kwargs)
 
     @property
     def horizon(self):
-        return self._task_envs[0].horizon
+        return self.active_env.horizon
 
     def close(self):
         for env in self._task_envs:
             env.close()
 
     def get_params_internal(self, **tags):
-        return self._active_env.get_params_internal(**tags)
+        return self.active_env.get_params_internal(**tags)
 
     # def set_param_values(self, params):
     #     self._active_env.set_param_values(params)
@@ -73,7 +88,7 @@ class MultiTaskEnv(gym.Env, Parameterized):
 
     @property
     def active_task(self):
-        return self._task_envs.index(self._active_env)
+        return self._active_task
 
     @property
     def active_task_one_hot(self):
@@ -82,19 +97,20 @@ class MultiTaskEnv(gym.Env, Parameterized):
         return one_hot
 
     @property
+    def active_env(self):
+        return self._task_envs[self.active_task]
+
+    @property
     def num_tasks(self):
         return len(self._task_envs)
 
-    def _choose_active_task(self):
-        # uniform random
-        #return random.choice(self._task_envs)
+    @property
+    def task_selection_strategy(self):
+        return self._task_selection_strategy
 
-        # round robin
-        if self._active_env is None:
-            self._active_env = self._task_envs[0]
-        else:
-            self._active_env = self._task_envs[(self.active_task + 1) %
-                                               self.num_tasks]
+    @task_selection_strategy.setter
+    def task_selection_strategy(self, strategy):
+        self._task_selection_strategy = strategy
 
 
 class TfEnv(BaseTfEnv):
