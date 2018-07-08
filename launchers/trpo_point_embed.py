@@ -115,7 +115,7 @@ def run_task(*_):
         step_size=0.2,
         plot=False,
         policy_ent_coeff=1e-7,  # 1e-7
-        embedding_ent_coeff=2e-3,  # 1e-3
+        embedding_ent_coeff=1e-3,  # 1e-3
         inference_ce_coeff=1e-7,  # 1e-7
         # kl_constraint=KLConstraint.SOFT,
         # optimizer_args=dict(max_penalty=1e9),

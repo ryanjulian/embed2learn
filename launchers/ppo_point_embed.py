@@ -21,9 +21,9 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
-    '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-    '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
-    '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
+    #'(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
+    #'(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
+    #'(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
 }  # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
@@ -73,15 +73,6 @@ def run_task(*_):
     task_obs_space = concat_spaces(env.task_space, env.observation_space)
     env_spec_embed = EnvSpec(task_obs_space, env.action_space)
 
-    # Embeddings
-    task_embedding = GaussianMLPEmbedding(
-        name="embedding",
-        embedding_spec=task_embed_spec,
-        hidden_sizes=(20, 20),
-        std_share_network=True,
-        init_std=3.0,  # 3.0
-    )
-
     # TODO(): rename to inference_network
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
@@ -89,6 +80,15 @@ def run_task(*_):
         hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         std_share_network=True,
         init_std=1.0,
+    )
+
+    # Embeddings
+    task_embedding = GaussianMLPEmbedding(
+        name="embedding",
+        embedding_spec=task_embed_spec,
+        hidden_sizes=(20, 20),
+        std_share_network=True,
+        init_std=3.0,  # 3.0
     )
 
     # Multitask policy
@@ -114,18 +114,18 @@ def run_task(*_):
         n_itr=1000,
         discount=0.99,
         step_size=0.2,
-        plot=False,
-        policy_ent_coeff=1e-9,  # 1e-7
-        embedding_ent_coeff=1e-5,  # 2e-3
-        inference_ce_coeff=1e-7,  # 1e-7
+        plot=True,
+        policy_ent_coeff=0.,  # 1e-7 1e-9
+        embedding_ent_coeff=0.,  # 2e-3 1e-9
+        inference_ce_coeff=0.,  # 1e-7 1e-2
     )
     algo.train()
 
 run_experiment(
     run_task,
     exp_prefix='ppo_point_embed',
-    n_parallel=16,
-    plot=False,
+    n_parallel=2,
+    plot=True,
 )
 
 # run_task()
