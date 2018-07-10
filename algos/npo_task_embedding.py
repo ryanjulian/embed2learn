@@ -105,10 +105,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             raise NotImplementedError
 
         # Input variables
-        pol_loss_inputs, \
-        pol_opt_inputs, \
-        infer_loss_inputs, \
-        infer_opt_inputs = self._build_inputs()
+        (pol_loss_inputs, pol_opt_inputs, infer_loss_inputs,
+         infer_opt_inputs) = self._build_inputs()
 
         self._policy_opt_inputs = pol_opt_inputs
         self._inference_opt_inputs = infer_opt_inputs
@@ -525,8 +523,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                         1 - self.step_size,
                         1 + self.step_size,
                         name="lr_clip")
-                    surr_clip = tf.reduce_mean(lr_clip * adv_valid,
-                                               name="surr_clip")
+                    surr_clip = tf.reduce_mean(
+                        lr_clip * adv_valid, name="surr_clip")
                     surr_loss = -tf.minimum(
                         surr_vanilla, surr_clip, name="surr_loss")
                 else:
@@ -578,7 +576,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     name="traj_ll_flat")
                 traj_ll = tf.reshape(
                     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
-                inference_ce = traj_ll
+                inference_ce = -traj_ll
 
             # 3. Policy path entropies
             with tf.name_scope('policy_entropy'):
@@ -812,6 +810,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         pol_ent = self.f_policy_entropy(*policy_opt_input_values)
         logger.record_tabular('Policy/Entropy', pol_ent)
 
+        task_ents = self.f_task_entropies(*policy_opt_input_values)
         tasks = samples_data["tasks"][:, 0, :]
         _, task_indices = np.nonzero(tasks)
         path_lengths = np.sum(samples_data["valids"], axis=1)
@@ -819,10 +818,16 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             lengths = path_lengths[task_indices == t]
             completed = lengths < self.max_path_length
             pct_completed = np.mean(completed)
+            num_samples = np.sum(lengths)
+            num_trajs = lengths.shape[0]
             logger.record_tabular('Tasks/EpisodeLength/t={}'.format(t),
                                   np.mean(lengths))
             logger.record_tabular('Tasks/CompletionRate/t={}'.format(t),
                                   pct_completed)
+            logger.record_tabular('Tasks/NumSamples/t={}'.format(t),
+                                  num_samples)
+            logger.record_tabular('Tasks/NumTrajs/t={}'.format(t), num_trajs)
+            logger.record_tabular('Tasks/Entropy/t={}'.format(t), task_ents[t])
 
         return samples_data
 

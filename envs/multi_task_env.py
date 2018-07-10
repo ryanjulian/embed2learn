@@ -127,18 +127,26 @@ class TfEnv(BaseTfEnv):
         return self.wrapped_env.active_task
 
 
-class NormalizedMultiTaskEnv(NormalizedEnv):
+class NormalizedMultiTaskEnv(NormalizedEnv, Parameterized):
+    def __init__(self, env):
+        Serializable.quick_init(self, locals())
+        Parameterized.__init__(self)
+        NormalizedEnv.__init__(self, env)
+
     @property
     def task_space(self):
-        return self._wrapped_env.task_space
+        return self.env.task_space
 
     @property
     def active_task_one_hot(self):
-        return self.wrapped_env.active_task_one_hot
+        return self.env.active_task_one_hot
 
     @property
     def active_task(self):
-        return self.wrapped_env.active_task
+        return self.env.active_task
+
+    def get_params_internal(self, *args, **kwargs):
+        return self.env.get_params_internal(*args, **kwargs)
 
 
 normalize = NormalizedMultiTaskEnv

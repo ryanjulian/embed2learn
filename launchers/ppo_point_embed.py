@@ -21,9 +21,9 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
-    #'(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-    #'(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
-    #'(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
+    '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
+    '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
+    '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
 }  # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
@@ -39,10 +39,11 @@ def run_task(*_):
 
     # Environment
     env = TfEnv(
-        MultiTaskEnv(
-            task_env_cls=PointEnv,
-            task_args=TASK_ARGS,
-            task_kwargs=TASK_KWARGS))
+        normalize(
+            MultiTaskEnv(
+                task_env_cls=PointEnv,
+                task_args=TASK_ARGS,
+                task_kwargs=TASK_KWARGS)))
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -88,7 +89,8 @@ def run_task(*_):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=3.0,  # 3.0
+        init_std=6.0,
+        max_std=16.0,
     )
 
     # Multitask policy
@@ -98,8 +100,10 @@ def run_task(*_):
         task_space=env.task_space,
         embedding=task_embedding,
         hidden_sizes=(20, 10),
-        std_share_network=True,  # Must be True for embedding learning
-        init_std=6.0,  # 4.5 6.0
+        std_share_network=True,
+        init_std=8.0,
+        max_std=16.0,
+        min_std=6.0,
     )
 
     baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
@@ -115,17 +119,18 @@ def run_task(*_):
         discount=0.99,
         step_size=0.2,
         plot=True,
-        policy_ent_coeff=0.,  # 1e-7 1e-9
-        embedding_ent_coeff=0.,  # 2e-3 1e-9
-        inference_ce_coeff=0.,  # 1e-7 1e-2
+        policy_ent_coeff=5e-2,  # 5e-2
+        embedding_ent_coeff=2e-3,  # 2e-3
+        inference_ce_coeff=1e-1,  # 2e-2
     )
     algo.train()
+
 
 run_experiment(
     run_task,
     exp_prefix='ppo_point_embed',
-    n_parallel=2,
-    plot=True,
+    n_parallel=16,
+    plot=False,
 )
 
 # run_task()
