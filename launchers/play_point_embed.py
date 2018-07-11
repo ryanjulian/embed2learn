@@ -10,9 +10,10 @@ import tensorflow as tf
 
 from sandbox.embed2learn.envs.multi_task_env import normalize, TfEnv
 
-MAX_PATH_LENGTH = 100
+MAX_PATH_LENGTH = 50
 SAMPLING_POSITIONS = [-0.75, -.5, 0., .5, 0.75]
-COLOR_MAPS = ['autumn', 'winter']
+COLOR_MAPS = ['autumn', 'winter', 'jet', 'plasma']
+color_maps = [matplotlib.cm.get_cmap(cm) for cm in COLOR_MAPS]
 
 
 def rollout_given_z(env,
@@ -47,40 +48,52 @@ def rollout_given_z(env,
 def play(pkl_filename):
     matplotlib.rcParams['pdf.fonttype'] = 42
     matplotlib.rcParams['ps.fonttype'] = 42
-    plt.figure(figsize=(4, 4))
+    plt.figure(figsize=(8, 8))
+
     with tf.Session():
         snapshot = joblib.load(pkl_filename)
         env = snapshot["env"]
         policy = snapshot["policy"]
-        task_envs = env._wrapped_env._wrapped_env._task_envs
+        task_envs = env._wrapped_env.env._task_envs
         goals = np.array([te._goal for te in task_envs])
 
-        color_maps = [matplotlib.cm.get_cmap(cm) for cm in COLOR_MAPS]
         for task, env in enumerate(task_envs):
+
+            # Sample latent
+            onehot = np.zeros(policy.task_space.shape, dtype=np.float32)
+            onehot[task] = 1
+            _, latent_info = policy.get_latent(onehot)
+            z_mean, z_std = latent_info["mean"], np.exp(latent_info["log_std"])
+
+            # Plot goals
             plt.scatter(
                 [goals[task, 0]], [goals[task, 1]],
                 s=50,
                 color=color_maps[task % len(color_maps)](0),
                 zorder=2,
                 label="Task %i" % (task + 1))
-            onehot = np.zeros(policy.task_space.shape, dtype=np.float32)
-            onehot[task] = 1
-            z, latent_info = policy.get_latent(onehot)
+
+            # Plot rollouts for linearly interpolated latents
             for i, x in enumerate(SAMPLING_POSITIONS):
                 # systematic sampling of latent from embedding distribution
-                z = latent_info["mean"] + x * np.exp(latent_info["log_std"])
+                z = z_mean + x * z_std
+
+                # Run rollout
                 obs = rollout_given_z(
                     TfEnv(normalize(env)),
                     policy,
                     z,
                     max_path_length=MAX_PATH_LENGTH,
                     animated=False)
+
+                # Plot
                 plt.plot(
                     obs[:, 0],
                     obs[:, 1],
                     alpha=0.7,
                     color=color_maps[task % len(color_maps)](
                         i * 1. / len(SAMPLING_POSITIONS)))
+
         plt.grid(True)
         plt.xlim([-4, 4])
         plt.ylim([-4, 4])

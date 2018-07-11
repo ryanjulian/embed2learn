@@ -7,8 +7,6 @@ from garage.tf.optimizers import FirstOrderOptimizer
 from sandbox.embed2learn.algos import NPOTaskEmbedding
 from sandbox.embed2learn.algos.npo_task_embedding import PGLoss
 
-# TODO: FirstOrderOptimizer seems to be reshaping inputs inappropriately
-
 
 class PPOTaskEmbedding(NPOTaskEmbedding):
     """

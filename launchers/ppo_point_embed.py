@@ -148,7 +148,7 @@ config = dict(
     batch_size=1024 * len(TASKS),  # 4096
     policy_ent_coeff=50e-3,        # 50e-3
     embedding_ent_coeff=3e-3,      # 3e-3,
-    inference_ce_coeff=200e-3,     # 200e-3
+    inference_ce_coeff=300e-3,     # 200e-3
 )
 
 

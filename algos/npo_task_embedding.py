@@ -512,23 +512,28 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     policy_dist_info_valid,
                     name="lr")
 
-                surr_vanilla = tf.reduce_mean(
-                    lr * adv_valid, name="surr_vanilla")
+                # Policy gradient surrogate objective
+                surr_vanilla = lr * adv_valid
 
                 if self._pg_loss == PGLoss.VANILLA:
-                    surr_loss = -surr_vanilla
+                    # VPG, TRPO use the standard surrogate objective
+                    surr_obj = tf.identity(surr_vanilla, name="surr_obj")
                 elif self._pg_loss == PGLoss.CLIP:
+                    # PPO uses a surrogate objective with clipped LR
                     lr_clip = tf.clip_by_value(
                         lr,
                         1 - self.step_size,
                         1 + self.step_size,
                         name="lr_clip")
-                    surr_clip = tf.reduce_mean(
-                        lr_clip * adv_valid, name="surr_clip")
-                    surr_loss = -tf.minimum(
-                        surr_vanilla, surr_clip, name="surr_loss")
+                    surr_clip = lr_clip * adv_valid
+                    surr_obj = tf.minimum(
+                        surr_vanilla, surr_clip, name="surr_obj")
                 else:
                     raise NotImplementedError("Unknown PGLoss")
+
+                # Maximize E[surrogate objective] by minimizing
+                # -E_t[surrogate objective]
+                surr_loss = -tf.reduce_mean(surr_obj)
 
                 # Embedding entropy bonus
                 surr_loss -= self.embedding_ent_coeff * embedding_entropy
