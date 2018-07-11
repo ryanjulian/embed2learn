@@ -18,13 +18,14 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
+N = 4
 
 def circle(r, n):
     for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
         yield r * np.sin(t), r * np.cos(t)
 
 
-goals = circle(3.0, 12)
+goals = circle(3.0, N)
 TASKS = {
     str(i + 1): {
         'args': [],
@@ -35,13 +36,13 @@ TASKS = {
     for i, g in enumerate(goals)
 }
 
+# TASKS = {
+#     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
+#     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
+#     '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
+#     '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
+# }  # yapf: disable
 
-TASKS = {
-    '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
-    '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-    '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
-    '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
-}  # yapf: disable
 TASK_NAMES = sorted(TASKS.keys())
 TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
 TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
@@ -131,7 +132,7 @@ def run_task(*_):
         policy=policy,
         baseline=baseline,
         inference=traj_embedding,
-        batch_size=4096,  # 4096
+        batch_size=N * 1024,  # 4096
         max_path_length=50,
         n_itr=1000,
         discount=0.99,
