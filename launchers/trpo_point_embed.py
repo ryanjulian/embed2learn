@@ -122,6 +122,7 @@ def run_task(*_):
     )
     algo.train()
 
+
 run_experiment(
     run_task,
     exp_prefix='trpo_point_embed',

@@ -16,7 +16,7 @@ from garage.tf.samplers.batch_sampler import worker_init_tf
 from garage.tf.samplers.batch_sampler import worker_init_tf_vars
 from garage.tf.spaces import Box
 
-from sandbox.embed2learn.embeddings import MultitaskPolicy
+from sandbox.embed2learn.policies import MultitaskPolicy
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.samplers.utils import sliding_window

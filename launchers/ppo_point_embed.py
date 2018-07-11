@@ -1,8 +1,9 @@
+from types import SimpleNamespace
+
 import numpy as np
 
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
-from garage.misc.ext import set_seed
 from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
 
@@ -10,7 +11,7 @@ from sandbox.embed2learn.algos import PPOTaskEmbedding
 from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
 from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
+from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings import EmbeddingSpec
 from sandbox.embed2learn.envs import PointEnv
 from sandbox.embed2learn.envs import MultiTaskEnv
@@ -18,13 +19,13 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-N = 4
 
 def circle(r, n):
     for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
         yield r * np.sin(t), r * np.cos(t)
 
 
+N = 4
 goals = circle(3.0, N)
 TASKS = {
     str(i + 1): {
@@ -43,30 +44,26 @@ TASKS = {
 #     '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
 # }  # yapf: disable
 
-TASK_NAMES = sorted(TASKS.keys())
-TASK_ARGS = [TASKS[t]['args'] for t in TASK_NAMES]
-TASK_KWARGS = [TASKS[t]['kwargs'] for t in TASK_NAMES]
 
-# Embedding params
-LATENT_LENGTH = 2
-TRAJ_ENC_WINDOW = 1
+def run_task(v):
+    v = SimpleNamespace(**v)
 
-
-def run_task(*_):
-    set_seed(1)
+    task_names = sorted(v.tasks.keys())
+    task_args = [v.tasks[t]['args'] for t in task_names]
+    task_kwargs = [v.tasks[t]['kwargs'] for t in task_names]
 
     # Environment
     env = TfEnv(
         normalize(
             MultiTaskEnv(
                 task_env_cls=PointEnv,
-                task_args=TASK_ARGS,
-                task_kwargs=TASK_KWARGS)))
+                task_args=task_args,
+                task_kwargs=task_kwargs)))
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
-    latent_lb = np.zeros(LATENT_LENGTH, )
-    latent_ub = np.ones(LATENT_LENGTH, )
+    latent_lb = np.zeros(v.latent_length, )
+    latent_ub = np.ones(v.latent_length, )
     latent_space = Box(latent_lb, latent_ub)
 
     # trajectory space is (TRAJ_ENC_WINDOW, act_obs) where act_obs is a stacked
@@ -83,8 +80,8 @@ def run_task(*_):
     act_obs_ub = obs_ub_flat
     # act_obs_lb = act_lb_flat
     # act_obs_ub = act_ub_flat
-    traj_lb = np.stack([act_obs_lb] * TRAJ_ENC_WINDOW)
-    traj_ub = np.stack([act_obs_ub] * TRAJ_ENC_WINDOW)
+    traj_lb = np.stack([act_obs_lb] * v.inference_window)
+    traj_ub = np.stack([act_obs_ub] * v.inference_window)
     traj_space = Box(traj_lb, traj_ub)
 
     task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
@@ -126,29 +123,41 @@ def run_task(*_):
 
     baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
 
-    temp = 1.0
     algo = PPOTaskEmbedding(
         env=env,
         policy=policy,
         baseline=baseline,
         inference=traj_embedding,
-        batch_size=N * 1024,  # 4096
+        batch_size=v.batch_size,  # 4096
         max_path_length=50,
         n_itr=1000,
         discount=0.99,
         step_size=0.2,
         plot=True,
-        policy_ent_coeff=temp * 50e-3,  # 5e-2
-        embedding_ent_coeff=temp * 3e-3,  # 1e-3
-        inference_ce_coeff=temp * 200e-3,  # 2e-1
+        policy_ent_coeff=v.policy_ent_coeff,
+        embedding_ent_coeff=v.embedding_ent_coeff,
+        inference_ce_coeff=v.inference_ce_coeff,
     )
     algo.train()
+
+
+config = dict(
+    tasks=TASKS,
+    latent_length=2,
+    inference_window=1,
+    batch_size=1024 * len(TASKS),  # 4096
+    policy_ent_coeff=50e-3,        # 50e-3
+    embedding_ent_coeff=3e-3,      # 3e-3,
+    inference_ce_coeff=200e-3,     # 200e-3
+)
 
 
 run_experiment(
     run_task,
     exp_prefix='ppo_point_embed',
     n_parallel=16,
+    seed=1,
+    variant=config,
     plot=False,
 )
 

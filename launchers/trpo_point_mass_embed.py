@@ -11,8 +11,8 @@ from garage.tf.spaces import Box
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings import EmbeddingSpec
+from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.envs import DmControlEnv
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.envs import TfEnv

@@ -44,8 +44,8 @@ with tf.Session() as sess:
         p_dist_info = p.dist_info_sym(my_task_obs, name="p_dist_info")
 
     with tf.name_scope("test_fixture"):
-         a = tf.exp(e.latent)
-         b = tf.exp(e._latent_std_param)
+        a = tf.exp(e.latent)
+        b = tf.exp(e._latent_std_param)
 
     sess.run(tf.global_variables_initializer())
 

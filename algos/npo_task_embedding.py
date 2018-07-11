@@ -22,9 +22,9 @@ from sandbox.embed2learn.algos.utils import filter_valids
 from sandbox.embed2learn.algos.utils import filter_valids_dict
 from sandbox.embed2learn.algos.utils import namedtuple_singleton
 from sandbox.embed2learn.algos.utils import flatten_inputs
-from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings import StochasticMultitaskPolicy
 from sandbox.embed2learn.embeddings import StochasticEmbedding
+from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
+from sandbox.embed2learn.policies import StochasticMultitaskPolicy
 from sandbox.embed2learn.samplers import TaskEmbeddingSampler
 from sandbox.embed2learn.samplers.task_embedding_sampler import rollout
 
