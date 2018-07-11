@@ -19,6 +19,23 @@ from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 
+def circle(r, n):
+    for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
+        yield r * np.sin(t), r * np.cos(t)
+
+
+goals = circle(3.0, 12)
+TASKS = {
+    str(i + 1): {
+        'args': [],
+        'kwargs': {
+            'goal': g
+        }
+    }
+    for i, g in enumerate(goals)
+}
+
+
 TASKS = {
     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
@@ -90,7 +107,7 @@ def run_task(*_):
         hidden_sizes=(20, 20),
         std_share_network=True,
         init_std=6.0,
-        max_std=16.0,
+        max_std=8.0,
     )
 
     # Multitask policy
@@ -108,20 +125,21 @@ def run_task(*_):
 
     baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
 
+    temp = 1.0
     algo = PPOTaskEmbedding(
         env=env,
         policy=policy,
         baseline=baseline,
         inference=traj_embedding,
-        batch_size=2048,
+        batch_size=4096,  # 4096
         max_path_length=50,
         n_itr=1000,
         discount=0.99,
         step_size=0.2,
         plot=True,
-        policy_ent_coeff=5e-2,  # 5e-2
-        embedding_ent_coeff=2e-3,  # 2e-3
-        inference_ce_coeff=1e-1,  # 2e-2
+        policy_ent_coeff=temp * 50e-3,  # 5e-2
+        embedding_ent_coeff=temp * 3e-3,  # 1e-3
+        inference_ce_coeff=temp * 200e-3,  # 2e-1
     )
     algo.train()
 

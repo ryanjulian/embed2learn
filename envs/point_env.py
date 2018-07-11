@@ -26,7 +26,7 @@ DARK_COLOR = (150, 150, 150)
 
 
 class PointEnv(gym.Env, Parameterized):
-    def __init__(self, goal=(1, 1), show_traces=True):
+    def __init__(self, goal=(1, 1), random_start=False, show_traces=True):
         Serializable.quick_init(self, locals())
         Parameterized.__init__(self)
 
@@ -38,6 +38,7 @@ class PointEnv(gym.Env, Parameterized):
         self.screen_height = 500
         self.zoom = 50.
         self.show_traces = show_traces
+        self.random_start = random_start
 
         self._traces = deque(maxlen=MAX_SHOWN_TRACES)
 
@@ -55,14 +56,16 @@ class PointEnv(gym.Env, Parameterized):
             low=-0.1, high=0.1, shape=(2, ), dtype=np.float32)
 
     def reset(self):
-        self._point = np.zeros_like(self._goal)
+        if self.random_start:
+            self._point = np.random.uniform(size=self._point.shape)
+        else:
+            self._point = np.zeros_like(self._goal)
         self._traces.append([tuple(self._point)])
         return np.copy(self._point)
 
     def step(self, action):
         # enforce action space
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # action = np.sign(action) * self.action_space.high
 
         self._point = self._point + action
         self._traces[-1].append(tuple(self._point))

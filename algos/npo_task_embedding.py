@@ -783,13 +783,13 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Calculate effect of the entropy terms
         d_rewards = np.mean(aug_rewards - env_rewards)
-        logger.record_tabular('Policy/dAugmentedRewards', d_rewards)
+        logger.record_tabular('Policy/EntRewards', d_rewards)
 
         aug_average_discounted_return = \
             np.mean([path["returns"][0] for path in paths])
         d_returns = np.mean(aug_average_discounted_return -
                             env_average_discounted_return)
-        logger.record_tabular('Policy/dAugmentedReturns', d_returns)
+        logger.record_tabular('Policy/EntReturns', d_returns)
 
         # Calculate explained variance
         ev = special.explained_variance_1d(
@@ -824,9 +824,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                                   np.mean(lengths))
             logger.record_tabular('Tasks/CompletionRate/t={}'.format(t),
                                   pct_completed)
-            logger.record_tabular('Tasks/NumSamples/t={}'.format(t),
-                                  num_samples)
-            logger.record_tabular('Tasks/NumTrajs/t={}'.format(t), num_trajs)
+            # logger.record_tabular('Tasks/NumSamples/t={}'.format(t),
+            #                       num_samples)
+            # logger.record_tabular('Tasks/NumTrajs/t={}'.format(t), num_trajs)
             logger.record_tabular('Tasks/Entropy/t={}'.format(t), task_ents[t])
 
         return samples_data
@@ -846,12 +846,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 mean=latent_infos["mean"][:, i],
                 stddev=np.exp(latent_infos["log_std"][:, i]))
 
-        # samples
-        num_traj = self.batch_size // self.max_path_length
-        latents = samples_data["latents"][:num_traj, 0]
-        for i in range(self.policy.latent_space.flat_dim):
-            logger.record_histogram("Embedding/samples/i={}".format(i),
-                                    latents[:, i])
+        # # samples
+        # num_traj = self.batch_size // self.max_path_length
+        # latents = samples_data["latents"][:num_traj, 0]
+        # for i in range(self.policy.latent_space.flat_dim):
+        #     logger.record_histogram("Embedding/samples/i={}".format(i),
+        #                             latents[:, i])
 
     def train_policy_and_embedding_networks(self, policy_opt_input_values):
         """ Joint optimization of policy and embedding networks """
