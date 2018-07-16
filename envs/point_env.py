@@ -95,9 +95,9 @@ class PointEnv(gym.Env, Parameterized):
                 int(self.screen_height / 2 - position[1] * self.zoom))
 
     @overrides
-    def render(self, **kwargs):
+    def render(self, mode="human"):
 
-        if self.screen is None:
+        if self.screen is None and mode == "human":
             pygame.init()
             caption = "Point Environment"
             pygame.display.set_caption(caption)
@@ -141,7 +141,10 @@ class PointEnv(gym.Env, Parameterized):
                         TRACE_COLORS[-min(len(TRACE_COLORS) - 1, i)], False,
                         [self._to_screen(p) for p in trace])
 
-        pygame.display.flip()
+        if mode == "human":
+            pygame.display.flip()
+        elif mode == "rgb_array":
+            pass
 
     def log_diagnostics(self, paths):
         pass

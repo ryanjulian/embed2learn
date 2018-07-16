@@ -104,8 +104,9 @@ def run_task(v):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=6.0,
-        max_std=8.0,
+        init_std=3.0,
+        # min_std=6.0,
+        # min_std=0.0
     )
 
     # Multitask policy
@@ -116,9 +117,8 @@ def run_task(v):
         embedding=task_embedding,
         hidden_sizes=(20, 10),
         std_share_network=True,
-        init_std=8.0,
-        max_std=16.0,
-        min_std=6.0,
+        init_std=6.0,
+        # min_std=8.0,
     )
 
     baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
@@ -130,7 +130,7 @@ def run_task(v):
         inference=traj_embedding,
         batch_size=v.batch_size,  # 4096
         max_path_length=50,
-        n_itr=1000,
+        n_itr=500,
         discount=0.99,
         step_size=0.2,
         plot=True,
@@ -140,25 +140,27 @@ def run_task(v):
     )
     algo.train()
 
+for p in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+    for e in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+        for i in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
 
-config = dict(
-    tasks=TASKS,
-    latent_length=2,
-    inference_window=1,
-    batch_size=1024 * len(TASKS),  # 4096
-    policy_ent_coeff=50e-3,        # 50e-3
-    embedding_ent_coeff=3e-3,      # 3e-3,
-    inference_ce_coeff=300e-3,     # 200e-3
-)
+            config = dict(
+                tasks=TASKS,
+                latent_length=2,
+                inference_window=3,
+                batch_size=1024 * len(TASKS),  # 4096
+                policy_ent_coeff=p,        # 2000e-5
+                embedding_ent_coeff=e,      # 5e-5,
+                inference_ce_coeff=i,     # 6000e-5
+            )
 
-
-run_experiment(
-    run_task,
-    exp_prefix='ppo_point_embed',
-    n_parallel=16,
-    seed=1,
-    variant=config,
-    plot=False,
-)
+            run_experiment(
+                run_task,
+                exp_prefix='ppo_point_embed',
+                n_parallel=16,
+                seed=1,
+                variant=config,
+                plot=False,
+            )
 
 # run_task()

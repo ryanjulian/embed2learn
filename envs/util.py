@@ -6,3 +6,8 @@ def colormap(k, name="jet"):
     cmap = get_cmap(name)
     rgb = cmap(np.linspace(0, 1, num=k), bytes=True)[::, :3]
     return [tuple(c) for c in rgb]
+
+
+def colormap_mpl(k, name="jet"):
+    cmap = get_cmap(name)
+    return cmap(np.linspace(0, 1, num=k))

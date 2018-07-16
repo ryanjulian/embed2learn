@@ -416,9 +416,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Augment the path rewards with entropy terms
         with tf.name_scope("augmented_rewards"):
-            rewards = i.reward_var + \
-                      (self.inference_ce_coeff * inference_ce) + \
-                      (self.policy_ent_coeff * policy_entropy)
+            rewards = i.reward_var \
+                      - (self.inference_ce_coeff * inference_ce) \
+                      + (self.policy_ent_coeff * policy_entropy)
 
         with tf.name_scope("policy_loss"):
             with tf.name_scope("advantages"):

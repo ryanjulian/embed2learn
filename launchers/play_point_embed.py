@@ -8,12 +8,11 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
+from sandbox.embed2learn.envs.util import colormap_mpl
 from sandbox.embed2learn.envs.multi_task_env import normalize, TfEnv
 
 MAX_PATH_LENGTH = 50
-SAMPLING_POSITIONS = [-0.75, -.5, 0., .5, 0.75]
-COLOR_MAPS = ['autumn', 'winter', 'jet', 'plasma']
-color_maps = [matplotlib.cm.get_cmap(cm) for cm in COLOR_MAPS]
+SAMPLING_POSITIONS = np.linspace(-1, 1, num=10)
 
 
 def rollout_given_z(env,
@@ -45,33 +44,55 @@ def rollout_given_z(env,
     return np.array(observations)
 
 
+def get_z_dist(t, policy):
+    """ Get the latent distribution for a task """
+    onehot = np.zeros(policy.task_space.shape, dtype=np.float32)
+    onehot[t] = 1
+    _, latent_info = policy.get_latent(onehot)
+    return latent_info
+
+
+def transform_z(policy):
+    num_tasks = policy.task_space.flat_dim
+    z_dists = [get_z_dist(t, policy) for t in range(num_tasks)]
+    z_means = np.array([d["mean"] for d in z_dists])
+    z_stds = np.array([np.exp(d["log_std"]) for d in z_dists])
+
+    import ipdb
+    ipdb.set_trace()
+
+
 def play(pkl_filename):
     matplotlib.rcParams['pdf.fonttype'] = 42
     matplotlib.rcParams['ps.fonttype'] = 42
     plt.figure(figsize=(8, 8))
 
     with tf.Session():
+
+        # Unpack the snapshot
         snapshot = joblib.load(pkl_filename)
         env = snapshot["env"]
         policy = snapshot["policy"]
+
+        # Get the task goals
         task_envs = env._wrapped_env.env._task_envs
+        num_tasks = len(task_envs)
         goals = np.array([te._goal for te in task_envs])
 
-        for task, env in enumerate(task_envs):
+        task_cmap = colormap_mpl(num_tasks)
+        for t, env in enumerate(task_envs):
+            # Get latent distribution
+            z_mean, z_std = get_z_dist(t, policy)
 
-            # Sample latent
-            onehot = np.zeros(policy.task_space.shape, dtype=np.float32)
-            onehot[task] = 1
-            _, latent_info = policy.get_latent(onehot)
-            z_mean, z_std = latent_info["mean"], np.exp(latent_info["log_std"])
+            transform_z(policy)
 
-            # Plot goals
+            # Plot goal
             plt.scatter(
-                [goals[task, 0]], [goals[task, 1]],
+                [goals[t, 0]], [goals[t, 1]],
                 s=50,
-                color=color_maps[task % len(color_maps)](0),
+                color=task_cmap[t],
                 zorder=2,
-                label="Task %i" % (task + 1))
+                label="Task {}".format(t + 1))
 
             # Plot rollouts for linearly interpolated latents
             for i, x in enumerate(SAMPLING_POSITIONS):
@@ -86,13 +107,8 @@ def play(pkl_filename):
                     max_path_length=MAX_PATH_LENGTH,
                     animated=False)
 
-                # Plot
-                plt.plot(
-                    obs[:, 0],
-                    obs[:, 1],
-                    alpha=0.7,
-                    color=color_maps[task % len(color_maps)](
-                        i * 1. / len(SAMPLING_POSITIONS)))
+                # Plot rollout
+                plt.plot(obs[:, 0], obs[:, 1], alpha=0.7, color=task_cmap[t])
 
         plt.grid(True)
         plt.xlim([-4, 4])
