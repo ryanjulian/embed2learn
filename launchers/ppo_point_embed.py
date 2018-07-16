@@ -140,10 +140,15 @@ def run_task(v):
     )
     algo.train()
 
-for p in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
-    for e in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
-        for i in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+# Hyperparamter optimization
+# for p in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+#     for e in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+#         for i in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
 
+# Finish p = 1e-3
+for i in [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-1, 1, 2]:
+    for e in [1e-3, 1e-2, 1e-1, 1, 2]:
+        for p in [1e-3]:
             config = dict(
                 tasks=TASKS,
                 latent_length=2,
@@ -162,5 +167,47 @@ for p in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
                 variant=config,
                 plot=False,
             )
+
+# Finish p > 1e-3 (probably well-conditioned)
+for i in [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-1, 1, 2]:
+    for e in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+        for p in [1e-2, 1e-1, 1, 2]:
+            config = dict(
+                tasks=TASKS,
+                latent_length=2,
+                inference_window=3,
+                batch_size=1024 * len(TASKS),  # 4096
+                policy_ent_coeff=p,        # 2000e-5
+                embedding_ent_coeff=e,      # 5e-5,
+                inference_ce_coeff=i,     # 6000e-5
+            )
+
+            run_experiment(
+                run_task,
+                exp_prefix='ppo_point_embed',
+                n_parallel=16,
+                seed=1,
+                variant=config,
+                plot=False,
+            )
+
+# config = dict(
+#     tasks=TASKS,
+#     latent_length=2,
+#     inference_window=3,
+#     batch_size=1024 * len(TASKS),  # 4096
+#     policy_ent_coeff=1e-3,
+#     embedding_ent_coeff=1e-2,
+#     inference_ce_coeff=1e-2,
+# )
+
+# run_experiment(
+#     run_task,
+#     exp_prefix='ppo_point_embed',
+#     n_parallel=2,
+#     seed=1,
+#     variant=config,
+#     plot=False,
+# )
 
 # run_task()

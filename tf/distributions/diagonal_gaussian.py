@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 
 from garage.tf.distributions import Distribution
-from garage.tf.misc.tensor_utils import enclosing_scope
 
 
 class DiagonalGaussian(Distribution):
