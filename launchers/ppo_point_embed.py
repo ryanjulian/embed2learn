@@ -105,8 +105,7 @@ def run_task(v):
         hidden_sizes=(20, 20),
         std_share_network=True,
         init_std=3.0,
-        # min_std=6.0,
-        # min_std=0.0
+        max_std=6.0,
     )
 
     # Multitask policy
@@ -118,7 +117,6 @@ def run_task(v):
         hidden_sizes=(20, 10),
         std_share_network=True,
         init_std=6.0,
-        # min_std=8.0,
     )
 
     baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
@@ -140,74 +138,21 @@ def run_task(v):
     )
     algo.train()
 
-# Hyperparamter optimization
-# for p in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
-#     for e in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
-#         for i in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
+config = dict(
+    tasks=TASKS,
+    latent_length=2,
+    inference_window=3,
+    batch_size=1024 * len(TASKS),  # 4096
+    policy_ent_coeff=1e-2,
+    embedding_ent_coeff=1e-3,
+    inference_ce_coeff=1e-4,
+)
 
-# Finish p = 1e-3
-for i in [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-1, 1, 2]:
-    for e in [1e-3, 1e-2, 1e-1, 1, 2]:
-        for p in [1e-3]:
-            config = dict(
-                tasks=TASKS,
-                latent_length=2,
-                inference_window=3,
-                batch_size=1024 * len(TASKS),  # 4096
-                policy_ent_coeff=p,        # 2000e-5
-                embedding_ent_coeff=e,      # 5e-5,
-                inference_ce_coeff=i,     # 6000e-5
-            )
-
-            run_experiment(
-                run_task,
-                exp_prefix='ppo_point_embed',
-                n_parallel=16,
-                seed=1,
-                variant=config,
-                plot=False,
-            )
-
-# Finish p > 1e-3 (probably well-conditioned)
-for i in [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-1, 1, 2]:
-    for e in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 2]:
-        for p in [1e-2, 1e-1, 1, 2]:
-            config = dict(
-                tasks=TASKS,
-                latent_length=2,
-                inference_window=3,
-                batch_size=1024 * len(TASKS),  # 4096
-                policy_ent_coeff=p,        # 2000e-5
-                embedding_ent_coeff=e,      # 5e-5,
-                inference_ce_coeff=i,     # 6000e-5
-            )
-
-            run_experiment(
-                run_task,
-                exp_prefix='ppo_point_embed',
-                n_parallel=16,
-                seed=1,
-                variant=config,
-                plot=False,
-            )
-
-# config = dict(
-#     tasks=TASKS,
-#     latent_length=2,
-#     inference_window=3,
-#     batch_size=1024 * len(TASKS),  # 4096
-#     policy_ent_coeff=1e-3,
-#     embedding_ent_coeff=1e-2,
-#     inference_ce_coeff=1e-2,
-# )
-
-# run_experiment(
-#     run_task,
-#     exp_prefix='ppo_point_embed',
-#     n_parallel=2,
-#     seed=1,
-#     variant=config,
-#     plot=False,
-# )
-
-# run_task()
+run_experiment(
+    run_task,
+    exp_prefix='ppo_point_embed_compose',
+    n_parallel=16,
+    seed=1,
+    variant=config,
+    plot=False,
+)

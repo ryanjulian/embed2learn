@@ -58,9 +58,6 @@ def transform_z(policy):
     z_means = np.array([d["mean"] for d in z_dists])
     z_stds = np.array([np.exp(d["log_std"]) for d in z_dists])
 
-    import ipdb
-    ipdb.set_trace()
-
 
 def play(pkl_filename):
     matplotlib.rcParams['pdf.fonttype'] = 42
