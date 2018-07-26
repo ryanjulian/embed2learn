@@ -18,3 +18,13 @@ Check out this repository as a submodule of the repository above, into
 ```sh
 git submodule add -f git@github.com:ryanjulian/embed2learn.git sandbox/embed2learn
 ```
+
+### Step 3
+```sh
+cd sandbox/embed2learn
+git submodule init
+git submodule update
+cd external/multiworld
+git checkout russell
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+```
