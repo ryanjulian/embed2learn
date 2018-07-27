@@ -173,11 +173,11 @@ class TaskEmbeddingSampler(BatchSampler):
             _worker_set_inference_params,
             [(inference_params, scope)] * singleton_pool.n_parallel,
         )
-        if env_params:
-            singleton_pool.run_each(
-                parallel_sampler._worker_set_env_params,
-                [(env_params, scope)] * singleton_pool.n_parallel,
-            )
+        # if env_params:
+        #     singleton_pool.run_each(
+        #         parallel_sampler._worker_set_env_params,
+        #         [(env_params, scope)] * singleton_pool.n_parallel,
+        #     )
 
         return singleton_pool.run_collect(
             _worker_collect_one_path,
@@ -188,10 +188,10 @@ class TaskEmbeddingSampler(BatchSampler):
 
     def obtain_samples(self, itr):
         policy_params = self.algo.policy.get_param_values()
-        env_params = self.algo.env.get_param_values()
+        # env_params = self.algo.env.get_param_values()
         paths = self.sample_paths(
             policy_params=policy_params,
-            env_params=env_params,
+            env_params=None,
             max_samples=self.algo.batch_size,
             max_path_length=self.algo.max_path_length,
             scope=self.algo.scope,

@@ -32,7 +32,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                  output_nonlinearity=None,
                  mean_network=None,
                  std_network=None,
-                 std_parameterization='exp'):
+                 std_parameterization='exp',
+                 normalize=False):
         """
         :param embedding_spec:
         :param hidden_sizes: list of sizes for the fully-connected hidden
@@ -88,23 +89,29 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
         self._mean_network = mean_network
         self._std_network = std_network
         self._std_parameterization = std_parameterization
+        self._normalize = normalize
+
+        if self._normalize:
+            latent_dim = self.latent_space.flat_dim
+            self._max_std = np.sqrt(1.0 / latent_dim)
+            self._init_std = self._max_std / 2.0
 
         # Tranform std arguments to parameterized space
         self._init_std_param = None
         self._min_std_param = None
         self._max_std_param = None
         if std_parameterization == 'exp':
-            self._init_std_param = np.log(init_std)
-            if min_std:
-                self._min_std_param = np.log(min_std)
-            if max_std:
-                self._max_std_param = np.log(max_std)
+            self._init_std_param = np.log(self._init_std)
+            if self._min_std:
+                self._min_std_param = np.log(self._min_std)
+            if self._max_std:
+                self._max_std_param = np.log(self._max_std)
         elif std_parameterization == 'softplus':
-            self._init_std_param = np.log(np.exp(init_std) - 1)
-            if min_std:
-                self._min_std_param = np.log(np.exp(min_std) - 1)
-            if max_std:
-                self._max_std_param = np.log(np.exp(max_std) - 1)
+            self._init_std_param = np.log(np.exp(self._init_std) - 1)
+            if self._min_std:
+                self._min_std_param = np.log(np.exp(self._min_std) - 1)
+            if self._max_std:
+                self._max_std_param = np.log(np.exp(self._max_std) - 1)
         else:
             raise NotImplementedError
 
@@ -243,6 +250,10 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                     std_var = tf.log(1. + tf.exp(std_param_var))
                 else:
                     raise NotImplementedError
+
+            if self._normalize:
+                mean_var = tf.nn.l2_normalize(mean_var)
+                #std_var = tf.nn.l2_normalize(std_var)
 
             dist = tf.contrib.distributions.MultivariateNormalDiag(
                 mean_var, std_var)

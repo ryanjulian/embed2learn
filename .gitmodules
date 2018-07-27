@@ -1,3 +1,6 @@
 [submodule "external/multiworld"]
 	path = external/multiworld
 	url = https://github.com/vitchyr/multiworld.git
+[submodule "external/embed_onpolicy"]
+	path = external/embed_onpolicy
+	url = git@github.com:eric-heiden/embed_onpolicy.git
