@@ -20,30 +20,17 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
+from embed_onpolicy.point3d_env import Point3dEnv, TASKS
 
-def circle(r, n):
-    for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
-        yield r * np.sin(t), r * np.cos(t)
-
-
-N = 4
-goals = circle(3.0, N)
-TASKS = {
-    str(i + 1): {
+MY_TASKS = {
+    str(t + 1): {
         'args': [],
         'kwargs': {
-            'goal': g
+            'task': t
         }
     }
-    for i, g in enumerate(goals)
+    for t in range(len(TASKS))
 }
-
-# TASKS = {
-#     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
-#     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-#     '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
-#     '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
-# }  # yapf: disable
 
 
 def run_task(v):
@@ -57,7 +44,7 @@ def run_task(v):
     env = TfEnv(
         normalize(
             MultiTaskEnv(
-                task_env_cls=PointEnv,
+                task_env_cls=Point3dEnv,
                 task_args=task_args,
                 task_kwargs=task_kwargs)))
 
@@ -94,7 +81,7 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
+        hidden_sizes=(20, 20),
         std_share_network=True,
         init_std=1.0,
     )
@@ -105,8 +92,8 @@ def run_task(v):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=1.0,  # 3.0
-        max_std=2.0,   # 6.0
+        init_std=1.0,
+        max_std=2.0,
         # normalize=True,
     )
 
@@ -124,7 +111,8 @@ def run_task(v):
 
     # baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
     extra = v.latent_length + len(v.tasks)
-    baseline = MultiTaskGaussianMLPBaseline(env_spec=env.spec, extra_dims=extra)
+    baseline = MultiTaskGaussianMLPBaseline(
+        env_spec=env.spec, extra_dims=extra)
 
     algo = PPOTaskEmbedding(
         env=env,
@@ -144,21 +132,22 @@ def run_task(v):
     )
     algo.train()
 
+
 config = dict(
-    tasks=TASKS,
-    latent_length=2,
+    tasks=MY_TASKS,
+    latent_length=3,
     inference_window=2,
-    batch_size=1024 * len(TASKS),  # 4096
-    policy_ent_coeff=1e-3,  # 1e-2 # 1e-6
-    embedding_ent_coeff=1e-2,  # 1e-3 # 1e-4
-    inference_ce_coeff=1e-4,  # 1e-4 # 1e-2
+    batch_size=1024 * len(MY_TASKS),  # 4096
+    policy_ent_coeff=1e-2,  # 1e-2 #
+    embedding_ent_coeff=1e-2,  # 1e-3
+    inference_ce_coeff=1e-4,  # 1e-4
 )
 
 run_experiment(
     run_task,
-    exp_prefix='ppo_point_embed_baseline',
+    exp_prefix='point3d_embed',
     n_parallel=16,
     seed=1,
     variant=config,
-    plot=False,
+    plot=True,
 )

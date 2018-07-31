@@ -10,6 +10,7 @@ from garage.tf.spaces import Box
 from sandbox.embed2learn.algos import PPOTaskEmbedding
 from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
 from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
+from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings import EmbeddingSpec
@@ -19,16 +20,8 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-from sawyer_reach import TaskReacherEnv, TASKS
+from embed_onpolicy.sawyer_reach import TaskReacherEnv, TASKS
 
-
-def circle(r, n):
-    for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
-        yield [r * np.sin(t), r * np.cos(t)]
-
-
-N = 4
-goals = [g.insert(0, 1) for g in circle(3.0, N)]
 MY_TASKS = {
     str(t + 1): {
         'args': [],
@@ -36,7 +29,8 @@ MY_TASKS = {
             'task': t
         }
     }
-    for t in range(len(TASKS))
+    #for t in range(len(TASKS))
+    for t in range(1)
 }
 
 
@@ -90,7 +84,7 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
+        hidden_sizes=(200, 200),
         std_share_network=True,
         init_std=1.0,
     )
@@ -99,10 +93,11 @@ def run_task(v):
     task_embedding = GaussianMLPEmbedding(
         name="embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(20, 20),
+        hidden_sizes=(200, 200),
         std_share_network=True,
-        init_std=3.0,
-        max_std=6.0,
+        init_std=1.0,  # 1.0
+        max_std=1.0,  # 2.0
+        std_parameterization="softplus",
         # normalize=True,
     )
 
@@ -112,13 +107,17 @@ def run_task(v):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(20, 10),
+        hidden_sizes=(200, 100),
         std_share_network=True,
-        # max_std=6.0,
-        init_std=6.0,
+        max_std=0.3,
+        init_std=0.15,
+        std_parameterization="softplus",
     )
 
-    baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
+    # baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
+    extra = v.latent_length + len(v.tasks)
+    baseline = MultiTaskGaussianMLPBaseline(
+        env_spec=env.spec, extra_dims=extra)
 
     algo = PPOTaskEmbedding(
         env=env,
@@ -126,7 +125,7 @@ def run_task(v):
         baseline=baseline,
         inference=traj_embedding,
         batch_size=v.batch_size,  # 4096
-        max_path_length=500,
+        max_path_length=150,
         n_itr=500,
         discount=0.99,
         step_size=0.2,
@@ -134,26 +133,25 @@ def run_task(v):
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
-        num_tasks_held_out=1,
     )
     algo.train()
 
 
 config = dict(
     tasks=MY_TASKS,
-    latent_length=2,
-    inference_window=30,
-    batch_size=1024 * len(MY_TASKS),  # 4096
-    policy_ent_coeff=1e-2,  # 1e-2 # 1e-6
-    embedding_ent_coeff=1e-3,  # 1e-3 # 1e-4
-    inference_ce_coeff=1e-4,  # 1e-4 # 1e-2
+    latent_length=3,
+    inference_window=8,
+    batch_size=4000 * len(MY_TASKS),  # 4096
+    policy_ent_coeff=0.,  # 1e-2 #
+    embedding_ent_coeff=0.,  # 1e-3
+    inference_ce_coeff=0.,  # 1e-4
 )
 
 run_experiment(
     run_task,
     exp_prefix='sawyer_reach_embed',
-    n_parallel=1,
+    n_parallel=16,
     seed=1,
     variant=config,
-    plot=True,
+    plot=False,
 )

@@ -74,7 +74,8 @@ class MultiTaskEnv(gym.Env, Parameterized):
             env.close()
 
     def get_params_internal(self, **tags):
-        return self.active_env.get_params_internal(**tags)
+        # return self.active_env.get_params_internal(**tags)
+        return []
 
     # def set_param_values(self, params):
     #     self._active_env.set_param_values(params)

@@ -100,13 +100,13 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
         self._init_std_param = None
         self._min_std_param = None
         self._max_std_param = None
-        if std_parameterization == 'exp':
+        if self._std_parameterization == 'exp':
             self._init_std_param = np.log(init_std)
             if min_std:
                 self._min_std_param = np.log(min_std)
             if max_std:
                 self._max_std_param = np.log(max_std)
-        elif std_parameterization == 'softplus':
+        elif self._std_parameterization == 'softplus':
             self._init_std_param = np.log(np.exp(init_std) - 1)
             if min_std:
                 self._min_std_param = np.log(np.exp(min_std) - 1)
@@ -265,7 +265,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                 # build std_var with std parameterization
                 if self._std_parameterization == "exp":
                     std_var = tf.exp(std_param_var)
-                elif std_parameterization == "softplus":
+                elif self._std_parameterization == "softplus":
                     std_var = tf.log(1. + tf.exp(std_param_var))
                 else:
                     raise NotImplementedError

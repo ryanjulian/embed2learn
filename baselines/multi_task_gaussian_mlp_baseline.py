@@ -37,6 +37,7 @@ class MultiTaskGaussianMLPBaseline(Baseline, Parameterized):
                          num_seq_inputs, ),
             output_dim=1,
             name="vf",
+            use_trust_region=True,
             **regressor_args)
 
     @overrides

@@ -13,13 +13,6 @@ from garage.spaces import Box
 from sandbox.embed2learn.envs.util import colormap
 
 MAX_SHOWN_TRACES = 10
-# TRACE_COLORS = [
-#     (80, 150, 0),
-#     (100, 180, 10),
-#     (100, 210, 30),
-#     (140, 230, 50),
-#     (180, 250, 150)
-# ]  # yapf: disable
 TRACE_COLORS = colormap(MAX_SHOWN_TRACES)
 BRIGHT_COLOR = (200, 200, 200)
 DARK_COLOR = (150, 150, 150)
@@ -74,18 +67,11 @@ class PointEnv(gym.Env, Parameterized):
         done = dist < np.linalg.norm(self.action_space.low)
 
         # dense reward
-        #reward = -np.exp(dist)
+
         reward = -dist
-
-        # alive penalty
-        # reward -= 10.0
-
         # completion bonus
         if done:
             reward = 100
-
-        # reward scaling
-        # reward *= 10.0
 
         return Step(observation=np.copy(self._point), reward=reward, done=done)
 
