@@ -4,7 +4,6 @@ import numpy as np
 
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
 from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
 
@@ -21,22 +20,17 @@ from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
-GOALS = [
-  # (  ?,    x,   ?)
-    (0.3, -0.3, 0.3),
-    (0.3, 0.3, 0.3),
-    (0.3, 0.3, 0.4),
-#    (0.3, -0.3, 0.3),  # confusion goal
-]
-TASKS = {
+from embed_onpolicy.sawyer_reach import TaskReacherEnv, TASKS
+
+MY_TASKS = {
     str(t + 1): {
         'args': [],
         'kwargs': {
-            'goal_position': g,
-            'completion_bonus': 100.,
+            'task': t
         }
     }
-    for t, g in enumerate(GOALS)
+    #for t in range(len(TASKS))
+    for t in range(1)
 }
 
 
@@ -47,11 +41,13 @@ def run_task(v):
     task_args = [v.tasks[t]['args'] for t in task_names]
     task_kwargs = [v.tasks[t]['kwargs'] for t in task_names]
 
+    env = TaskReacherEnv(task=0)
+
     # Environment
     env = TfEnv(
-            normalize(
-              MultiTaskEnv(
-                task_env_cls=SimpleReacherEnv,
+        normalize(
+            MultiTaskEnv(
+                task_env_cls=TaskReacherEnv,
                 task_args=task_args,
                 task_kwargs=task_kwargs)))
 
@@ -100,8 +96,9 @@ def run_task(v):
         hidden_sizes=(200, 200),
         std_share_network=True,
         init_std=1.0,  # 1.0
-        max_std=2.0,  # 2.0
+        max_std=1.0,  # 2.0
         std_parameterization="softplus",
+        # normalize=True,
     )
 
     # Multitask policy
@@ -112,8 +109,8 @@ def run_task(v):
         embedding=task_embedding,
         hidden_sizes=(200, 100),
         std_share_network=True,
-        init_std=1.0,
-        max_std=2.0,
+        max_std=0.3,
+        init_std=0.15,
         std_parameterization="softplus",
     )
 
@@ -139,14 +136,15 @@ def run_task(v):
     )
     algo.train()
 
+
 config = dict(
-    tasks=TASKS,
+    tasks=MY_TASKS,
     latent_length=3,
-    inference_window=6,
-    batch_size=4000 * len(TASKS),  # 4096
-    policy_ent_coeff=0.5e-3,  # 1e-2 #
-    embedding_ent_coeff=0.2e-3,  # 1e-3
-    inference_ce_coeff=1e-3,  # 1e-4
+    inference_window=8,
+    batch_size=4000 * len(MY_TASKS),  # 4096
+    policy_ent_coeff=0.,  # 1e-2 #
+    embedding_ent_coeff=0.,  # 1e-3
+    inference_ce_coeff=0.,  # 1e-4
 )
 
 run_experiment(
