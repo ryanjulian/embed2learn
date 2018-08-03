@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
 import numpy as np
+import tensorflow as tf
 
+from garage.core import Serializable
+from garage.core import Parameterized
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
 from garage.envs.mujoco.sawyer import SimpleReacherEnv
@@ -15,25 +18,40 @@ from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.envs import PointEnv
+from sandbox.embed2learn.envs.multiworld import FlatXYZReacher
+from sandbox.embed2learn.envs.multiworld import FlatTorqueReacher
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
+
 GOALS = [
   # (  ?,    x,   ?)
     (0.3, -0.3, 0.3),
     (0.3, 0.3, 0.3),
-    (0.3, 0.3, 0.4),
+#    (0.3, 0.3, 0.4),
 #    (0.3, -0.3, 0.3),  # confusion goal
 ]
+# # SimpleReacherEnv
+# TASKS = {
+#     str(t + 1): {
+#         'args': [],
+#         'kwargs': {
+#             'goal_position': g,
+#             'completion_bonus': 100.,
+#         }
+#     }
+#     for t, g in enumerate(GOALS)
+# }
+
+# FlatXYZReacher/FlatTorqueReacher
 TASKS = {
     str(t + 1): {
         'args': [],
         'kwargs': {
-            'goal_position': g,
-            'completion_bonus': 100.,
+            'fix_goal': True,
+            'fixed_goal': g,
         }
     }
     for t, g in enumerate(GOALS)
@@ -51,7 +69,7 @@ def run_task(v):
     env = TfEnv(
             normalize(
               MultiTaskEnv(
-                task_env_cls=SimpleReacherEnv,
+                task_env_cls=FlatTorqueReacher,
                 task_args=task_args,
                 task_kwargs=task_kwargs)))
 
@@ -88,7 +106,7 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(200, 200),
+        hidden_sizes=(64, 64),
         std_share_network=True,
         init_std=1.0,
     )
@@ -97,11 +115,11 @@ def run_task(v):
     task_embedding = GaussianMLPEmbedding(
         name="embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(200, 200),
+        hidden_sizes=(64, 64),
         std_share_network=True,
-        init_std=1.0,  # 1.0
-        max_std=2.0,  # 2.0
-        std_parameterization="softplus",
+        init_std=v.embedding_init_std,  # 1.0
+        max_std=v.embedding_max_std,  # 2.0
+        # std_parameterization="softplus",
     )
 
     # Multitask policy
@@ -110,11 +128,11 @@ def run_task(v):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(200, 100),
+        hidden_sizes=(64, 32),
         std_share_network=True,
-        init_std=1.0,
-        max_std=2.0,
-        std_parameterization="softplus",
+        init_std=v.policy_init_std,
+        max_std=v.policy_max_std,
+        # std_parameterization="softplus",
     )
 
     # baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
@@ -128,7 +146,7 @@ def run_task(v):
         baseline=baseline,
         inference=traj_embedding,
         batch_size=v.batch_size,  # 4096
-        max_path_length=150,
+        max_path_length=v.max_path_length,
         n_itr=500,
         discount=0.99,
         step_size=0.2,
@@ -136,22 +154,28 @@ def run_task(v):
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
+        #optimizer_args=dict(max_grad_norm=0.5)
     )
     algo.train()
 
 config = dict(
     tasks=TASKS,
-    latent_length=3,
-    inference_window=6,
-    batch_size=4000 * len(TASKS),  # 4096
-    policy_ent_coeff=0.5e-3,  # 1e-2 #
-    embedding_ent_coeff=0.2e-3,  # 1e-3
-    inference_ce_coeff=1e-3,  # 1e-4
+    latent_length=3,  # 3
+    inference_window=6,  # 6
+    batch_size=4096 * len(TASKS),  # 4096 * len(TASKS)
+    policy_ent_coeff=1e-4,  # 1e-2 #
+    embedding_ent_coeff=1e-4,  # 1e-3
+    inference_ce_coeff=2e-5,  # 1e-4
+    max_path_length=100,  # 50
+    embedding_init_std=1.0,  # 1.0
+    embedding_max_std=2.0,  # 2.0
+    policy_init_std=0.5,  # 1.0
+    policy_max_std=1.0,  # 2.0
 )
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_embed',
+    exp_prefix='sawyer_reach_multiworld_torque',
     n_parallel=16,
     seed=1,
     variant=config,

@@ -15,6 +15,7 @@ from sandbox.embed2learn.policies import StochasticMultitaskPolicy
 from sandbox.embed2learn.tf.distributions import DiagonalGaussian
 from sandbox.embed2learn.tf.network_utils import mlp
 from sandbox.embed2learn.tf.network_utils import parameter
+from sandbox.embed2learn.tf.network_utils import two_headed_mlp
 
 
 class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
@@ -201,20 +202,36 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                         ],
                         axis=0)
                     b = tf.constant_initializer(b)
-                    # b = tf.truncated_normal_initializer(
-                    #     mean=b, stddev=small)
                     mean_std_network = mlp(
                         with_input=latent_obs_input,
                         output_dim=action_dim * 2,
                         hidden_sizes=self._hidden_sizes,
                         hidden_nonlinearity=self._hidden_nonlinearity,
                         output_nonlinearity=self._output_nonlinearity,
+                        hidden_w_init=tf.orthogonal_initializer(1.0),
+                        output_w_init=tf.orthogonal_initializer(1.0),
                         output_b_init=b,
                         name="mean_std_network")
                     with tf.variable_scope("mean_network"):
                         mean_network = mean_std_network[..., :action_dim]
                     with tf.variable_scope("std_network"):
                         std_network = mean_std_network[..., action_dim:]
+
+                    # kernel initialization version (NOT WORKING)
+                    # lower: mean, upper: std
+                    # b = tf.constant_initializer(
+                    #     np.full(action_dim, self._init_std_param))
+                    # mean_network, std_network = two_headed_mlp(
+                    #     with_input=latent_obs_input,
+                    #     lower_output_dim=action_dim,
+                    #     upper_output_dim=action_dim,
+                    #     hidden_sizes=self._hidden_sizes,
+                    #     hidden_nonlinearity=self._hidden_nonlinearity,
+                    #     lower_output_nonlinearity=self._output_nonlinearity,
+                    #     upper_output_nonlinearity=self._output_nonlinearity,
+                    #     upper_output_b_init=b,
+                    #     name="mean_std_network")
+
                 else:
                     # separate MLPs for mean and std networks
                     # mean network
@@ -229,8 +246,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                     # std network
                     if self._adaptive_std:
                         b = tf.constant_initializer(self._init_std_param)
-                        # b = tf.truncated_normal_initializer(
-                        #     mean=self._init_std_param, stddev=small)
                         std_network = mlp(
                             with_input=latent_obs_input,
                             output_dim=action_dim,
@@ -241,8 +256,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                             name="std_network")
                     else:
                         p = tf.constant_initializer(self._init_std_param)
-                        # p = tf.truncated_normal_initializer(
-                        #     mean=self._init_std_param, stddev=small)
                         std_network = parameter(
                             with_input=latent_obs_input,
                             length=action_dim,

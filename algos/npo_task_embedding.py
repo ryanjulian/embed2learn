@@ -23,6 +23,7 @@ from sandbox.embed2learn.algos.utils import filter_valids_dict
 from sandbox.embed2learn.algos.utils import namedtuple_singleton
 from sandbox.embed2learn.algos.utils import flatten_inputs
 from sandbox.embed2learn.embeddings import StochasticEmbedding
+from sandbox.embed2learn.misc.metrics import rrse, rmse
 from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.policies import StochasticMultitaskPolicy
 from sandbox.embed2learn.samplers import TaskEmbeddingSampler
@@ -806,6 +807,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         inference_rmse = np.sqrt(inference_rmse.mean())
         logger.record_tabular('Inference/RMSE', inference_rmse)
 
+        inference_rrse = rrse(
+            samples_data['latents'], samples_data['trajectory_infos']['mean'])
+        logger.record_tabular('Inference/RRSE', inference_rrse)
+
         embed_ent = self.f_embedding_entropy(*policy_opt_input_values)
         logger.record_tabular('Embedding/Entropy', embed_ent)
 
@@ -844,19 +849,33 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         all_tasks = np.eye(num_tasks, num_tasks)
         _, latent_infos = self.policy._embedding.get_latents(all_tasks)
         for i in range(self.policy.latent_space.flat_dim):
+            log_stds = latent_infos["log_std"][:, i]
+            if self.policy.embedding._std_parameterization == "exp":
+                stds = np.exp(log_stds)
+            elif self.policy.embedding._std_parameterization == "softplus":
+                stds = np.log(1. + log_stds)
+            else:
+                raise NotImplementedError
             logger.record_histogram_by_type(
                 "normal",
                 shape=[1000, num_tasks],
                 key="Embedding/i={}".format(i),
                 mean=latent_infos["mean"][:, i],
-                stddev=np.exp(latent_infos["log_std"][:, i]))
+                stddev=stds)
 
+        num_traj = self.batch_size // self.max_path_length
         # # samples
-        # num_traj = self.batch_size // self.max_path_length
         # latents = samples_data["latents"][:num_traj, 0]
         # for i in range(self.policy.latent_space.flat_dim):
         #     logger.record_histogram("Embedding/samples/i={}".format(i),
         #                             latents[:, i])
+
+        # action distributions
+        actions = samples_data["actions"][:num_traj, ...]
+        logger.record_histogram("Actions", actions)
+
+
+
 
     def train_policy_and_embedding_networks(self, policy_opt_input_values):
         """ Joint optimization of policy and embedding networks """

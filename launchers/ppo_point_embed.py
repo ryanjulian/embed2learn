@@ -94,7 +94,7 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
+        hidden_sizes=(200, 100),  # was the same size as policy in Karol's paper
         std_share_network=True,
         init_std=1.0,
     )
@@ -103,10 +103,10 @@ def run_task(v):
     task_embedding = GaussianMLPEmbedding(
         name="embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(20, 20),
+        hidden_sizes=(200, 200),
         std_share_network=True,
-        init_std=1.0,  # 3.0
-        max_std=2.0,   # 6.0
+        init_std=v.embedding_init_std,  # 3.0
+        max_std=v.embedding_max_std,   # 6.0
         # normalize=True,
     )
 
@@ -116,10 +116,10 @@ def run_task(v):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(20, 10),
+        hidden_sizes=(200, 100),
         std_share_network=True,
-        # max_std=6.0,
-        init_std=6.0,
+        max_std=v.policy_max_std,
+        init_std=v.policy_init_std,
     )
 
     # baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
@@ -132,15 +132,14 @@ def run_task(v):
         baseline=baseline,
         inference=traj_embedding,
         batch_size=v.batch_size,  # 4096
-        max_path_length=50,
-        n_itr=500,
+        max_path_length=v.max_path_length,
+        n_itr=300,
         discount=0.99,
         step_size=0.2,
         plot=True,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
-        num_tasks_held_out=1,
     )
     algo.train()
 
@@ -149,14 +148,19 @@ config = dict(
     latent_length=2,
     inference_window=2,
     batch_size=1024 * len(TASKS),  # 4096
-    policy_ent_coeff=1e-3,  # 1e-2 # 1e-6
+    policy_ent_coeff=1e-2,  # 1e-2 # 1e-6
     embedding_ent_coeff=1e-2,  # 1e-3 # 1e-4
     inference_ce_coeff=1e-4,  # 1e-4 # 1e-2
+    max_path_length=50,
+    embedding_init_std=1.0,
+    embedding_max_std=2.0,
+    policy_init_std=2.0,  # 6.0
+    policy_max_std=None,
 )
 
 run_experiment(
     run_task,
-    exp_prefix='ppo_point_embed_baseline',
+    exp_prefix='ppo_point_embed',
     n_parallel=16,
     seed=1,
     variant=config,
