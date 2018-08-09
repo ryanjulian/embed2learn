@@ -26,24 +26,12 @@ from sandbox.embed2learn.envs.multi_task_env import normalize
 from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 
+# FlatTorqueReacherEnv
 GOALS = [
-  # (  ?,    x,   ?)
-    (0.3, -0.3, 0.3),
-    (0.3, 0.3, 0.3),
-    (0.3, 0.3, 0.4),
-    (0.3, -0.3, 0.3),  # confusion goal
+  # (L/R, depth, height)
+    (0.3, 0.6, 0.15),
+    (-0.3, 0.6, 0.15),
 ]
-# # SimpleReacherEnv
-# TASKS = {
-#     str(t + 1): {
-#         'args': [],
-#         'kwargs': {
-#             'goal_position': g,
-#             'completion_bonus': 100.,
-#         }
-#     }
-#     for t, g in enumerate(GOALS)
-# }
 
 # FlatXYZReacher/FlatTorqueReacher
 TASKS = {
@@ -52,6 +40,12 @@ TASKS = {
         'kwargs': {
             'fix_goal': True,
             'fixed_goal': g,
+            'reward_type': 'hand_distance',
+            'torque_limit_pct': 0.2,
+            'indicator_threshold': 0.03,
+            'velocity_penalty_coeff': 0.01,
+            'action_scale': 10.0,
+            'hide_goal_pos': True,
         }
     }
     for t, g in enumerate(GOALS[:2])
@@ -163,14 +157,14 @@ config = dict(
     latent_length=3,  # 3
     inference_window=6,  # 6
     batch_size=4096 * len(TASKS),  # 4096 * len(TASKS)
-    policy_ent_coeff=1e-4,  # 1e-2 #
-    embedding_ent_coeff=2e-4,  # 1e-3
+    policy_ent_coeff=1e-5,  # 1e-2 #
+    embedding_ent_coeff=3e-4,  # 1e-3
     inference_ce_coeff=2e-5,  # 1e-4
-    max_path_length=100,  # 50
+    max_path_length=100,  # 100
     embedding_init_std=1.0,  # 1.0
     embedding_max_std=2.0,  # 2.0
-    policy_init_std=0.25,  # 1.0
-    policy_max_std=0.5,  # 2.0
+    policy_init_std=0.1,  # 1.0
+    policy_max_std=0.2,  # 2.0
 )
 
 run_experiment(
@@ -179,5 +173,5 @@ run_experiment(
     n_parallel=16,
     seed=1,
     variant=config,
-    plot=False,
+    plot=True,
 )

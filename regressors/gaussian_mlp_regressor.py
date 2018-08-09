@@ -1,9 +1,9 @@
 import numpy as np
 import tensorflow as tf
-import theano.tensor as TT
 
 from garage.core import Serializable
 from garage.misc import logger
+from garage.tf.core import Parameterized
 from garage.tf.core import LayersPowered
 from garage.tf.core import MLP
 import garage.tf.core.layers as L
@@ -67,10 +67,10 @@ class GaussianMLPRegressor(LayersPowered, Serializable):
         self._std_network_name = "std_network"
 
         with tf.variable_scope(name):
+            if optimizer_args is None:
+                optimizer_args = dict()
 
             if optimizer is None:
-                if optimizer_args is None:
-                    optimizer_args = dict()
                 if use_trust_region:
                     optimizer = PenaltyLbfgsOptimizer(**optimizer_args)
                 else:
@@ -264,7 +264,7 @@ class GaussianMLPRegressor(LayersPowered, Serializable):
             inputs = [xs, ys]
         loss_before = self._optimizer.loss(inputs)
         if self._name:
-            prefix = self._name + "_"
+            prefix = self._name + "/"
         else:
             prefix = ""
         logger.record_tabular(prefix + 'LossBefore', loss_before)
@@ -315,7 +315,7 @@ class GaussianMLPRegressor(LayersPowered, Serializable):
 
             means_var = (
                 normalized_means_var * self._y_std_var + self._y_mean_var)
-            log_stds_var = normalized_log_stds_var + TT.log(self._y_std_var)
+            log_stds_var = normalized_log_stds_var + tf.log(self._y_std_var)
 
             return self._dist.log_likelihood_sym(
                 y_var, dict(mean=means_var, log_std=log_stds_var))
