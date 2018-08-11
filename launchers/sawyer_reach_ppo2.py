@@ -3,30 +3,20 @@ from types import SimpleNamespace
 import numpy as np
 import tensorflow as tf
 
-from garage.tf.algos import TRPO
+from garage.tf.algos import PPO
 from garage.envs import normalize
+from garage.envs.mujoco.sawyer import SimpleReacherEnv
 from garage.envs.env_spec import EnvSpec
 from garage.misc.instrument import run_experiment
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
 from sandbox.embed2learn.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
-from sandbox.embed2learn.envs.multiworld import FlatTorqueReacher
 
-# SimpleReacherEnv
-# GOALS = [
-#   # (  ?,    x,   ?)
-#     (0.3, -0.3, 0.3),
-#     (0.3, 0.3, 0.3),
-#     (0.3, 0.3, 0.4),
-#     (0.3, -0.3, 0.3),  # confusion goal
-# ]
-
-# FlatTorqueReacherEnv
 GOALS = [
     # (  ?,    ?,   ?)
-    # (0.05, 0.6, 0.15),
-    (0.3, 0.6, 0.15),
-    (-0.3, 0.6, 0.15),
+    (0.15, 0.6, 0.15),
+    # (0.3, 0.6, 0.15),
+    # (-0.3, 0.6, 0.15),
 ]
 
 
@@ -34,17 +24,11 @@ def run_task(v):
     v = SimpleNamespace(**v)
 
     # Environment
-    env = FlatTorqueReacher(
-        fix_goal=True,
-        fixed_goal=GOALS[0],
-        reward_type="hand_distance",
-        hand_distance_completion_bonus=0.,
-        torque_limit_pct=0.2,
-        indicator_threshold=0.03,
-        velocity_penalty_coeff=0.01,
-        action_scale=10.0,
-        hide_goal_pos=True,
-    )
+    env = SimpleReacherEnv(goal_position=GOALS[0], control_method="position_control")
+
+    import ipdb
+    ipdb.set_trace()
+
     env = TfEnv(normalize(env))
 
     # Policy
@@ -57,7 +41,7 @@ def run_task(v):
 
     baseline = GaussianMLPBaseline(env_spec=env.spec)
 
-    algo = TRPO(
+    algo = PPO(
         env=env,
         policy=policy,
         baseline=baseline,
@@ -65,9 +49,9 @@ def run_task(v):
         max_path_length=v.max_path_length,
         n_itr=1000,
         discount=0.99,
-        step_size=0.01,
+        step_size=0.2,
+        optimizer_args=dict(batch_size=32, max_epochs=10),
         plot=True,
-        #optimizer_args=dict(max_grad_norm=0.5)
     )
     algo.train()
 
@@ -80,8 +64,8 @@ config = dict(
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_trpo_torque',
-    n_parallel=8,
+    exp_prefix='sawyer_reach_ppo_position',
+    n_parallel=16,
     seed=1,
     variant=config,
     plot=True,

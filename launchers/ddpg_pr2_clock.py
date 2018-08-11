@@ -1,13 +1,15 @@
-from garage.algos import DDPG
+from garage.tf.algos import DDPG
 from garage.envs.box2d import CartpoleEnv
 from garage.envs import normalize
 from garage.misc.instrument import run_experiment
 from garage.exploration_strategies import OUStrategy
-from garage.policies import DeterministicMLPPolicy
-from garage.q_functions import ContinuousMLPQFunction
+from garage.tf.policies import DeterministicMLPPolicy
+from garage.tf.q_functions import ContinuousMLPQFunction
 
 from sandbox.embed2learn.envs.mujoco import PR2ArmClockEnv
 from sandbox.embed2learn.envs import OneHotMultiTaskEnv
+
+# NOTE: NOT WORKING RIGHT NOW
 
 TASKS = {
     'center': {'args': [], 'kwargs': {'target': 'center'}},

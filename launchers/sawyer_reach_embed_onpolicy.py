@@ -22,6 +22,8 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 
 from embed_onpolicy.sawyer_reach import TaskReacherEnv, TASKS
 
+# NOTE: NOT WORKING RIGHT NOW
+
 MY_TASKS = {
     str(t + 1): {
         'args': [],
@@ -153,5 +155,5 @@ run_experiment(
     n_parallel=16,
     seed=1,
     variant=config,
-    plot=False,
+    plot=True,
 )

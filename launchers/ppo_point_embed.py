@@ -164,5 +164,5 @@ run_experiment(
     n_parallel=16,
     seed=1,
     variant=config,
-    plot=False,
+    plot=True,
 )

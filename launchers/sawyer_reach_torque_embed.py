@@ -170,7 +170,7 @@ config = dict(
 run_experiment(
     run_task,
     exp_prefix='sawyer_reach_multiworld_torque',
-    n_parallel=16,
+    n_parallel=12,
     seed=1,
     variant=config,
     plot=True,
