@@ -22,7 +22,8 @@ def rollout(env,
             max_path_length=np.inf,
             animated=False,
             speedup=1,
-            always_return_paths=False):
+            always_return_paths=False,
+            goal_markers=None):
 
     observations = []
     tasks = []
@@ -56,9 +57,90 @@ def rollout(env,
             break
         o = next_o
         if animated:
+            for i, g in enumerate(goal_markers):
+                env.env.get_viewer().add_marker(
+                        pos=g,
+                        size=0.01 * np.ones(3),
+                        label="Task {}".format(i + 1)
+                )
             env.render()
             timestep = 0.05
             time.sleep(timestep / speedup)
+    if animated and not always_return_paths:
+        return
+
+    return np.array(observations)
+
+def rollout_interpolate(env,
+                        agent,
+                        zs,
+                        z_steps=10,
+                        z_path_length=20,
+                        max_path_length=np.inf,
+                        animated=False,
+                        speedup=1,
+                        always_return_paths=False,
+                        goal_markers=None):
+
+    observations = []
+    tasks = []
+    latents = []
+    latent_infos = []
+    actions = []
+    rewards = []
+    agent_infos = []
+    env_infos = []
+
+    # Resets
+    o = env.reset()
+    agent.reset()
+
+    if animated:
+        env.render()
+
+    # Do full rollout to first task
+    path_length = 0
+    while path_length < max_path_length:
+        z = zs[0]
+        a, agent_info = agent.get_action_from_latent(z, o)
+        next_o, r, d, env_info = env.step(a)
+        observations.append(agent.observation_space.flatten(o))
+        path_length += 1
+        if d:
+            break
+        o = next_o
+        if animated:
+            for i, g in enumerate(goal_markers):
+                env.env.get_viewer().add_marker(
+                        pos=g,
+                        size=0.01 * np.ones(3),
+                        label="Task {}".format(i + 1)
+                )
+            env.render()
+            timestep = 0.05
+            time.sleep(timestep / speedup)
+
+    # Interpolate rollout to next task
+    for x in np.linspace(0, 1, z_steps):
+        z = x * zs[0] + (1 - x) * zs[1]
+        for _ in range(z_path_length):
+            a, agent_info = agent.get_action_from_latent(z, o)
+            next_o, r, d, env_info = env.step(a)
+            observations.append(agent.observation_space.flatten(o))
+            path_length += 1
+            if d:
+                break
+            o = next_o
+            if animated:
+                for i, g in enumerate(goal_markers):
+                    env.env.get_viewer().add_marker(
+                            pos=g,
+                            size=0.01 * np.ones(3),
+                            label="Task {}".format(i + 1)
+                    )
+                env.render()
+                timestep = 0.05
+                time.sleep(timestep / speedup)
     if animated and not always_return_paths:
         return
 
@@ -84,8 +166,9 @@ def play(pkl_file):
 
         # Tasks and goals
         num_tasks = policy.task_space.flat_dim
-        task_envs = env._wrapped_env.env._task_envs
-        # goals = np.array([te._goal_position for te in task_envs])
+        task_envs = env.env._task_envs
+        goals = np.array(
+            [te.env._goal_configuration.gripper_pos for te in task_envs])
         task_cmap = colormap_mpl(num_tasks)
 
         # Embedding distributions
@@ -93,30 +176,32 @@ def play(pkl_file):
         z_means = np.array([d[0] for d in z_dists])
         z_stds = np.array([d[1] for d in z_dists])
 
+        # Render individual task policies
+        for t in range(num_tasks):
+            z = z_means[t]
+
+            # Run rollout
+            print("Animating task {}".format(t + 1))
+            rollout(
+                task_envs[0],
+                policy,
+                z,
+                max_path_length=100,
+                animated=True,
+                goal_markers=goals,
+            )
+
         while True:
-            # Render individual task policies
-            for t in range(num_tasks):
-                z = z_means[t]
-
-                # Run rollout
-                print("Animating task {}".format(t + 1))
-                rollout(
-                    task_envs[t],
-                    policy,
-                    z,
-                    max_path_length=150,
-                    animated=True)
-
-            # Render mean policy of task 1 and 2
-            if num_tasks > 1:
-                z = (z_means[0] + z_means[1]) / 2
-                print("Animating mean of tasks {} and {}".format(1, 2))
-                rollout(
+            for t in range(num_tasks - 1):
+                print("Interpolating between tasks {} and {}".format(t+1, t+2))
+                rollout_interpolate(
                     task_envs[0],
                     policy,
-                    z,
-                    max_path_length=150,
-                    animated=True)
+                    z_means[t:t+2],
+                    max_path_length=100,
+                    animated=True,
+                    goal_markers=goals,
+                )
 
 
 

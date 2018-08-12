@@ -30,10 +30,13 @@ def run_task(v):
         control_method="position_control",
         # control_cost_coeff=1.0,
         action_scale=0.04,
-        # randomize_start_position=True,
+        randomize_start_jpos=True,
         completion_bonus=0.0,
+        # terminate_on_collision=True,
+        # collision_penalty=1.,
     )
     # env = TfEnv(normalize(env))
+
     env = TfEnv(env)
 
     # Policy
@@ -71,8 +74,8 @@ config = dict(
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_ppo_position_no_completion',
-    n_parallel=12,
+    exp_prefix='sawyer_reach_ppo_position_collision_det',
+    n_parallel=6,
     seed=1,
     variant=config,
     plot=True,

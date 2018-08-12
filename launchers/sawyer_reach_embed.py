@@ -1,10 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
-import tensorflow as tf
 
-from garage.core import Serializable
-from garage.core import Parameterized
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
 from garage.envs.mujoco.sawyer import SimpleReacherEnv
@@ -12,49 +9,41 @@ from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
 
 from sandbox.embed2learn.algos import PPOTaskEmbedding
-from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
 from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.envs.multiworld import FlatXYZReacher
-from sandbox.embed2learn.envs.multiworld import FlatTorqueReacher
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
-from sandbox.embed2learn.envs.multi_task_env import normalize
+from sandbox.embed2learn.embeddings import EmbeddingSpec
+from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.embeddings.utils import concat_spaces
+from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 
 
 GOALS = [
-  # (  ?,    x,   ?)
-    (0.3, -0.3, 0.3),
-    (0.3, 0.3, 0.3),
-    (0.3, 0.3, 0.4),
-    (0.3, -0.3, 0.3),  # confusion goal
+  # (  z     x,    y)
+    (0.4,  0.3, 0.15),
+    (0.4, -0.3, 0.15),
+    (0.4,  0.3,  0.3),
+    (0.4, -0.3,  0.3),
+    (0.7,  0.3, 0.15),
+    (0.7, -0.3, 0.15),
+    (0.7,  0.3,  0.3),
+    (0.7, -0.3,  0.3),
 ]
-# # SimpleReacherEnv
-# TASKS = {
-#     str(t + 1): {
-#         'args': [],
-#         'kwargs': {
-#             'goal_position': g,
-#             'completion_bonus': 100.,
-#         }
-#     }
-#     for t, g in enumerate(GOALS)
-# }
 
-# FlatXYZReacher/FlatTorqueReacher
 TASKS = {
-    str(t + 1): {
-        'args': [],
-        'kwargs': {
-            'fix_goal': True,
-            'fixed_goal': g,
+    str(i + 1): {
+        "args": [],
+        "kwargs": {
+            "control_method": "position_control",
+            "goal_position": g,
+            "completion_bonus": 0.0,
+            "action_scale": 0.04,
+            "randomize_start_jpos": True,
+            "collision_penalty": 10.,
         }
     }
-    for t, g in enumerate(GOALS[:2])
+    for i, g in enumerate(GOALS)
 }
 
 
@@ -67,11 +56,10 @@ def run_task(v):
 
     # Environment
     env = TfEnv(
-            normalize(
-              MultiTaskEnv(
-                task_env_cls=FlatTorqueReacher,
+            MultiTaskEnv(
+                task_env_cls=SimpleReacherEnv,
                 task_args=task_args,
-                task_kwargs=task_kwargs)))
+                task_kwargs=task_kwargs))
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -106,20 +94,19 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(64, 64),
+        hidden_sizes=(200, 100),  # was the same size as policy in Karol's paper
         std_share_network=True,
-        init_std=1.0,
+        init_std=2.0,
     )
 
     # Embeddings
     task_embedding = GaussianMLPEmbedding(
         name="embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(64, 64),
+        hidden_sizes=(200, 200),
         std_share_network=True,
-        init_std=v.embedding_init_std,  # 1.0
-        max_std=v.embedding_max_std,  # 2.0
-        # std_parameterization="softplus",
+        init_std=v.embedding_init_std,
+        max_std=v.embedding_max_std,
     )
 
     # Multitask policy
@@ -128,55 +115,50 @@ def run_task(v):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(64, 32),
+        hidden_sizes=(200, 100),
         std_share_network=True,
         init_std=v.policy_init_std,
-        max_std=v.policy_max_std,
-        # std_parameterization="softplus",
     )
 
-    # baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
     extra = v.latent_length + len(v.tasks)
-    baseline = MultiTaskGaussianMLPBaseline(
-        env_spec=env.spec, extra_dims=extra)
+    baseline = MultiTaskGaussianMLPBaseline(env_spec=env.spec, extra_dims=extra)
 
     algo = PPOTaskEmbedding(
         env=env,
         policy=policy,
         baseline=baseline,
         inference=traj_embedding,
-        batch_size=v.batch_size,  # 4096
+        batch_size=v.batch_size,
         max_path_length=v.max_path_length,
-        n_itr=1000,
+        n_itr=6000,
         discount=0.99,
         step_size=0.2,
         plot=True,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
-        #optimizer_args=dict(max_grad_norm=0.5)
+        use_softplus_entropy=True,
     )
     algo.train()
 
 config = dict(
     tasks=TASKS,
-    latent_length=3,  # 3
-    inference_window=6,  # 6
-    batch_size=4096 * len(TASKS),  # 4096 * len(TASKS)
-    policy_ent_coeff=1e-4,  # 1e-2 #
-    embedding_ent_coeff=2e-4,  # 1e-3
-    inference_ce_coeff=2e-5,  # 1e-4
-    max_path_length=100,  # 50
-    embedding_init_std=1.0,  # 1.0
-    embedding_max_std=2.0,  # 2.0
-    policy_init_std=0.25,  # 1.0
-    policy_max_std=0.5,  # 2.0
+    latent_length=3,
+    inference_window=6,
+    batch_size=4096 * len(TASKS),
+    policy_ent_coeff=5e-3,  # 1e-2
+    embedding_ent_coeff=1e-2,  # 1e-3
+    inference_ce_coeff=14e-3,  # 1e-4
+    max_path_length=500,
+    embedding_init_std=2.0,
+    embedding_max_std=2.0,
+    policy_init_std=1.0,
 )
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_multiworld_torque',
-    n_parallel=16,
+    exp_prefix='sawyer_reach_embed_8goal_coldet',
+    n_parallel=12,
     seed=1,
     variant=config,
     plot=False,

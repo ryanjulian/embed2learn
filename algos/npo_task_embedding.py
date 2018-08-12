@@ -12,7 +12,7 @@ from garage.misc.overrides import overrides
 import garage.misc.logger as logger
 from garage.tf.algos import BatchPolopt
 from garage.tf.misc import tensor_utils
-from garage.tf.misc.tensor_utils import calculate_advantages
+from garage.tf.misc.tensor_utils import compute_advantages
 from garage.tf.misc.tensor_utils import discounted_returns
 from garage.tf.misc.tensor_utils import filter_valids
 from garage.tf.misc.tensor_utils import filter_valids_dict
@@ -426,7 +426,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         with tf.name_scope("policy_loss"):
             with tf.name_scope("advantages"):
-                advantages = calculate_advantages(self.discount, self.gae_lambda,
+                advantages = compute_advantages(self.discount, self.gae_lambda,
                                  self.max_path_length, i.baseline_var,
                                  rewards, name="advantages")
 

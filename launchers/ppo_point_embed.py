@@ -89,7 +89,7 @@ def run_task(v):
         embedding_spec=traj_embed_spec,
         hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         std_share_network=True,
-        init_std=1.0,
+        init_std=2.0,
     )
 
     # Embeddings
@@ -98,8 +98,8 @@ def run_task(v):
         embedding_spec=task_embed_spec,
         hidden_sizes=(20, 20),
         std_share_network=True,
-        init_std=v.embedding_init_std,  # 3.0
-        max_std=v.embedding_max_std,   # 6.0
+        init_std=v.embedding_init_std,
+        max_std=v.embedding_max_std,
     )
 
     # Multitask policy
@@ -112,6 +112,7 @@ def run_task(v):
         std_share_network=True,
         max_std=v.policy_max_std,
         init_std=v.policy_init_std,
+        min_std=v.policy_min_std,
     )
 
     extra = v.latent_length + len(v.tasks)
@@ -124,35 +125,37 @@ def run_task(v):
         inference=traj_embedding,
         batch_size=v.batch_size,
         max_path_length=v.max_path_length,
-        n_itr=300,
+        n_itr=600,
         discount=0.99,
         step_size=0.2,
         plot=True,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
+        use_softplus_entropy=True,
     )
     algo.train()
 
 config = dict(
     tasks=TASKS,
     latent_length=2,
-    inference_window=4,
+    inference_window=2,
     batch_size=1024 * len(TASKS),
-    policy_ent_coeff=32e-2,  # 1e-2
-    embedding_ent_coeff=1e-2,  # 1e-3
-    inference_ce_coeff=1e-4,  # 1e-4
+    policy_ent_coeff=128e-2,  # 2e-2
+    embedding_ent_coeff=1e-2,  # 1e-2
+    inference_ce_coeff=14e-3,  # 1e-2
     max_path_length=100,
     embedding_init_std=1.0,
     embedding_max_std=2.0,
     policy_init_std=1.0,
     policy_max_std=None,
+    policy_min_std=None,
 )
 
 run_experiment(
     run_task,
     exp_prefix='ppo_point_embed',
-    n_parallel=16,
+    n_parallel=2,
     seed=1,
     variant=config,
     plot=True,
