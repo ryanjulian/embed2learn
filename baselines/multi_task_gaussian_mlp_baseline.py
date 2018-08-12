@@ -5,7 +5,7 @@ from garage.baselines import Baseline
 from garage.core import Parameterized
 from garage.core import Serializable
 from garage.misc.overrides import overrides
-from sandbox.embed2learn.regressors.gaussian_mlp_regressor import GaussianMLPRegressor
+from garage.tf.regressors import GaussianMLPRegressor
 
 
 class MultiTaskGaussianMLPBaseline(Baseline, Parameterized):

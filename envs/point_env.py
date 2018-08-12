@@ -8,7 +8,6 @@ from garage.core import Parameterized
 from garage.core import Serializable
 from garage.envs import Step
 from garage.misc.overrides import overrides
-from garage.spaces import Box
 
 from sandbox.embed2learn.envs.util import colormap
 
@@ -19,12 +18,23 @@ DARK_COLOR = (150, 150, 150)
 
 
 class PointEnv(gym.Env, Parameterized):
-    def __init__(self, goal=(1, 1), random_start=False, show_traces=True):
+    def __init__(
+            self,
+            goal=(1, 1),
+            random_start=False,
+            show_traces=True,
+            completion_bonus=0.,
+            never_done=False,
+            action_scale=1.,
+        ):
         Serializable.quick_init(self, locals())
         Parameterized.__init__(self)
 
         self._goal = np.array(goal, dtype=np.float32)
         self._point = np.zeros(2)
+        self._completion_bonus = completion_bonus
+        self._never_done = never_done
+        self._action_scale = action_scale
 
         self.screen = None
         self.screen_width = 500
@@ -58,20 +68,25 @@ class PointEnv(gym.Env, Parameterized):
 
     def step(self, action):
         # enforce action space
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        a = action.copy()  # NOTE: we MUST copy the action before modifying it
+        a *= self._action_scale
+        a = np.clip(a, self.action_space.low, self.action_space.high)
 
-        self._point = self._point + action
+        self._point = self._point + a
         self._traces[-1].append(tuple(self._point))
 
         dist = np.linalg.norm(self._point - self._goal)
         done = dist < np.linalg.norm(self.action_space.low)
 
         # dense reward
-
         reward = -dist
+
         # completion bonus
         if done:
-            reward = 100
+            reward += self._completion_bonus
+
+        # sometimes we don't want to terminate
+        done = done and not self._never_done
 
         return Step(observation=np.copy(self._point), reward=reward, done=done)
 

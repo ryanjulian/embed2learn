@@ -6,11 +6,11 @@ from garage.misc import ext
 from garage.misc import logger
 from garage.misc.overrides import overrides
 from garage.tf.core import Parameterized
+from garage.tf.distributions import DiagonalGaussian
 from garage.tf.misc import tensor_utils
 from garage.tf.spaces import Box
 
 from sandbox.embed2learn.embeddings import StochasticEmbedding
-from sandbox.embed2learn.tf.distributions import DiagonalGaussian
 from sandbox.embed2learn.tf.network_utils import mlp
 from sandbox.embed2learn.tf.network_utils import parameter
 from sandbox.embed2learn.tf.network_utils import two_headed_mlp
@@ -188,29 +188,14 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                         hidden_sizes=self._hidden_sizes,
                         hidden_nonlinearity=self._hidden_nonlinearity,
                         output_nonlinearity=self._output_nonlinearity,
-                        hidden_w_init=tf.orthogonal_initializer(1.0),
-                        output_w_init=tf.orthogonal_initializer(1.0),
+                        # hidden_w_init=tf.orthogonal_initializer(1.0),
+                        # output_w_init=tf.orthogonal_initializer(1.0),
                         output_b_init=b,
                         name="mean_std_network")
                     with tf.variable_scope("mean_network"):
                         mean_network = mean_std_network[..., :latent_dim]
                     with tf.variable_scope("std_network"):
                         std_network = mean_std_network[..., latent_dim:]
-
-                    # kernel initialization version (NOT WORKING)
-                    # lower: mean, upper: std
-                    # mean_network, std_network = two_headed_mlp(
-                    #     with_input=from_input,
-                    #     lower_output_dim=latent_dim,
-                    #     upper_output_dim=latent_dim,
-                    #     hidden_sizes=self._hidden_sizes,
-                    #     hidden_nonlinearity=self._hidden_nonlinearity,
-                    #     lower_output_nonlinearity=self._output_nonlinearity,
-                    #     upper_output_nonlinearity=self._output_nonlinearity,
-                    #     hidden_w_init=tf.orthogonal_initializer(1.0),
-                    #     upper_output_w_init=tf.orthogonal_initializer(
-                    #         self._init_std_param),
-                    #     name="mean_std_network")
                 else:
                     # separate MLPs for mean and std networks
                     # mean network

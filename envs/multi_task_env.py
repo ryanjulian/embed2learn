@@ -11,7 +11,6 @@ from garage.envs import NormalizedEnv
 from garage.envs import Step
 
 from garage.tf.envs import TfEnv as BaseTfEnv
-from garage.tf.envs import to_tf_space
 
 
 def round_robin(num_tasks, last_task):
@@ -117,15 +116,15 @@ class MultiTaskEnv(gym.Env, Parameterized):
 class TfEnv(BaseTfEnv):
     @cached_property
     def task_space(self):
-        return to_tf_space(self.wrapped_env.task_space)
+        return self._to_garage_space(self.env.task_space)
 
     @property
     def active_task_one_hot(self):
-        return self.wrapped_env.active_task_one_hot
+        return self.env.active_task_one_hot
 
     @property
     def active_task(self):
-        return self.wrapped_env.active_task
+        return self.env.active_task
 
 
 class NormalizedMultiTaskEnv(NormalizedEnv, Parameterized):

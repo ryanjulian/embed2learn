@@ -6,11 +6,11 @@ from garage.misc import ext
 from garage.misc import logger
 from garage.misc.overrides import overrides
 from garage.tf.core import Parameterized
+from garage.tf.distributions import DiagonalGaussian
 from garage.tf.misc import tensor_utils
 from garage.tf.spaces import Box
 
 from sandbox.embed2learn.embeddings import StochasticEmbedding
-from sandbox.embed2learn.tf.distributions import DiagonalGaussian
 from sandbox.embed2learn.tf.network_utils import mlp
 from sandbox.embed2learn.tf.network_utils import parameter
 

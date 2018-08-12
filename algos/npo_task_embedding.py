@@ -10,18 +10,19 @@ from garage.misc import ext
 from garage.misc import special
 from garage.misc.overrides import overrides
 import garage.misc.logger as logger
-
 from garage.tf.algos import BatchPolopt
 from garage.tf.misc import tensor_utils
+from garage.tf.misc.tensor_utils import calculate_advantages
+from garage.tf.misc.tensor_utils import discounted_returns
+from garage.tf.misc.tensor_utils import filter_valids
+from garage.tf.misc.tensor_utils import filter_valids_dict
+from garage.tf.misc.tensor_utils import flatten_batch
+from garage.tf.misc.tensor_utils import flatten_batch_dict
+from garage.tf.misc.tensor_utils import flatten_inputs
+from garage.tf.misc.tensor_utils import graph_inputs
 from garage.tf.optimizers import LbfgsOptimizer
 from garage.tf.plotter import Plotter
 
-from sandbox.embed2learn.algos.utils import flatten_batch
-from sandbox.embed2learn.algos.utils import flatten_batch_dict
-from sandbox.embed2learn.algos.utils import filter_valids
-from sandbox.embed2learn.algos.utils import filter_valids_dict
-from sandbox.embed2learn.algos.utils import namedtuple_singleton
-from sandbox.embed2learn.algos.utils import flatten_inputs
 from sandbox.embed2learn.embeddings import StochasticEmbedding
 from sandbox.embed2learn.misc.metrics import rrse, rmse
 from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
@@ -59,6 +60,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  inference_optimizer=LbfgsOptimizer,
                  inference_optimizer_args=dict(),
                  inference_ce_coeff=1e-3,
+                 use_softplus_entropy=False,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -71,6 +73,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._pg_loss = pg_loss
         self._policy_opt_inputs = None
         self._inference_opt_inputs = None
+        self._use_softplus_entropy = use_softplus_entropy
 
         with tf.name_scope(self.name):
             # Optimizer for policy and embedding networks
@@ -310,7 +313,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     name="infer_old_dist_info_vars_valid")
 
         # Policy and embedding network loss and optimizer inputs
-        pol_flat = namedtuple_singleton(
+        pol_flat = graph_inputs(
             "PolicyLossInputsFlat",
             obs_var=obs_flat,
             task_var=task_flat,
@@ -324,14 +327,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             embed_state_info_vars=embed_state_info_vars_flat,
             embed_old_dist_info_vars=embed_old_dist_info_vars_flat,
         )
-        pol_valid = namedtuple_singleton(
+        pol_valid = graph_inputs(
             "PolicyLossInputsValid",
             action_var=action_valid,
             policy_state_info_vars=policy_state_info_vars_valid,
             policy_old_dist_info_vars=policy_old_dist_info_vars_valid,
             embed_old_dist_info_vars=embed_old_dist_info_vars_valid,
         )
-        policy_loss_inputs = namedtuple_singleton(
+        policy_loss_inputs = graph_inputs(
             "PolicyLossInputs",
             obs_var=obs_var,
             action_var=action_var,
@@ -352,7 +355,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # * Uses lists instead of dicts for the distribution parameters
         # * Omits flats and valids
         # TODO: eliminate
-        policy_opt_inputs = namedtuple_singleton(
+        policy_opt_inputs = graph_inputs(
             "PolicyOptInputs",
             obs_var=obs_var,
             action_var=action_var,
@@ -369,7 +372,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         )
 
         # Inference network loss and optimizer inputs
-        infer_flat = namedtuple_singleton(
+        infer_flat = graph_inputs(
             "InferenceLossInputsFlat",
             latent_var=latent_flat,
             trajectory_var=trajectory_flat,
@@ -377,11 +380,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             infer_state_info_vars=infer_state_info_vars_flat,
             infer_old_dist_info_vars=infer_old_dist_info_vars_flat,
         )
-        infer_valid = namedtuple_singleton(
+        infer_valid = graph_inputs(
             "InferenceLossInputsValid",
             infer_old_dist_info_vars=infer_old_dist_info_vars_valid,
         )
-        inference_loss_inputs = namedtuple_singleton(
+        inference_loss_inputs = graph_inputs(
             "InferenceLossInputs",
             latent_var=latent_var,
             trajectory_var=trajectory_var,
@@ -395,7 +398,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # * Uses lists instead of dicts for the distribution parameters
         # * Omits flats and valids
         # TODO: eliminate
-        inference_opt_inputs = namedtuple_singleton(
+        inference_opt_inputs = graph_inputs(
             "InferenceOptInputs",
             latent_var=latent_var,
             trajectory_var=trajectory_var,
@@ -423,52 +426,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         with tf.name_scope("policy_loss"):
             with tf.name_scope("advantages"):
-                # Calculate advantages
-                #
-                # Advantages are a discounted cumulative sum.
-                #
-                # The discount cumulative sum can be represented as an IIR
-                # filter ob the reversed input vectors, i.e.
-                #    y[t] - discount*y[t+1] = x[t]
-                #        or
-                #    rev(y)[t] - discount*rev(y)[t-1] = rev(x)[t]
-                #
-                # Given the time-domain IIR filter step response, we can
-                # calculate the filter response to our signal by convolving the
-                # signal with the filter response function. The time-domain IIR
-                # step response is calculated below as discount_filter:
-                #     discount_filter =
-                #         [1, discount, discount^2, ..., discount^N-1]
-                #         where the epsiode length is N.
-                #
-                # We convolve discount_filter with the reversed time-domain
-                # signal deltas to calculate the reversed advantages:
-                #     rev(advantages) = discount_filter (X) rev(deltas)
-                #
-                # TensorFlow's tf.nn.conv1d op is not a true convolution, but
-                # actually a cross-correlation, so its input and output are
-                # already implicitly reversed for us.
-                #    advantages = discount_filter (tf.nn.conv1d) deltas
-
-                # Prepare convolutional IIR filter to calculate advantages
-                gamma_lambda = tf.constant(
-                    float(self.discount) * float(self.gae_lambda),
-                    dtype=tf.float32,
-                    shape=[self.max_path_length, 1, 1])
-                advantage_filter = tf.cumprod(gamma_lambda, exclusive=True)
-
-                # Calculate deltas
-                pad = tf.zeros_like(i.baseline_var[:, :1])
-                baseline_shift = tf.concat([i.baseline_var[:, 1:], pad], 1)
-                deltas = rewards + \
-                         (self.discount * baseline_shift) - i.baseline_var
-                # Convolve deltas with the discount filter to get advantages
-                deltas_pad = tf.expand_dims(
-                    tf.concat([deltas, tf.zeros_like(deltas[:, :-1])], axis=1),
-                    axis=2)
-                adv = tf.nn.conv1d(
-                    deltas_pad, advantage_filter, stride=1, padding='VALID')
-                advantages = tf.reshape(adv, [-1])
+                advantages = calculate_advantages(self.discount, self.gae_lambda,
+                                 self.max_path_length, i.baseline_var,
+                                 rewards, name="advantages")
 
                 # Flatten and filter valids
                 adv_flat = flatten_batch(advantages, name="adv_flat")
@@ -552,7 +512,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             rewards,
             log_name="f_rewards")
 
-        returns = self._build_returns(rewards)
+        # returns = self._build_returns(rewards)
+        returns = discounted_returns(self.discount, self.max_path_length, rewards, name="returns")
         self.f_returns = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
             returns,
@@ -571,6 +532,10 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     np.arange(task_dim), task_dim, name="all_task_one_hots")
                 all_task_entropies = self.policy.embedding.entropy_sym(
                     all_task_one_hots)
+
+                if self._use_softplus_entropy:
+                    all_task_entropies = tf.nn.softplus(all_task_entropies)
+
                 embedding_entropy = tf.reduce_mean(
                     all_task_entropies, name="embedding_entropy")
 
@@ -584,6 +549,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
                 inference_ce = -traj_ll
 
+                if self._use_softplus_entropy:
+                    inference_ce = tf.nn.softplus(inference_ce)
+
             # 3. Policy path entropies
             with tf.name_scope('policy_entropy'):
                 policy_entropy_flat = self.policy.entropy_sym(
@@ -591,6 +559,9 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 policy_entropy = tf.reshape(
                     policy_entropy_flat, [-1, self.max_path_length],
                     name="policy_entropy")
+
+                if self._use_softplus_entropy:
+                    policy_entropy = tf.nn.softplus(policy_entropy)
 
         # Diagnostic functions
         self.f_task_entropies = tensor_utils.compile_function(
@@ -637,20 +608,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 log_name="f_embedding_kl")
 
             return mean_kl
-
-    def _build_returns(self, rewards):
-        with tf.name_scope("returns"):
-            gamma = tf.constant(
-                float(self.discount),
-                dtype=tf.float32,
-                shape=[self.max_path_length, 1, 1])
-            return_filter = tf.cumprod(gamma, exclusive=True)
-            rewards_pad = tf.expand_dims(
-                tf.concat([rewards, tf.zeros_like(rewards[:, :-1])], axis=1),
-                axis=2)
-            returns = tf.nn.conv1d(
-                rewards_pad, return_filter, stride=1, padding='VALID')
-        return returns
 
     def _build_inference_loss(self, i):
         """ Build loss function for the inference network """
@@ -873,8 +830,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         # action distributions
         actions = samples_data["actions"][:num_traj, ...]
         logger.record_histogram("Actions", actions)
-
-
 
 
     def train_policy_and_embedding_networks(self, policy_opt_input_values):

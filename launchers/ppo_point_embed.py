@@ -8,17 +8,15 @@ from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
 
 from sandbox.embed2learn.algos import PPOTaskEmbedding
-from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
 from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings import EmbeddingSpec
 from sandbox.embed2learn.envs import PointEnv
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
-from sandbox.embed2learn.envs.multi_task_env import normalize
+from sandbox.embed2learn.embeddings import EmbeddingSpec
+from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.embeddings.utils import concat_spaces
+from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 
 
 def circle(r, n):
@@ -32,18 +30,14 @@ TASKS = {
     str(i + 1): {
         'args': [],
         'kwargs': {
-            'goal': g
+            'goal': g,
+            'never_done': True,
+            'completion_bonus': 0.0,
+            'action_scale': 0.1,
         }
     }
     for i, g in enumerate(goals)
 }
-
-# TASKS = {
-#     '(-3, 0)': {'args': [], 'kwargs': {'goal': (-3, 0)}},
-#     '(3, 0)': {'args': [], 'kwargs': {'goal': (3, 0)}},
-#     '(0, 3)': {'args': [], 'kwargs': {'goal': (0, 3)}},
-#     '(0, -0)': {'args': [], 'kwargs': {'goal': (0, -3)}},
-# }  # yapf: disable
 
 
 def run_task(v):
@@ -55,11 +49,10 @@ def run_task(v):
 
     # Environment
     env = TfEnv(
-        normalize(
             MultiTaskEnv(
                 task_env_cls=PointEnv,
                 task_args=task_args,
-                task_kwargs=task_kwargs)))
+                task_kwargs=task_kwargs))
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -94,7 +87,7 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(200, 100),  # was the same size as policy in Karol's paper
+        hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         std_share_network=True,
         init_std=1.0,
     )
@@ -103,11 +96,10 @@ def run_task(v):
     task_embedding = GaussianMLPEmbedding(
         name="embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(200, 200),
+        hidden_sizes=(20, 20),
         std_share_network=True,
         init_std=v.embedding_init_std,  # 3.0
         max_std=v.embedding_max_std,   # 6.0
-        # normalize=True,
     )
 
     # Multitask policy
@@ -116,13 +108,12 @@ def run_task(v):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(200, 100),
+        hidden_sizes=(20, 10),
         std_share_network=True,
         max_std=v.policy_max_std,
         init_std=v.policy_init_std,
     )
 
-    # baseline = MultiTaskLinearFeatureBaseline(env_spec=env_spec_embed)
     extra = v.latent_length + len(v.tasks)
     baseline = MultiTaskGaussianMLPBaseline(env_spec=env.spec, extra_dims=extra)
 
@@ -131,7 +122,7 @@ def run_task(v):
         policy=policy,
         baseline=baseline,
         inference=traj_embedding,
-        batch_size=v.batch_size,  # 4096
+        batch_size=v.batch_size,
         max_path_length=v.max_path_length,
         n_itr=300,
         discount=0.99,
@@ -146,15 +137,15 @@ def run_task(v):
 config = dict(
     tasks=TASKS,
     latent_length=2,
-    inference_window=2,
-    batch_size=1024 * len(TASKS),  # 4096
-    policy_ent_coeff=1e-2,  # 1e-2 # 1e-6
-    embedding_ent_coeff=1e-2,  # 1e-3 # 1e-4
-    inference_ce_coeff=1e-4,  # 1e-4 # 1e-2
-    max_path_length=50,
+    inference_window=4,
+    batch_size=1024 * len(TASKS),
+    policy_ent_coeff=32e-2,  # 1e-2
+    embedding_ent_coeff=1e-2,  # 1e-3
+    inference_ce_coeff=1e-4,  # 1e-4
+    max_path_length=100,
     embedding_init_std=1.0,
     embedding_max_std=2.0,
-    policy_init_std=2.0,  # 6.0
+    policy_init_std=1.0,
     policy_max_std=None,
 )
 
