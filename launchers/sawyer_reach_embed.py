@@ -21,10 +21,10 @@ from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 
 GOALS = [
   # (  z     x,    y)
-    (0.4,  0.3, 0.15),
-    (0.4, -0.3, 0.15),
-    (0.4,  0.3,  0.3),
-    (0.4, -0.3,  0.3),
+    (0.5,  0.3, 0.15),
+    (0.5, -0.3, 0.15),
+    (0.5,  0.3,  0.3),
+    (0.5, -0.3,  0.3),
     (0.7,  0.3, 0.15),
     (0.7, -0.3, 0.15),
     (0.7,  0.3,  0.3),
@@ -40,7 +40,7 @@ TASKS = {
             "completion_bonus": 0.0,
             "action_scale": 0.04,
             "randomize_start_jpos": True,
-            "collision_penalty": 10.,
+            "collision_penalty": 1.,
         }
     }
     for i, g in enumerate(GOALS)
@@ -121,7 +121,11 @@ def run_task(v):
     )
 
     extra = v.latent_length + len(v.tasks)
-    baseline = MultiTaskGaussianMLPBaseline(env_spec=env.spec, extra_dims=extra)
+    baseline = MultiTaskGaussianMLPBaseline(
+        env_spec=env.spec,
+        extra_dims=extra,
+        regressor_args=dict(hidden_sizes=(200, 100)),
+    )
 
     algo = PPOTaskEmbedding(
         env=env,
@@ -157,7 +161,7 @@ config = dict(
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_embed_8goal_coldet',
+    exp_prefix='sawyer_reach_embed_8goal_coldet_rand',
     n_parallel=12,
     seed=1,
     variant=config,

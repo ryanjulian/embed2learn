@@ -12,11 +12,13 @@ from garage.tf.baselines import GaussianMLPBaseline
 from garage.tf.envs import TfEnv
 # from garage.tf.policies import GaussianMLPPolicy
 from sandbox.embed2learn.policies import  GaussianMLPPolicy
+from sandbox.embed2learn.baselines import CollisionAwareBaseline
 
 
 GOALS = [
     # (  ?,    ?,   ?)
-    (0.4, -0.3, 0.15),
+    # (0.4, -0.3, 0.15),
+    (0.6, 0, 0.15),
     # (0.3, 0.6, 0.15),
     # (-0.3, 0.6, 0.15),
 ]
@@ -30,11 +32,11 @@ def run_task(v):
         goal_position=GOALS[0],
         control_method="position_control",
         # control_cost_coeff=1.0,
-        action_scale=0.04,
-        # randomize_start_jpos=True,
+        action_scale=0.02,
+        randomize_start_jpos=True,
         completion_bonus=0.0,
         # terminate_on_collision=True,
-        # collision_penalty=1.,
+        collision_penalty=1.,
     )
     env = TfEnv(env)
 
@@ -42,12 +44,20 @@ def run_task(v):
     policy = GaussianMLPPolicy(
         name="Policy",
         env_spec=env.spec,
-        hidden_sizes=(64, 32),
+        hidden_sizes=(256, 128),
         std_share_network=True,
         init_std=v.policy_init_std,
     )
 
-    baseline = GaussianMLPBaseline(env_spec=env.spec)
+    # baseline = GaussianMLPBaseline(
+    #     env_spec=env.spec,
+    #     regressor_args=dict(hidden_sizes=(256, 128)),
+    # )
+
+    baseline = CollisionAwareBaseline(
+        env_spec=env.spec,
+        regressor_args=dict(hidden_sizes=(256, 128)),
+    )
 
     algo = PPO(
         env=env,
@@ -58,7 +68,7 @@ def run_task(v):
         n_itr=10000,
         discount=0.99,
         step_size=0.2,
-        policy_ent_coeff=-1.,
+        policy_ent_coeff=0.,
         optimizer_args=dict(batch_size=32, max_epochs=10),
         plot=True,
     )
@@ -66,15 +76,15 @@ def run_task(v):
 
 
 config = dict(
-    batch_size=4096,
+    batch_size=16384,
     max_path_length=500,  # 50
     policy_init_std=1.0,  # 1.0
 )
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_ppo_position_collision_det',
-    n_parallel=12,
+    exp_prefix='sawyer_reach_ppo_position_rand_collision_det',
+    n_parallel=1,
     seed=1,
     variant=config,
     plot=True,
