@@ -60,7 +60,7 @@ class PointEnv(gym.Env, Parameterized):
 
     def reset(self):
         if self.random_start:
-            self._point = np.random.uniform(size=self._point.shape)
+            self._point = np.random.uniform(low=-4, high=4, size=self._point.shape)
         else:
             self._point = np.zeros_like(self._goal)
         self._traces.append([tuple(self._point)])
@@ -72,7 +72,7 @@ class PointEnv(gym.Env, Parameterized):
         a *= self._action_scale
         a = np.clip(a, self.action_space.low, self.action_space.high)
 
-        self._point = self._point + a
+        self._point = np.clip(self._point + a, -5, 5)
         self._traces[-1].append(tuple(self._point))
 
         dist = np.linalg.norm(self._point - self._goal)
@@ -80,15 +80,16 @@ class PointEnv(gym.Env, Parameterized):
 
         # dense reward
         reward = -dist
-
+        is_success = False
         # completion bonus
         if done:
+            is_success = True
             reward += self._completion_bonus
 
         # sometimes we don't want to terminate
         done = done and not self._never_done
 
-        return Step(observation=np.copy(self._point), reward=reward, done=done)
+        return Step(np.copy(self._point), reward, done, is_success=is_success)
 
     def _to_screen(self, position):
         position = np.nan_to_num(position)

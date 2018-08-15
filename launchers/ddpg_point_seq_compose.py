@@ -12,7 +12,7 @@ from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
 
 from sandbox.embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
-from sandbox.embed2learn.envs import PointEnv
+from sandbox.embed2learn.envs.seq_point_env import SequencePointEnv
 
 USE_LOG = "local/ppo-point-embed/ppo_point_embed_2018_08_12_16_26_20_0001"
 latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_100.pkl")
@@ -23,7 +23,7 @@ def run_task(*_):
     sess.__enter__()
     latent_policy = joblib.load(latent_policy_pkl)["policy"]
 
-    inner_env = PointEnv(goal=(1.4, 1.4),completion_bonus=100)
+    inner_env = SequencePointEnv(completion_bonus=100)
     env = TfEnv(EmbeddedPolicyEnv(inner_env, latent_policy))
 
     action_noise = OUStrategy(env, sigma=0.2)
@@ -51,7 +51,7 @@ def run_task(*_):
         target_update_tau=1e-2,
         n_epochs=500,
         n_epoch_cycles=10,
-        n_rollout_steps=50,
+        n_rollout_steps=200,
         n_train_steps=50,
         discount=0.9,
         replay_buffer_size=int(1e6),
@@ -66,7 +66,7 @@ def run_task(*_):
 run_experiment(
     run_task,
     n_parallel=2,
-    exp_prefix="ddpg_point_compose",
+    exp_prefix="ddpg_point_compose_seq",
     seed=1,
     plot=True,
 )

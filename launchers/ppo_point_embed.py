@@ -34,6 +34,7 @@ TASKS = {
             'never_done': True,
             'completion_bonus': 0.0,
             'action_scale': 0.1,
+            'random_start': True,
         }
     }
     for i, g in enumerate(goals)
@@ -108,7 +109,7 @@ def run_task(v):
         env_spec=env.spec,
         task_space=env.task_space,
         embedding=task_embedding,
-        hidden_sizes=(20, 10),
+        hidden_sizes=(32, 16),
         std_share_network=True,
         max_std=v.policy_max_std,
         init_std=v.policy_init_std,
@@ -141,10 +142,10 @@ config = dict(
     latent_length=2,
     inference_window=2,
     batch_size=1024 * len(TASKS),
-    policy_ent_coeff=128e-2,  # 2e-2
+    policy_ent_coeff=192e-2,  # 2e-2
     embedding_ent_coeff=1e-2,  # 1e-2
     inference_ce_coeff=14e-3,  # 1e-2
-    max_path_length=100,
+    max_path_length=300,
     embedding_init_std=1.0,
     embedding_max_std=2.0,
     policy_init_std=1.0,
@@ -154,7 +155,7 @@ config = dict(
 
 run_experiment(
     run_task,
-    exp_prefix='ppo_point_embed',
+    exp_prefix='ppo_point_embed_random_start_192_polent_300maxpath',
     n_parallel=2,
     seed=1,
     variant=config,
