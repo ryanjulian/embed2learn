@@ -103,10 +103,10 @@ class AlmostContinuousEmbeddedPolicyEnv(gym.Env, Parameterized):
     def step(self, action, use_mean=True):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         idx = int(action[0])
-        if idx == self.action_space.high:
+        if idx == self.action_space.high[0]:
             idx -= 1
         latents = self._latents_combination_hash[idx]
-        latent = action[1] * latents[0] + (1 - action[1]) * latent[1]
+        latent = action[1] * latents[0] + (1 - action[1]) * latents[1]
         # TODO: Make this step size a param..
         for _ in range(10):
             action, agent_info = self._wrapped_policy.get_action_from_latent(

@@ -24,9 +24,7 @@ def run_task(*_):
     latent_policy = joblib.load(latent_policy_pkl)["policy"]
 
     inner_env = SequencePointEnv(completion_bonus=100)
-    env = TfEnv(AlmostContinuousEmbeddedPolicyEnv(inner_env, latent_policy))
-
-    action_noise = OUStrategy(env, sigma=0.8)
+    env = TfEnv(EmbeddedPolicyEnv(inner_env, latent_policy))
     
     actor_net = ContinuousMLPPolicy(
         env_spec=env,
@@ -41,6 +39,7 @@ def run_task(*_):
         hidden_sizes=[64, 64],
         hidden_nonlinearity=tf.nn.relu)
 
+    es = TaskStrategy(actor_net, latent_policy)
     ddpg = DDPG(
         env,
         actor=actor_net,
@@ -56,7 +55,7 @@ def run_task(*_):
         discount=0.9,
         replay_buffer_size=int(1e6),
         min_buffer_size=int(1e4),
-        exploration_strategy=action_noise,
+        exploration_strategy=es,
         actor_optimizer=tf.train.AdamOptimizer,
         critic_optimizer=tf.train.AdamOptimizer,)
 

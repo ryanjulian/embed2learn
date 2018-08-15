@@ -40,13 +40,12 @@ class SequencePointEnv(PointEnv):
             if self._reached_goal >= self._n_goals:
                 done = True
             else:
-                reward = 1
+                reward = 10
                 done = False
                 info["is_success"] = False
                 self._goal = self._goal_sequence[self._reached_goal]
 
-        reward += self._completion_bonus if info["is_success"] else 0
-
+        reward += self._completion_bonus if info["is_success"] else -.1
         return obs, reward, done, info
 
     @overrides
