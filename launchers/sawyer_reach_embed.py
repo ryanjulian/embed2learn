@@ -40,7 +40,7 @@ TASKS = {
             "completion_bonus": 0.0,
             "action_scale": 0.04,
             "randomize_start_jpos": True,
-            "collision_penalty": 1.,
+            "collision_penalty": 1.0,
         }
     }
     for i, g in enumerate(GOALS)
@@ -151,12 +151,12 @@ config = dict(
     inference_window=6,
     batch_size=4096 * len(TASKS),
     policy_ent_coeff=5e-3,  # 1e-2
-    embedding_ent_coeff=1e-2,  # 1e-3
-    inference_ce_coeff=14e-3,  # 1e-4
+    embedding_ent_coeff=5e-3,  # 1e-3
+    inference_ce_coeff=2e-2,  # 1e-4
     max_path_length=500,
-    embedding_init_std=2.0,
+    embedding_init_std=1.0,
     embedding_max_std=2.0,
-    policy_init_std=1.0,
+    policy_init_std=0.5,
 )
 
 run_experiment(
@@ -165,5 +165,5 @@ run_experiment(
     n_parallel=12,
     seed=1,
     variant=config,
-    plot=False,
+    plot=True,
 )

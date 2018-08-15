@@ -32,7 +32,7 @@ def run_task(v):
         goal_position=GOALS[0],
         control_method="position_control",
         # control_cost_coeff=1.0,
-        action_scale=0.02,
+        action_scale=0.04,
         randomize_start_jpos=True,
         completion_bonus=0.0,
         # terminate_on_collision=True,
@@ -76,14 +76,14 @@ def run_task(v):
 
 
 config = dict(
-    batch_size=16384,
+    batch_size=4096,
     max_path_length=500,  # 50
-    policy_init_std=1.0,  # 1.0
+    policy_init_std=0.5,  # 1.0
 )
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_ppo_position_rand_collision_det',
+    exp_prefix='sawyer_reach_ppo_position',
     n_parallel=1,
     seed=1,
     variant=config,
