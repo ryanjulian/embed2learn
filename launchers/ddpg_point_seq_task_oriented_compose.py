@@ -10,9 +10,10 @@ from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.envs import TfEnv
 from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
-from garage.exploration_strategies.model_predictive_strategy import TaskStrategy
+
 from sandbox.embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv, AlmostContinuousEmbeddedPolicyEnv
 from sandbox.embed2learn.envs.seq_point_env import SequencePointEnv
+from sandbox.embed2learn.exploration_strategy.task_oriented_strategy import TaskStrategy
 
 USE_LOG = "local/ppo-point-embed-random-start-192-polent/ppo_point_embed_random_start_192_polent_2018_08_14_17_01_37_0001"
 latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_400.pkl")
