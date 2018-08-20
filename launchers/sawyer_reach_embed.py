@@ -39,8 +39,8 @@ TASKS = {
             "goal_position": g,
             "completion_bonus": 0.0,
             "action_scale": 0.04,
-            "randomize_start_jpos": True,
-            "collision_penalty": 1.0,
+            "randomize_start_jpos": False,
+            "collision_penalty": 0.0,
         }
     }
     for i, g in enumerate(GOALS)
@@ -134,10 +134,10 @@ def run_task(v):
         inference=traj_embedding,
         batch_size=v.batch_size,
         max_path_length=v.max_path_length,
-        n_itr=6000,
+        n_itr=2000,
         discount=0.99,
         step_size=0.2,
-        plot=True,
+        plot=False,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
@@ -151,19 +151,19 @@ config = dict(
     inference_window=6,
     batch_size=4096 * len(TASKS),
     policy_ent_coeff=5e-3,  # 1e-2
-    embedding_ent_coeff=5e-3,  # 1e-3
-    inference_ce_coeff=2e-2,  # 1e-4
-    max_path_length=500,
+    embedding_ent_coeff=1e-3,  # 1e-3
+    inference_ce_coeff=5e-3,  # 1e-4
+    max_path_length=200,
     embedding_init_std=1.0,
     embedding_max_std=2.0,
-    policy_init_std=0.5,
+    policy_init_std=1.0,
 )
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_embed_8goal_coldet_rand',
-    n_parallel=12,
+    exp_prefix='sawyer_reach_embed_8goal',
+    n_parallel=8,
     seed=1,
     variant=config,
-    plot=True,
+    plot=False,
 )
