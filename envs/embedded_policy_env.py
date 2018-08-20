@@ -25,12 +25,12 @@ class EmbeddedPolicyEnv(gym.Env, Parameterized):
     def action_space(self):
         # TODO: fix gym.spaces conversion
         lower, upper = self._wrapped_policy.latent_space.bounds
-        # lb = np.array([-13, -18, - 18])
-        # ub = np.array([17, 18, 18])
+        # lb = np.array([-1., -1.1, -0.6])
+        # ub = np.array([1.4, 1.0, 0.6])
 
         # Below is for point env         
-        lb = np.full_like(lower, -13.0)
-        ub = np.full_like(lower, 13.0)
+        lb = np.full_like(lower, -5.0)
+        ub = np.full_like(lower, 5.0)
         return gym.spaces.Box(lb, ub, dtype=np.float32)
 
     @property
@@ -38,7 +38,10 @@ class EmbeddedPolicyEnv(gym.Env, Parameterized):
         return self._wrapped_env.observation_space
 
     def step(self, latent, use_mean=True):
-        for _ in range(10):
+        latent = latent.copy()
+        latent = np.clip(latent, self.action_space.low, self.action_space.high)
+        accumulated_r = 0
+        for _ in range(1):
             action, agent_info = self._wrapped_policy.get_action_from_latent(
                 latent, self._last_obs)
             if use_mean:
@@ -46,10 +49,11 @@ class EmbeddedPolicyEnv(gym.Env, Parameterized):
             else:
                 a = action
             scale = np.random.normal()
-            a += scale * 0.02
+            a += scale * 0.
             obs, reward, done, info = self._wrapped_env.step(a)
+            accumulated_r += reward
             self._last_obs = obs
-        return Step(obs, reward, done, **info)
+        return Step(obs, accumulated_r, done, **info)
 
     def render(self, *args, **kwargs):
         return self._wrapped_env.render(*args, **kwargs)
@@ -116,7 +120,7 @@ class AlmostContinuousEmbeddedPolicyEnv(gym.Env, Parameterized):
             else:
                 a = action
             scale = np.random.normal()
-            a += scale * 0.02
+            a += scale * 0
             obs, reward, done, info = self._wrapped_env.step(a)
             self._last_obs = obs
 

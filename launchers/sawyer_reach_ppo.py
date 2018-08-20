@@ -18,7 +18,7 @@ from sandbox.embed2learn.baselines import CollisionAwareBaseline
 GOALS = [
     # (  ?,    ?,   ?)
     # (0.4, -0.3, 0.15),
-    (0.6, 0, 0.15),
+    (0.6, 0.4, 0.2),
     # (0.3, 0.6, 0.15),
     # (-0.3, 0.6, 0.15),
 ]
@@ -34,9 +34,9 @@ def run_task(v):
         # control_cost_coeff=1.0,
         action_scale=0.04,
         randomize_start_jpos=True,
-        completion_bonus=0.0,
+        completion_bonus=0.1,
         # terminate_on_collision=True,
-        collision_penalty=1.,
+        collision_penalty=0.0,
     )
     env = TfEnv(env)
 
@@ -44,20 +44,20 @@ def run_task(v):
     policy = GaussianMLPPolicy(
         name="Policy",
         env_spec=env.spec,
-        hidden_sizes=(256, 128),
+        hidden_sizes=(64, 64),
         std_share_network=True,
         init_std=v.policy_init_std,
     )
 
-    # baseline = GaussianMLPBaseline(
-    #     env_spec=env.spec,
-    #     regressor_args=dict(hidden_sizes=(256, 128)),
-    # )
-
-    baseline = CollisionAwareBaseline(
+    baseline = GaussianMLPBaseline(
         env_spec=env.spec,
-        regressor_args=dict(hidden_sizes=(256, 128)),
+        regressor_args=dict(hidden_sizes=(64, 64)),
     )
+
+    # baseline = CollisionAwareBaseline(
+    #     env_spec=env.spec,
+    #     regressor_args=dict(hidden_sizes=(64, 64)),
+    # )
 
     algo = PPO(
         env=env,
@@ -77,8 +77,8 @@ def run_task(v):
 
 config = dict(
     batch_size=4096,
-    max_path_length=500,  # 50
-    policy_init_std=0.5,  # 1.0
+    max_path_length=150,  # 50
+    policy_init_std=1,  # 1.0
 )
 
 run_experiment(
