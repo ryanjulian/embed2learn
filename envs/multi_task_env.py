@@ -38,7 +38,7 @@ class MultiTaskEnv(gym.Env, Parameterized):
             for t_args, t_kwargs in zip(task_args, task_kwargs)
         ]
         self._task_selection_strategy = task_selection_strategy
-        self._active_task = self._task_selection_strategy(self.num_tasks, None)
+        self._active_task = None
 
     def reset(self, **kwargs):
         self._active_task = self._task_selection_strategy(
@@ -93,12 +93,13 @@ class MultiTaskEnv(gym.Env, Parameterized):
     @property
     def active_task_one_hot(self):
         one_hot = np.zeros(self.task_space.shape)
-        one_hot[self.active_task] = self.task_space.high[self.active_task]
+        t = self.active_task or 0
+        one_hot[t] = self.task_space.high[t]
         return one_hot
 
     @property
     def active_env(self):
-        return self._task_envs[self.active_task]
+        return self._task_envs[self.active_task or 0]
 
     @property
     def num_tasks(self):
