@@ -2,6 +2,9 @@ from enum import Enum
 from enum import unique
 import time
 
+import pickle
+import os.path as osp
+
 import numpy as np
 import tensorflow as tf
 
@@ -61,6 +64,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  inference_optimizer_args=dict(),
                  inference_ce_coeff=1e-3,
                  use_softplus_entropy=False,
+                 save_sample_frequency=0,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -74,6 +78,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._policy_opt_inputs = None
         self._inference_opt_inputs = None
         self._use_softplus_entropy = use_softplus_entropy
+
+        self._save_sample_frequency = save_sample_frequency
 
         with tf.name_scope(self.name):
             # Optimizer for policy and embedding networks
@@ -877,10 +883,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         return infer_loss_after
 
+    def save_samples(self, itr, samples_data):
+        with open(osp.join(logger.get_snapshot_dir(), 'samples_%i.pkl' % itr), "wb") as fout:
+            pickle.dump(samples_data, fout)
+
     @overrides
     def optimize_policy(self, itr, **kwargs):
         paths = self.obtain_samples(itr)
+
         samples_data = self.process_samples(itr, paths)
+        if self._save_sample_frequency > 0 and itr % self._save_sample_frequency == 0:
+            self.save_samples(itr, samples_data)
         self.log_diagnostics(paths)
 
         policy_opt_input_values = self._policy_opt_input_values(samples_data)
