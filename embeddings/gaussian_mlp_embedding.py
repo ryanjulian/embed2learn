@@ -29,6 +29,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                  max_std=None,
                  std_hidden_nonlinearity=tf.nn.tanh,
                  hidden_nonlinearity=tf.nn.tanh,
+                 mean_scale=1.,
                  output_nonlinearity=None,
                  mean_network=None,
                  std_network=None,
@@ -114,6 +115,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                 self._max_std_param = np.log(np.exp(self._max_std) - 1)
         else:
             raise NotImplementedError
+
+        self._mean_scale = mean_scale
 
         # Build default graph
         with self._name_scope:
@@ -227,7 +230,11 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                             trainable=self._learn_std,
                             name="std_network")
 
-                mean_var = mean_network
+                if self._mean_scale != 1.:
+                    mean_var = tf.identity(mean_network * self._mean_scale,
+                                           "mean_scale")
+                else:
+                    mean_var = mean_network
                 std_param_var = std_network
 
                 with tf.variable_scope("std_limits"):
