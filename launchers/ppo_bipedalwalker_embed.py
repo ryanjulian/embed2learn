@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import gym
 import numpy as np
 
 from garage.baselines import LinearFeatureBaseline
@@ -10,7 +11,6 @@ from garage.tf.spaces import Box
 from sandbox.embed2learn.algos import PPOTaskEmbedding
 from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
-from sandbox.embed2learn.envs import PointEnv
 from sandbox.embed2learn.envs import MultiTaskEnv
 from sandbox.embed2learn.envs.multi_task_env import TfEnv
 from sandbox.embed2learn.embeddings import EmbeddingSpec
@@ -19,27 +19,11 @@ from sandbox.embed2learn.embeddings.utils import concat_spaces
 from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 
 
-def circle(r, n):
-    for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
-        yield r * np.sin(t), r * np.cos(t)
+class GymTasks(gym.ActionWrapper):
 
-
-N = 4
-goals = circle(3.0, N)
-TASKS = {
-    str(i + 1): {
-        'args': [],
-        'kwargs': {
-            'goal': g,
-            'completion_bonus': 0.,
-            'action_scale': 0.1,
-            'random_start': False,
-            'never_done': True,
-            'obs_noise': 0.,
-        }
-    }
-    for i, g in enumerate(goals)
-}
+    def action(self, action)
+        a = action.copy()
+        np.clip(a, self.action_space.low, self.action_space.high)
 
 
 def run_task(v):
@@ -127,36 +111,31 @@ def run_task(v):
         inference=traj_embedding,
         batch_size=v.batch_size,
         max_path_length=v.max_path_length,
-        n_itr=400,
+        n_itr=600,
         discount=0.99,
         step_size=0.2,
         plot=True,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
-        embedding_reg_coeff=v.embedding_reg_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
-        use_softplus_entropy=False,
-        stop_entropy_gradients=False,
-        use_logli_entropy=False,
-        use_sampled_embedding_entropy=False,
+        use_softplus_entropy=True,
     )
     algo.train()
 
 config = dict(
     tasks=TASKS,
     latent_length=2,
-    inference_window=50,
+    inference_window=2,
     batch_size=4096 * len(TASKS),
     policy_ent_coeff=1e-2,  # 2e-2
-    embedding_ent_coeff=1e-3,  # 1e-2
-    embedding_reg_coeff=1e-5,  # 3e-4
-    inference_ce_coeff=1e-1,  # 1e-4
+    embedding_ent_coeff=1e-2,  # 1e-2
+    inference_ce_coeff=1e-6,  # 1e-2
     max_path_length=50,
     embedding_init_std=1.0,
     embedding_max_std=2.0,
-    policy_init_std=1.0,
+    policy_init_std=2.0,
     policy_max_std=None,
-    policy_min_std=None,
+    policy_min_std=1.0,
 )
 
 run_experiment(

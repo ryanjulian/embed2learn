@@ -23,7 +23,8 @@ def rollout(env,
             animated=False,
             speedup=1,
             always_return_paths=False,
-            goal_markers=None):
+            goal_markers=None,
+            mean_actions=False):
 
     observations = []
     tasks = []
@@ -50,6 +51,8 @@ def rollout(env,
     path_length = 0
     while path_length < max_path_length:
         a, agent_info = agent.get_action_from_latent(z, o)
+        if mean_actions:
+            a = agent_info["mean"]
         next_o, r, d, env_info = env.step(a)
         observations.append(agent.observation_space.flatten(o))
         path_length += 1
@@ -80,7 +83,8 @@ def rollout_interpolate(env,
                         animated=False,
                         speedup=1,
                         always_return_paths=False,
-                        goal_markers=None):
+                        goal_markers=None,
+                        mean_actions=False):
 
     observations = []
     tasks = []
@@ -103,6 +107,8 @@ def rollout_interpolate(env,
     while path_length < max_path_length:
         z = zs[0]
         a, agent_info = agent.get_action_from_latent(z, o)
+        if mean_actions:
+            a = agent_info["mean"]
         next_o, r, d, env_info = env.step(a)
         observations.append(agent.observation_space.flatten(o))
         path_length += 1
@@ -189,6 +195,7 @@ def play(pkl_file):
                 max_path_length=500,
                 animated=True,
                 goal_markers=goals,
+                mean_actions=True,
             )
 
         while True:
@@ -199,8 +206,10 @@ def play(pkl_file):
                     policy,
                     z_means[t:t+2],
                     max_path_length=500,
+                    z_path_length=50,
                     animated=True,
                     goal_markers=goals,
+                    mean_actions=True,
                 )
 
 

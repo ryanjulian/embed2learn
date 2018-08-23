@@ -188,6 +188,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
         with self._variable_scope:
 
+            from_latent_input = tf.stop_gradient(from_latent_input)
+
             with tf.variable_scope("concat_latent_obs"):
                 latent_obs_input = tf.concat(
                     [from_latent_input, from_obs_input], axis=-1)
@@ -291,6 +293,27 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
         return params
 
+    def log_likelihood_sym(self,
+                           task_var,
+                           obs_var,
+                           action_var,
+                           name=None):
+        with tf.name_scope(name, "log_likelihood_sym",
+                           [task_var, obs_var]):
+            latent = self._embedding.latent_sym(task_var)
+            _, _, _, dist = self._build_graph(latent, obs_var)
+            return dist.log_prob(action_var)
+
+    def log_likelihood_sym_from_latent(self,
+                                       latent_var,
+                                       obs_var,
+                                       action_var,
+                                       name=None):
+        with tf.name_scope(name, "log_likelihood_sym_from_latent",
+                           [latent_var, obs_var]):
+            _, _, _, dist = self._build_graph(latent_var, obs_var)
+            return dist.log_prob(action_var)
+
     def dist_info_sym(self, task_var, obs_var, state_info_vars=None,
                       name=None):
         with tf.name_scope(name, "dist_info_sym", [obs_var, state_info_vars]):
@@ -331,13 +354,6 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
         """
         flat_task_obs = self.task_observation_space.flatten(observation)
         flat_task, flat_obs = self.split_observation(flat_task_obs)
-        # mean, log_std, latent_mean, latent_log_std = \
-        #     [x[0] for x in self.f_dist_task_obs([flat_task], [flat_obs])]
-        # rnd = np.random.normal(size=mean.shape)
-        # action = rnd * np.exp(log_std) + mean
-        # latent_info = dict(mean=latent_mean, log_std=latent_log_std)
-        # return action, dict(
-        #     mean=mean, log_std=log_std, latent_info=latent_info)
         action, \
         action_mean, \
         action_log_std, \

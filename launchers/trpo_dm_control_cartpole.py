@@ -1,18 +1,15 @@
-from garage.algos import TRPO
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
-from garage.policies import GaussianMLPPolicy
-from garage.misc.instrument import stub
 from garage.misc.instrument import run_experiment
+from garage.tf.algos import TRPO
+from garage.tf.envs import TfEnv
+from sandbox.embed2learn.policies import GaussianMLPPolicy
 
-from sandbox.embed2learn.envs import DmControlEnv
+from garage.envs.dm_control import DmControlEnv
 
 
 def run_task(*_):
-    env = normalize(
-        DmControlEnv(
-            domain_name='cartpole', task_name='balance',
-            visualize_reward=True))
+    env = TfEnv(DmControlEnv(domain_name='cartpole', task_name='balance'))
 
     policy = GaussianMLPPolicy(
         env_spec=env.spec,
