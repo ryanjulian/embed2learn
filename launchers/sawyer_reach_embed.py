@@ -39,8 +39,8 @@ TASKS = {
             "goal_position": g,
             "completion_bonus": 0.0,
             "action_scale": 0.04,
-            "randomize_start_jpos": True,
-            "collision_penalty": 1.0,
+            "randomize_start_jpos": False,
+            # "collision_penalty": 1.0,
         }
     }
     for i, g in enumerate(GOALS)
@@ -149,9 +149,9 @@ config = dict(
     tasks=TASKS,
     latent_length=3,
     inference_window=6,
-    batch_size=4096 * len(TASKS),
-    policy_ent_coeff=5e-3,  # 1e-2
-    embedding_ent_coeff=5e-3,  # 1e-3
+    batch_size=15000 * len(TASKS),
+    policy_ent_coeff=1e-2,  # 1e-2
+    embedding_ent_coeff=1e-2,  # 1e-3
     inference_ce_coeff=2e-2,  # 1e-4
     max_path_length=500,
     embedding_init_std=1.0,
@@ -161,7 +161,7 @@ config = dict(
 
 run_experiment(
     run_task,
-    exp_prefix='sawyer_reach_embed_8goal_coldet_rand',
+    exp_prefix='sawyer_reach_embed_8goal_physics',
     n_parallel=12,
     seed=1,
     variant=config,

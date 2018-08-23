@@ -363,6 +363,11 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
         with tf.name_scope(name, "entropy_sym_sampled", [dist_info_vars]):
             return self._dist.entropy_sym(dist_info_vars)
 
+    def kl_sym(self, input_var, other, name=None):
+        with tf.name_scope(name, "kl_sym", [input_var]):
+            _, _, _, dist = self._build_graph(input_var)
+            return dist.kl_divergence(other)
+
     def log_diagnostics(self):
         log_stds = np.vstack(
             [path["agent_infos"]["log_std"] for path in paths])

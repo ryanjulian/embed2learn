@@ -26,6 +26,7 @@ class PointEnv(gym.Env, Parameterized):
             completion_bonus=0.,
             never_done=False,
             action_scale=1.,
+            obs_noise=0.
         ):
         Serializable.quick_init(self, locals())
         Parameterized.__init__(self)
@@ -35,6 +36,8 @@ class PointEnv(gym.Env, Parameterized):
         self._completion_bonus = completion_bonus
         self._never_done = never_done
         self._action_scale = action_scale
+        self._completion_latch = False
+        self._obs_noise = obs_noise
 
         self.screen = None
         self.screen_width = 500
@@ -75,6 +78,9 @@ class PointEnv(gym.Env, Parameterized):
         self._point = np.clip(self._point + a, -5, 5)
         self._traces[-1].append(tuple(self._point))
 
+        obs = self._point + (
+            np.random.normal(size=self._point.shape) * self._obs_noise)
+
         dist = np.linalg.norm(self._point - self._goal)
         done = dist < np.linalg.norm(self.action_space.low)
 
@@ -82,14 +88,15 @@ class PointEnv(gym.Env, Parameterized):
         reward = -dist
         is_success = False
         # completion bonus
-        if done:
+        if done and not self._completion_latch:
+            self._completion_latch = True
             is_success = True
             reward += self._completion_bonus
 
         # sometimes we don't want to terminate
         done = done and not self._never_done
 
-        return Step(np.copy(self._point), reward, done, is_success=is_success)
+        return Step(obs, reward, done, is_success=is_success)
 
     def _to_screen(self, position):
         position = np.nan_to_num(position)
