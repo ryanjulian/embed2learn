@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import tensorflow as tf
 
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
@@ -31,10 +32,10 @@ TASKS = {
         'args': [],
         'kwargs': {
             'goal': g,
-            'never_done': True,
-            'completion_bonus': 0.0,
+            'completion_bonus': 0.,
             'action_scale': 0.1,
-            'random_start': True,
+            'random_start': False,
+            'never_done': True,
         }
     }
     for i, g in enumerate(goals)
@@ -88,7 +89,7 @@ def run_task(v):
     traj_embedding = GaussianMLPEmbedding(
         name="inference",
         embedding_spec=traj_embed_spec,
-        hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
+        hidden_sizes=(64, 64),  # was the same size as policy in Karol's paper
         std_share_network=True,
         init_std=2.0,
     )
@@ -97,10 +98,11 @@ def run_task(v):
     task_embedding = GaussianMLPEmbedding(
         name="embedding",
         embedding_spec=task_embed_spec,
-        hidden_sizes=(20, 20),
+        hidden_sizes=(32, 32),
         std_share_network=True,
         init_std=v.embedding_init_std,
         max_std=v.embedding_max_std,
+        hidden_nonlinearity=tf.nn.relu,
     )
 
     # Multitask policy
@@ -116,7 +118,7 @@ def run_task(v):
         min_std=v.policy_min_std,
     )
 
-    extra = v.latent_length + len(v.tasks)
+    extra = v.latent_length + len(v.tasks)  # + traj_space.flat_dim
     baseline = MultiTaskGaussianMLPBaseline(env_spec=env.spec, extra_dims=extra)
 
     algo = PPOTaskEmbedding(
@@ -126,36 +128,43 @@ def run_task(v):
         inference=traj_embedding,
         batch_size=v.batch_size,
         max_path_length=v.max_path_length,
-        n_itr=600,
+        n_itr=500,
         discount=0.99,
         step_size=0.2,
         plot=True,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
+        embedding_reg_coeff=v.embedding_reg_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
-        use_softplus_entropy=True,
+        softplus_policy_ent=True,
+        tanh_embedding_ent=True,
+        stop_policy_ent_gradient=True,
+        # logli_policy_ent=True,
+        logli_embedding_ent=True,
+
     )
     algo.train()
 
 config = dict(
     tasks=TASKS,
-    latent_length=2,
+    latent_length=10,
     inference_window=2,
-    batch_size=1024 * len(TASKS),
-    policy_ent_coeff=192e-2,  # 2e-2
-    embedding_ent_coeff=1e-2,  # 1e-2
-    inference_ce_coeff=14e-3,  # 1e-2
-    max_path_length=300,
-    embedding_init_std=1.0,
-    embedding_max_std=2.0,
-    policy_init_std=1.0,
+    batch_size=4096 * len(TASKS),
+    policy_ent_coeff=1e-3,  # 1e-3
+    embedding_ent_coeff=1e-8,  # 1e-8
+    embedding_reg_coeff=0.,  # 0.
+    inference_ce_coeff=1e-2,  # 1e-2
+    max_path_length=50,  # 50
+    embedding_init_std=0.5,  # 0.5
+    embedding_max_std=10.0,  # 10.0
+    policy_init_std=2.0,
     policy_max_std=None,
     policy_min_std=None,
 )
 
 run_experiment(
     run_task,
-    exp_prefix='ppo_point_embed_random_start_192_polent_300maxpath',
+    exp_prefix='ppo_point_embed',
     n_parallel=2,
     seed=1,
     variant=config,

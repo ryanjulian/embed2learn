@@ -212,33 +212,8 @@ class TaskEmbeddingSampler(BatchSampler):
         action_space = self.algo.env.action_space
         observation_space = self.algo.env.observation_space
 
-        if hasattr(self.algo.baseline, "predict_n"):
-            all_path_baselines = self.algo.baseline.predict_n(paths)
-        else:
-            all_path_baselines = [
-                self.algo.baseline.predict(path) for path in paths
-            ]
-
-        for idx, path in enumerate(paths):
-            path_baselines = np.append(all_path_baselines[idx], 0)
-            deltas = path["rewards"] + \
-                     self.algo.discount * path_baselines[1:] - \
-                     path_baselines[:-1]
-            path["advantages"] = special.discount_cumsum(
-                deltas, self.algo.discount * self.algo.gae_lambda)
-            path["deltas"] = deltas
-
         # calculate trajectory tensors (TODO: probably can do this in TF)
         for idx, path in enumerate(paths):
-            # baselines
-            path['baselines'] = all_path_baselines[idx]
-            baselines.append(path['baselines'])
-
-            # returns
-            path["returns"] = special.discount_cumsum(path["rewards"],
-                                                      self.algo.discount)
-            returns.append(path["returns"])
-
             # Calculate trajectory samples
             #
             # Pad and flatten action and observation traces
@@ -268,6 +243,32 @@ class TaskEmbeddingSampler(BatchSampler):
             # trajectory infos
             _, traj_infos = self.inference.get_latents(trajs)
             path['trajectory_infos'] = traj_infos
+
+        if hasattr(self.algo.baseline, "predict_n"):
+            all_path_baselines = self.algo.baseline.predict_n(paths)
+        else:
+            all_path_baselines = [
+                self.algo.baseline.predict(path) for path in paths
+            ]
+
+        for idx, path in enumerate(paths):
+            path_baselines = np.append(all_path_baselines[idx], 0)
+            deltas = path["rewards"] + \
+                     self.algo.discount * path_baselines[1:] - \
+                     path_baselines[:-1]
+            path["advantages"] = special.discount_cumsum(
+                deltas, self.algo.discount * self.algo.gae_lambda)
+            path["deltas"] = deltas
+
+        for idx, path in enumerate(paths):
+            # baselines
+            path['baselines'] = all_path_baselines[idx]
+            baselines.append(path['baselines'])
+
+            # returns
+            path["returns"] = special.discount_cumsum(path["rewards"],
+                                                      self.algo.discount)
+            returns.append(path["returns"])
 
         ev = special.explained_variance_1d(
             np.concatenate(baselines), np.concatenate(returns))

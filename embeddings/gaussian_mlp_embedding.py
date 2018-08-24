@@ -15,6 +15,7 @@ from sandbox.embed2learn.tf.network_utils import mlp
 from sandbox.embed2learn.tf.network_utils import parameter
 from sandbox.embed2learn.tf.network_utils import two_headed_mlp
 
+
 class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
     def __init__(self,
                  embedding_spec,

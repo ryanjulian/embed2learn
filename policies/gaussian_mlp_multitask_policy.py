@@ -188,6 +188,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
         with self._variable_scope:
 
+            from_latent_input = tf.stop_gradient(from_latent_input)
+
             with tf.variable_scope("concat_latent_obs"):
                 latent_obs_input = tf.concat(
                     [from_latent_input, from_obs_input], axis=-1)
