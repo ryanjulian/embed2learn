@@ -46,16 +46,22 @@ class MultiTaskGaussianMLPBaseline(Baseline, Parameterized):
         observations = np.concatenate([p["observations"] for p in paths])
         tasks = np.concatenate([p["tasks"] for p in paths])
         latents = np.concatenate([p["latents"] for p in paths])
-        trajectories = np.concatenate([p["trajectories"] for p in paths])
-        aug_obs = np.concatenate([observations, tasks, latents], axis=1)
+        aug_obs = np.concatenate([
+            observations,
+            tasks,
+            latents,
+        ], axis=1)
         returns = np.concatenate([p["returns"] for p in paths])
         self._regressor.fit(aug_obs, returns.reshape((-1, 1)))
 
     @overrides
     def predict(self, path):
         """Predict value based on paths."""
-        inputs = np.concatenate(
-            (path["observations"], path["tasks"], path["latents"]), axis=1)
+        inputs = np.concatenate((
+            path["observations"],
+            path["tasks"],
+            path["latents"],
+        ), axis=1)
         return self._regressor.predict(inputs, ).flatten()
 
     @overrides

@@ -30,6 +30,7 @@ from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
 from sandbox.embed2learn.policies import StochasticMultitaskPolicy
 from sandbox.embed2learn.samplers import TaskEmbeddingSampler
 from sandbox.embed2learn.samplers.task_embedding_sampler import rollout
+from sandbox.embed2learn.tf.network_utils import softclip
 
 
 @unique
@@ -62,10 +63,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  inference_optimizer=LbfgsOptimizer,
                  inference_optimizer_args=dict(),
                  inference_ce_coeff=1e-3,
-                 use_softplus_entropy=False,
-                 stop_entropy_gradients=False,
-                 use_logli_entropy=False,
-                 use_sampled_embedding_entropy=False,
+                 softplus_policy_ent=False,
+                 softplus_embedding_ent=False,
+                 stop_policy_ent_gradient=False,
+                 logli_policy_ent=False,
+                 logli_embedding_ent=False,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -78,10 +80,11 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._pg_loss = pg_loss
         self._policy_opt_inputs = None
         self._inference_opt_inputs = None
-        self._use_softplus_entropy = use_softplus_entropy
-        self._stop_entropy_gradients = stop_entropy_gradients
-        self._use_logli_entropy = use_logli_entropy
-        self._use_sampled_embedding_entropy = use_sampled_embedding_entropy
+        self._softplus_policy_ent = softplus_policy_ent
+        self._softplus_embedding_ent = softplus_embedding_ent
+        self._stop_policy_ent_gradient = stop_policy_ent_gradient
+        self._logli_policy_ent = logli_policy_ent
+        self._logli_embedding_ent = logli_embedding_ent
 
         with tf.name_scope(self.name):
             # Optimizer for policy and embedding networks
@@ -497,8 +500,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     # PPO uses a surrogate objective with clipped LR
                     lr_clip = tf.clip_by_value(
                         lr,
-                        1 - self.step_size,
-                        1 + self.step_size,
+                        1. - self.step_size,
+                        1. + self.step_size,
                         name="lr_clip")
                     surr_clip = lr_clip * adv_valid
                     surr_obj = tf.minimum(
@@ -548,16 +551,26 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 all_task_one_hots = tf.one_hot(
                     np.arange(task_dim), task_dim, name="all_task_one_hots")
 
-                if self._use_logli_entropy:
-                    all_task_latents = self.policy.embedding.latent_sym(
-                        all_task_one_hots)
-                    all_task_entropies = (
-                        -self.policy.embedding.log_likelihood_sym(
-                            all_task_one_hots, all_task_latents)
-                    )
-                else:
+                if not self._logli_embedding_ent:
                     all_task_entropies = self.policy.embedding.entropy_sym(
                         all_task_one_hots)
+                    all_task_entropies = softclip(all_task_entropies, 0., 5.)
+                else:
+                    all_task_latent_dist_infos = (
+                        self.policy.embedding.dist_info_sym(all_task_one_hots))
+                    all_task_latent_means = all_task_latent_dist_infos["mean"]
+                    all_latent_loglis = (
+                        self.policy.embedding.log_likelihood_sym(
+                            all_task_one_hots,
+                            all_task_latent_means,
+                            name="all_latent_loglis",
+                        )
+                    )
+                    # Clip extreme log likelihoods to prevent exploding
+                    # gradients
+                    all_latent_loglis = softclip(
+                        all_latent_loglis, np.log(1e-2), 0.)
+                    all_task_entropies = -all_latent_loglis
 
                 embedding_entropy = tf.reduce_mean(
                     all_task_entropies, name="embedding_entropy")
@@ -575,11 +588,20 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     name="traj_ll_flat")
                 traj_ll = tf.reshape(
                     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
+                # Softclip extreme log likelihoods to prevent exploding
+                # gradients
+                traj_ll = softclip(traj_ll, np.log(1e-3), 0.)
                 inference_ce = -traj_ll
 
             # 4. Policy path entropies
             with tf.name_scope('policy_entropy'):
-                if self._use_logli_entropy:
+                if not self._logli_policy_ent:
+                    policy_entropy_flat = self.policy.entropy_sym(
+                        i.task_var, i.obs_var, name="policy_entropy_flat")
+                    policy_entropy = tf.reshape(
+                        policy_entropy_flat, [-1, self.max_path_length],
+                        name="policy_entropy")
+                else:
                     action_loglis = self.policy.log_likelihood_sym(
                         i.task_var,
                         i.obs_var,
@@ -587,34 +609,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                         name="action_loglis",
                     )
                     policy_entropy = -action_loglis
-                else:
-                    policy_entropy_flat = self.policy.entropy_sym(
-                        i.task_var, i.obs_var, name="policy_entropy_flat")
-                    policy_entropy = tf.reshape(
-                        policy_entropy_flat, [-1, self.max_path_length],
-                        name="policy_entropy")
 
-            # optionally softplus the entropy terms
-            if self._use_softplus_entropy:
-                embedding_entropy = tf.nn.softplus(embedding_entropy)
-                inference_ce = tf.nn.softplus(inference_ce)
+            # optionally add nonlinearities to entropy terms
+            if self._softplus_policy_ent:
                 policy_entropy = tf.nn.softplus(policy_entropy)
 
-            # optionally stop gradients
-            if self._stop_entropy_gradients:
-                pass
-                # embedding_entropy = tf.stop_gradient(embedding_entropy)
-                # embedding_divergence = tf.stop_gradient(embedding_divergence)
-                # inference_ce = tf.stop_gradient(inference_ce)
-                # policy_entropy = tf.stop_gradient(policy_entropy)
+            if self._softplus_embedding_ent:
+                embedding_entropy = tf.nn.softplus(embedding_entropy)
 
-        # DEBUG
-        self._i = i
-        self._all_task_one_hots = all_task_one_hots
-        self._embedding_entropy = embedding_entropy
-        self._policy_entropy = policy_entropy
-        self._inference_ce = inference_ce
-        self._embedding_divergence = embedding_divergence
+            # optionally stop policy entropy gradients
+            if self._stop_policy_ent_gradient:
+                policy_entropy = tf.stop_gradient(policy_entropy)
 
         # Diagnostic functions
         self.f_task_entropies = tensor_utils.compile_function(
@@ -915,20 +920,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         logger.log("Computing loss after")
         loss_after = self.optimizer.loss(policy_opt_input_values)
-
-        sess = tf.get_default_session()
-        feed = dict(zip(flatten_inputs(self._policy_opt_inputs), policy_opt_input_values))
-
-
-        a_t = tf.gradients(self.policy._action, self.policy.embedding._input)
-        t = np.array([[0, 0, 0, 1]])
-        obs = np.array([[0,0]])
-
-        if a_t[0]:
-            import ipdb
-            ipdb.set_trace()
-            g = sess.run(a_t, feed_dict={self.policy.embedding._input: t, self.policy._obs_input: obs})
-
 
         logger.record_tabular('Policy/LossBefore', loss_before)
         logger.record_tabular('Policy/LossAfter', loss_after)

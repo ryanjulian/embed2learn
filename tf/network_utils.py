@@ -2,6 +2,13 @@ import numpy as np
 import tensorflow as tf
 
 
+def softclip(x, min_, max_):
+    offset = 0.5 * (min_ + max_)
+    range_ = 0.5 * (max_ - min_)
+
+    return offset + (range_ * tf.nn.tanh(x / range_))
+
+
 def mlp(with_input=None,
         output_dim=None,
         hidden_sizes=None,
@@ -30,6 +37,7 @@ def mlp(with_input=None,
             bias_initializer=output_b_init,
             name="out")
         return out
+
 
 def two_headed_mlp(with_input=None,
                    lower_output_dim=None,
