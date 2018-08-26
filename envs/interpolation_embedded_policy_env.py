@@ -7,22 +7,23 @@ from garage.envs import Step
 from sandbox.embed2learn.policies import MultitaskPolicy
 
 
-class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
-    """Discrete action space where each action corresponds to one latent."""
+class InterpolationEmbeddedPolicyEnv(gym.Env, Parameterized):
+    """Control the embedded policy via linear combinations of latents."""
 
     def __init__(self,
                  wrapped_env=None,
                  wrapped_policy=None,
-                 latents=None):
+                 latents=None,
+                 normalize=False):
         assert isinstance(wrapped_policy, MultitaskPolicy)
-        assert isinstance(latents, list)
         Serializable.quick_init(self, locals())
         Parameterized.__init__(self)
 
         self._wrapped_env = wrapped_env
         self._wrapped_policy = wrapped_policy
-        self._latents = latents
+        self._latents = np.array(latents)
         self._last_obs = None
+        self._normalize = normalize
 
     def reset(self, **kwargs):
         self._last_obs = self._wrapped_env.reset(**kwargs)
@@ -31,14 +32,19 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
 
     @property
     def action_space(self):
-        return gym.spaces.Discrete(len(self._latents))
+        return gym.spaces.Box(low=0, high=1,
+                              shape=(len(self._latents),),
+                              dtype=np.float32)
 
     @property
     def observation_space(self):
         return self._wrapped_env.observation_space
 
     def step(self, action, use_mean=False):
-        latent = self._latents[action]
+        action = np.copy(action)
+        if self._normalize:
+            action /= np.linalg.norm(action)
+        latent = np.sum(action * self._latents.T, axis=1)
         accumulated_r = 0
         for _ in range(1):
             action, agent_info = self._wrapped_policy.get_action_from_latent(
