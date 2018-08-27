@@ -24,7 +24,7 @@ latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_596.pkl")
 
 GOAL = np.array([-0.20, 0.10, 0.]),
 
-PATH_LENGTH = 40  # 80
+PATH_LENGTH = 64  # 80
 SKIP_STEPS = 8  # 20
 
 SEARCH_METHOD = "ucs"  # "greedy"  # "brute"
@@ -88,7 +88,7 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
             obs, reward, done, info = self._wrapped_env.step(a)
             accumulated_r += reward
             self._last_obs = obs
-        return Step(obs, accumulated_r, done, **info)
+        return Step(obs, reward, done, **info)
 
     def set_sequence(self, actions):
         """Resets environment deterministically to sequence of actions."""
@@ -136,8 +136,9 @@ def ucs(env: DiscreteEmbeddedPolicyEnv, ntasks: int):
         if len(curr_s) == ITERATIONS:
             return curr_s
         for a in range(ntasks):
-            r = env.set_sequence(curr_s + [a])
-            queue.put((-r, curr_s + [a]))
+            seq = curr_s + [a]
+            r = env.set_sequence(seq)
+            queue.put((-r / len(seq), curr_s + [a]))
     return []
 
 
