@@ -1,6 +1,8 @@
 import os.path as osp
 
 import time
+from queue import PriorityQueue
+
 import gym
 import joblib
 import numpy as np
@@ -22,9 +24,12 @@ latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_596.pkl")
 
 GOAL = np.array([-0.20, 0.10, 0.]),
 
-PATH_LENGTH = 32  # 80
+PATH_LENGTH = 40  # 80
 SKIP_STEPS = 8  # 20
 
+SEARCH_METHOD = "ucs"  # "greedy"  # "brute"
+
+ITERATIONS = PATH_LENGTH // SKIP_STEPS
 
 # XXX I'm using Hejia's garage.zip to get his SimplePushEnv
 class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
@@ -85,6 +90,17 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
             self._last_obs = obs
         return Step(obs, accumulated_r, done, **info)
 
+    def set_sequence(self, actions):
+        """Resets environment deterministically to sequence of actions."""
+
+        assert self._deterministic
+        self.reset()
+        reward = 0
+        for a in actions:
+            _, r, _, _ = self.step(a)
+            reward += r
+        return reward
+
     def render(self, *args, **kwargs):
         return self._wrapped_env.render(*args, **kwargs)
 
@@ -94,6 +110,35 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
 
     def close(self):
         return self._wrapped_env.close()
+
+
+def greedy(env: DiscreteEmbeddedPolicyEnv, ntasks: int):
+    sequence = []
+    for l in range(ITERATIONS):
+        best_r, best_a = -np.inf, 0
+        for a in range(ntasks):
+            env.set_sequence(sequence)
+            obs, r, done, info = env.step(a)
+            if r > best_r:
+                best_r, best_a = r, a
+        sequence.append(best_a)
+    return sequence
+
+
+def ucs(env: DiscreteEmbeddedPolicyEnv, ntasks: int):
+    queue = PriorityQueue()
+    for a in range(ntasks):
+        r = env.set_sequence([a])
+        queue.put((-r, [a]))
+    while not queue.empty():
+        curr_r, curr_s = queue.get()
+        print(curr_r, curr_s)
+        if len(curr_s) == ITERATIONS:
+            return curr_s
+        for a in range(ntasks):
+            r = env.set_sequence(curr_s + [a])
+            queue.put((-r, curr_s + [a]))
+    return []
 
 
 def main():
@@ -107,7 +152,6 @@ def main():
     latents = [latent_policy.get_latent(tasks[t])[1]["mean"] for t in range(ntasks)]
     print("Latents:\n\t", "\n\t".join(map(str, latents)))
 
-    ITERATIONS = PATH_LENGTH // SKIP_STEPS
 
     inner_env = SimplePushEnv(delta=GOAL,
                               control_method="position_control",
@@ -121,20 +165,26 @@ def main():
                                     skip_steps=SKIP_STEPS,
                                     deterministic=True)
 
-    def f(x):
-        env.reset()
-        reward = 0.
-        # first go to the desired embedding
-        env.step(int(x[0]))
-        for i in range(ITERATIONS):
-            obs, r, done, info = env.step(int(x[i]))
-            reward += r
-        print(x, "\tr:", reward)
-        return -reward  # optimizers minimize by default
+    if SEARCH_METHOD == "brute":
+        def f(x):
+            env.reset()
+            reward = 0.
+            for i in range(ITERATIONS):
+                obs, r, done, info = env.step(int(x[i]))
+                reward += r
+            print(x, "\tr:", reward)
+            return -reward  # optimizers minimize by default
 
-    print("Brute-forcing", ntasks ** ITERATIONS, "combinations...")
-    ranges = (slice(0, ntasks, 1),) * ITERATIONS
-    result = brute(f, ranges, disp=True, finish=None)
+        print("Brute-forcing", ntasks ** ITERATIONS, "combinations...")
+        ranges = (slice(0, ntasks, 1),) * ITERATIONS
+        result = brute(f, ranges, disp=True, finish=None)
+    elif SEARCH_METHOD == "greedy":
+        result = greedy(env, ntasks)
+    elif SEARCH_METHOD == "ucs":
+        result = ucs(env, ntasks)
+    else:
+        raise NotImplementedError
+
     print("Result:", result)
 
     src_env = snapshot["env"]
@@ -159,8 +209,6 @@ def main():
     while True:
         env.reset()
         reward = 0.
-        # first go to the desired embedding
-        env.step(int(result[0]))
         for i in range(ITERATIONS):
             obs, r, done, info = env.step(int(result[i]),
                                           animate=True,
