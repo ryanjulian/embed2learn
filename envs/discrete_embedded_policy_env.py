@@ -1,3 +1,5 @@
+import time
+
 import gym
 import numpy as np
 
@@ -41,7 +43,7 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
     def observation_space(self):
         return self._wrapped_env.observation_space
 
-    def step(self, action):
+    def step(self, action, animate=False, markers=[]):
         latent = self._latents[action]
         accumulated_r = 0
         for _ in range(self._skip_steps):
@@ -51,11 +53,18 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
                 a = agent_info['mean']
             else:
                 a = action
-        # scale = np.random.normal()
-        # a += scale * 0.
-        obs, reward, done, info = self._wrapped_env.step(a)
-        accumulated_r += reward
-        self._last_obs = obs
+            if animate:
+                for m in markers:
+                    self._wrapped_env.env.get_viewer().add_marker(**m)
+                self._wrapped_env.render()
+                timestep = 0.05
+                speedup = 1.
+                time.sleep(timestep / speedup)
+            # scale = np.random.normal()
+            # a += scale * 0.
+            obs, reward, done, info = self._wrapped_env.step(a)
+            accumulated_r += reward
+            self._last_obs = obs
         return Step(obs, accumulated_r, done, **info)
 
     def render(self, *args, **kwargs):
