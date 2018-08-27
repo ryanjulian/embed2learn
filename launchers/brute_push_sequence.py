@@ -1,0 +1,173 @@
+import os.path as osp
+
+import time
+import gym
+import joblib
+import numpy as np
+import tensorflow as tf
+
+from scipy.optimize import brute
+
+from garage.core import Parameterized
+from garage.core import Serializable
+from garage.envs import Step
+from sandbox.embed2learn.policies import MultitaskPolicy
+
+from garage.envs.mujoco.sawyer import SimplePushEnv
+
+
+USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
+LOG_DIR = "/home/eric/.deep-rl-docker/garage_embed/data"
+latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_596.pkl")
+
+GOAL = np.array([-0.20, 0.10, 0.]),
+
+PATH_LENGTH = 32  # 80
+SKIP_STEPS = 8  # 20
+
+
+# XXX I'm using Hejia's garage.zip to get his SimplePushEnv
+class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
+    """Discrete action space where each action corresponds to one latent."""
+
+    def __init__(self,
+                 wrapped_env=None,
+                 wrapped_policy=None,
+                 latents=None,
+                 skip_steps=1,
+                 deterministic=True):
+        assert isinstance(wrapped_policy, MultitaskPolicy)
+        assert isinstance(latents, list)
+        Serializable.quick_init(self, locals())
+        Parameterized.__init__(self)
+
+        self._wrapped_env = wrapped_env
+        self._wrapped_policy = wrapped_policy
+        self._latents = latents
+        self._last_obs = None
+        self._skip_steps = skip_steps
+        self._deterministic = deterministic
+
+    def reset(self, **kwargs):
+        self._last_obs = self._wrapped_env.reset(**kwargs)
+        self._wrapped_policy.reset()
+        return self._last_obs
+
+    @property
+    def action_space(self):
+        return gym.spaces.Discrete(len(self._latents))
+
+    @property
+    def observation_space(self):
+        return self._wrapped_env.observation_space
+
+    def step(self, action, animate=False, markers=[]):
+        latent = self._latents[action]
+        accumulated_r = 0
+        for _ in range(self._skip_steps):
+            action, agent_info = self._wrapped_policy.get_action_from_latent(
+                latent, np.copy(self._last_obs))
+            if self._deterministic:
+                a = agent_info['mean']
+            else:
+                a = action
+            if animate:
+                for m in markers:
+                    self._wrapped_env.env.get_viewer().add_marker(**m)
+                self._wrapped_env.render()
+                timestep = 0.05
+                speedup = 1.
+                time.sleep(timestep / speedup)
+            # scale = np.random.normal()
+            # a += scale * 0.
+            obs, reward, done, info = self._wrapped_env.step(a)
+            accumulated_r += reward
+            self._last_obs = obs
+        return Step(obs, accumulated_r, done, **info)
+
+    def render(self, *args, **kwargs):
+        return self._wrapped_env.render(*args, **kwargs)
+
+    @property
+    def horizon(self):
+        return self._wrapped_env.horizon
+
+    def close(self):
+        return self._wrapped_env.close()
+
+
+def main():
+    sess = tf.Session()
+    sess.__enter__()
+
+    snapshot = joblib.load(latent_policy_pkl)
+    latent_policy = snapshot["policy"]
+    ntasks = latent_policy.task_space.shape[0]
+    tasks = np.eye(ntasks)
+    latents = [latent_policy.get_latent(tasks[t])[1]["mean"] for t in range(ntasks)]
+    print("Latents:\n\t", "\n\t".join(map(str, latents)))
+
+    ITERATIONS = PATH_LENGTH // SKIP_STEPS
+
+    inner_env = SimplePushEnv(delta=GOAL,
+                              control_method="position_control",
+                              completion_bonus=0.,
+                              randomize_start_jpos=False,
+                              action_scale=0.04)
+
+    env = DiscreteEmbeddedPolicyEnv(inner_env,
+                                    latent_policy,
+                                    latents=latents,
+                                    skip_steps=SKIP_STEPS,
+                                    deterministic=True)
+
+    def f(x):
+        env.reset()
+        reward = 0.
+        # first go to the desired embedding
+        env.step(int(x[0]))
+        for i in range(ITERATIONS):
+            obs, r, done, info = env.step(int(x[i]))
+            reward += r
+        print(x, "\tr:", reward)
+        return -reward  # optimizers minimize by default
+
+    print("Brute-forcing", ntasks ** ITERATIONS, "combinations...")
+    ranges = (slice(0, ntasks, 1),) * ITERATIONS
+    result = brute(f, ranges, disp=True, finish=None)
+    print("Result:", result)
+
+    src_env = snapshot["env"]
+    goals = np.array(
+        [te.env._goal_configuration.object_pos for te in src_env.env._task_envs])
+
+    initial_block_pos = np.array([0.64, 0.22, 0.03])
+    markers = [dict(
+        pos=initial_block_pos + GOAL,
+        size=0.01 * np.ones(3),
+        label="Goal",
+        rgba=np.array([1., 0.8, 0., 1.])
+    )]
+
+    for i, g in enumerate(goals):
+        markers.append(dict(
+            pos=g,
+            size=0.01 * np.ones(3),
+            label="Task {}".format(i + 1),
+            rgba=np.array([1., 0.2, 0., 1.])
+        ))
+    while True:
+        env.reset()
+        reward = 0.
+        # first go to the desired embedding
+        env.step(int(result[0]))
+        for i in range(ITERATIONS):
+            obs, r, done, info = env.step(int(result[i]),
+                                          animate=True,
+                                          markers=markers)
+            reward += r
+        print(result, "\tr:", reward)
+
+
+if __name__ == "__main__":
+    main()

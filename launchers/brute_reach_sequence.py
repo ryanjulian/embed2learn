@@ -92,8 +92,8 @@ def main():
             label="Task {}".format(i + 1),
             rgba=np.array([1., 0.2, 0., 1.])
         ))
-    env.reset()
     while True:
+        env.reset()
         reward = 0.
         # first go to the desired embedding
         env.step(int(result[0]))
