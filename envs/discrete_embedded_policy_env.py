@@ -13,7 +13,9 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
     def __init__(self,
                  wrapped_env=None,
                  wrapped_policy=None,
-                 latents=None):
+                 latents=None,
+                 skip_steps=1,
+                 deterministic=True):
         assert isinstance(wrapped_policy, MultitaskPolicy)
         assert isinstance(latents, list)
         Serializable.quick_init(self, locals())
@@ -23,6 +25,8 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
         self._wrapped_policy = wrapped_policy
         self._latents = latents
         self._last_obs = None
+        self._skip_steps = skip_steps
+        self._deterministic = deterministic
 
     def reset(self, **kwargs):
         self._last_obs = self._wrapped_env.reset(**kwargs)
@@ -37,13 +41,13 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
     def observation_space(self):
         return self._wrapped_env.observation_space
 
-    def step(self, action, use_mean=False):
+    def step(self, action):
         latent = self._latents[action]
         accumulated_r = 0
-        for _ in range(1):
+        for _ in range(self._skip_steps):
             action, agent_info = self._wrapped_policy.get_action_from_latent(
                 latent, np.copy(self._last_obs))
-            if use_mean:
+            if self._deterministic:
                 a = agent_info['mean']
             else:
                 a = action
