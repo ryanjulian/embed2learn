@@ -18,18 +18,20 @@ from sandbox.embed2learn.policies import MultitaskPolicy
 from garage.envs.mujoco.sawyer import SimplePushEnv
 
 
-USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
+USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_27_15_49_32_0001"
+# USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
 LOG_DIR = "/home/eric/.deep-rl-docker/garage_embed/data"
-latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_596.pkl")
+latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_600.pkl")
 
-GOAL = np.array([-0.20, 0.10, 0.]),
+GOAL = np.array([0.10, 0.20, 0.]),
 
-PATH_LENGTH = 64  # 80
-SKIP_STEPS = 8  # 20
+PATH_LENGTH = 200  # 80
+SKIP_STEPS = 30  # 20
 
 SEARCH_METHOD = "ucs"  # "greedy"  # "brute"
 
 ITERATIONS = PATH_LENGTH // SKIP_STEPS
+
 
 # XXX I'm using Hejia's garage.zip to get his SimplePushEnv
 class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
@@ -69,9 +71,11 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
     def step(self, action, animate=False, markers=[]):
         latent = self._latents[action]
         accumulated_r = 0
+        # print("action", action)
         for _ in range(self._skip_steps):
             action, agent_info = self._wrapped_policy.get_action_from_latent(
                 latent, np.copy(self._last_obs))
+            # a = action
             if self._deterministic:
                 a = agent_info['mean']
             else:
@@ -99,7 +103,7 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
         for a in actions:
             _, r, _, _ = self.step(a)
             reward += r
-        return reward
+        return r
 
     def render(self, *args, **kwargs):
         return self._wrapped_env.render(*args, **kwargs)
@@ -138,7 +142,7 @@ def ucs(env: DiscreteEmbeddedPolicyEnv, ntasks: int):
         for a in range(ntasks):
             seq = curr_s + [a]
             r = env.set_sequence(seq)
-            queue.put((-r / len(seq), curr_s + [a]))
+            queue.put((-r, curr_s + [a]))
     return []
 
 
@@ -185,6 +189,7 @@ def main():
         result = ucs(env, ntasks)
     else:
         raise NotImplementedError
+    # result = [1] * 50
 
     print("Result:", result)
 

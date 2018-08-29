@@ -46,9 +46,11 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
     def step(self, action, animate=False, markers=[]):
         latent = self._latents[action]
         accumulated_r = 0
+        # print("action", action)
         for _ in range(self._skip_steps):
             action, agent_info = self._wrapped_policy.get_action_from_latent(
                 latent, np.copy(self._last_obs))
+            # a = action
             if self._deterministic:
                 a = agent_info['mean']
             else:
@@ -65,7 +67,18 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
             obs, reward, done, info = self._wrapped_env.step(a)
             accumulated_r += reward
             self._last_obs = obs
-        return Step(obs, accumulated_r, done, **info)
+        return Step(obs, reward, done, **info)
+
+    def set_sequence(self, actions):
+        """Resets environment deterministically to sequence of actions."""
+
+        assert self._deterministic
+        self.reset()
+        reward = 0
+        for a in actions:
+            _, r, _, _ = self.step(a)
+            reward += r
+        return r
 
     def render(self, *args, **kwargs):
         return self._wrapped_env.render(*args, **kwargs)
