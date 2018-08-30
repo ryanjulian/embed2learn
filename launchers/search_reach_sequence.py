@@ -221,7 +221,7 @@ def main():
             obs, r, done, info = env.step(int(result[i]),
                                           animate=True,
                                           markers=markers)
-            reward += r
+            reward = r
         print(result, "\tr:", reward)
 
 

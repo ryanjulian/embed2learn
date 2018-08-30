@@ -18,14 +18,17 @@ from sandbox.embed2learn.policies import MultitaskPolicy
 from garage.envs.mujoco.sawyer import SimplePushEnv
 
 
-USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_27_15_49_32_0001"
-# USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
+# USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_27_15_49_32_0001"
+# # USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
+# LOG_DIR = "/home/eric/.deep-rl-docker/garage_embed/data"
+# latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_600.pkl")
+USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
 LOG_DIR = "/home/eric/.deep-rl-docker/garage_embed/data"
-latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_600.pkl")
+latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_596.pkl")
 
-GOAL = np.array([0.10, 0.20, 0.]),
+GOAL = np.array([-0.20, 0.20, 0.]),
 
-PATH_LENGTH = 200  # 80
+PATH_LENGTH = 100  # 80
 SKIP_STEPS = 30  # 20
 
 SEARCH_METHOD = "ucs"  # "greedy"  # "brute"
@@ -92,6 +95,7 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
             obs, reward, done, info = self._wrapped_env.step(a)
             accumulated_r += reward
             self._last_obs = obs
+        # reward = -np.linalg.norm(self._wrapped_env.env.object_position - self._wrapped_env.env._desired_goal)
         return Step(obs, reward, done, **info)
 
     def set_sequence(self, actions):
@@ -103,7 +107,7 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
         for a in actions:
             _, r, _, _ = self.step(a)
             reward += r
-        return r
+        return reward
 
     def render(self, *args, **kwargs):
         return self._wrapped_env.render(*args, **kwargs)
