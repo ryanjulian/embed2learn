@@ -16,6 +16,8 @@ from garage.envs import Step
 from sandbox.embed2learn.policies import MultitaskPolicy
 
 from garage.envs.mujoco.sawyer import SimplePushEnv
+from garage.envs.mujoco.sawyer.sawyer_env import SawyerEnvWrapper
+from garage.envs.mujoco.sawyer import PushEnv
 
 
 # USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_27_15_49_32_0001"
@@ -26,10 +28,13 @@ USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
 LOG_DIR = "/home/eric/.deep-rl-docker/garage_embed/data"
 latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_596.pkl")
 
-GOAL = np.array([-0.20, 0.20, 0.]),
+GOAL_SEQUENCE = np.array([[0.10, -0.10, 0.03],
+                         [0.10, 0.10, 0.03],
+                         [0., -0.10, 0.03],
+                         [0., 0., 0.03]])
 
-PATH_LENGTH = 100  # 80
-SKIP_STEPS = 30  # 20
+PATH_LENGTH = 500  # 80
+SKIP_STEPS = 15  # 20
 
 SEARCH_METHOD = "ucs"  # "greedy"  # "brute"
 
@@ -95,7 +100,6 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
             obs, reward, done, info = self._wrapped_env.step(a)
             accumulated_r += reward
             self._last_obs = obs
-        # reward = -np.linalg.norm(self._wrapped_env.env.object_position - self._wrapped_env.env._desired_goal)
         return Step(obs, reward, done, **info)
 
     def set_sequence(self, actions):
@@ -118,6 +122,47 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
 
     def close(self):
         return self._wrapped_env.close()
+
+
+class SequencePusherEnv(PushEnv):
+    def __init__(self, sequence=None, **kwargs):
+        self._sequence = np.array([subgoal for subgoal in sequence])
+        self._reached = 0
+        self._n_goals = len(sequence)
+        PushEnv.__init__(
+            self,
+            delta=self._sequence[self._reached],
+            **kwargs
+        )
+
+    def step(self, action):
+        obs, _, _, info = super(SequencePusherEnv, self).step(action)
+
+        current_goal = self._sequence[self._reached]
+        d = np.linalg.norm(self.object_position - current_goal, axis=-1)
+        reward = -d
+
+        done = self._reached == len(self._sequence) - 1
+        if d < self._distance_threshold and self._reached < len(self._sequence) - 1:
+            self._reached += 1
+        info['n_reached_goal'] = self._reached
+
+        reward += self._reached
+
+        return obs, reward, done, info
+
+    def reset(self):
+        obs = super(SequencePusherEnv, self).reset()
+        self._reached = 0
+        return obs
+
+
+class SimpleSequencePusherEnv(SawyerEnvWrapper, Serializable):
+    def __init__(self, *args, **kwargs):
+        Serializable.quick_init(self, locals())
+        self.reward_range = None
+        self.metadata = None
+        super().__init__(SequencePusherEnv(*args, **kwargs))
 
 
 def greedy(env: DiscreteEmbeddedPolicyEnv, ntasks: int):
@@ -158,15 +203,15 @@ def main():
     latent_policy = snapshot["policy"]
     ntasks = latent_policy.task_space.shape[0]
     tasks = np.eye(ntasks)
+
     latents = [latent_policy.get_latent(tasks[t])[1]["mean"] for t in range(ntasks)]
     print("Latents:\n\t", "\n\t".join(map(str, latents)))
 
-
-    inner_env = SimplePushEnv(delta=GOAL,
-                              control_method="position_control",
-                              completion_bonus=0.,
-                              randomize_start_jpos=False,
-                              action_scale=0.04)
+    inner_env = SimpleSequencePusherEnv(sequence=GOAL_SEQUENCE,
+                                        control_method="position_control",
+                                        completion_bonus=0.,
+                                        randomize_start_jpos=False,
+                                        action_scale=0.04)
 
     env = DiscreteEmbeddedPolicyEnv(inner_env,
                                     latent_policy,
@@ -202,20 +247,30 @@ def main():
         [te.env._goal_configuration.object_pos for te in src_env.env._task_envs])
 
     initial_block_pos = np.array([0.64, 0.22, 0.03])
-    markers = [dict(
-        pos=initial_block_pos + GOAL,
-        size=0.01 * np.ones(3),
-        label="Goal",
-        rgba=np.array([1., 0.8, 0., 1.])
-    )]
+    # markers = [dict(
+    #     pos=initial_block_pos + GOAL_SEQUENCE,
+    #     size=0.01 * np.ones(3),
+    #     label="Goal",
+    #     rgba=np.array([1., 0.8, 0., 1.])
+    # )]
+
+    markers = []
+    for i, g in enumerate(GOAL_SEQUENCE):
+        markers.append(dict(
+            pos=initial_block_pos + g,
+            size=0.01 * np.ones(3),
+            label="Goal {}".format(i + 1),
+            rgba=np.array([1., 0.2, 0., 1.])
+        ))
 
     for i, g in enumerate(goals):
         markers.append(dict(
             pos=g,
             size=0.01 * np.ones(3),
-            label="Task {}".format(i + 1),
+            label="Goal {}".format(i + 1),
             rgba=np.array([1., 0.2, 0., 1.])
         ))
+
     while True:
         env.reset()
         reward = 0.
