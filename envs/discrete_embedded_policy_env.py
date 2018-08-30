@@ -1,3 +1,4 @@
+import copy
 import time
 
 import gym
@@ -43,14 +44,24 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
     def observation_space(self):
         return self._wrapped_env.observation_space
 
-    def step(self, action, animate=False, markers=[]):
+    def step(self, action, animate=False, markers=()):
         latent = self._latents[action]
+        latent_index = action
         accumulated_r = 0
-        # print("action", action)
+
+        seq_info = {
+            "latents": [],
+            "latent_indices": [],
+            "observations": [],
+            "actions": [],
+            "infos": [],
+            "rewards": [],
+            "dones": []
+        }
+
         for _ in range(self._skip_steps):
             action, agent_info = self._wrapped_policy.get_action_from_latent(
                 latent, np.copy(self._last_obs))
-            # a = action
             if self._deterministic:
                 a = agent_info['mean']
             else:
@@ -62,23 +73,31 @@ class DiscreteEmbeddedPolicyEnv(gym.Env, Parameterized):
                 timestep = 0.05
                 speedup = 1.
                 time.sleep(timestep / speedup)
-            # scale = np.random.normal()
-            # a += scale * 0.
+
             obs, reward, done, info = self._wrapped_env.step(a)
+
+            seq_info["latents"].append(latent)
+            seq_info["latent_indices"].append(latent_index)
+            seq_info["observations"].append(np.copy(self._last_obs))
+            seq_info["actions"].append(action)
+            seq_info["infos"].append(copy.deepcopy(info))
+            seq_info["rewards"].append(reward)
+            seq_info["dones"].append(done)
+
             accumulated_r += reward
             self._last_obs = obs
-        return Step(obs, reward, done, **info)
+        return Step(obs, reward, done, **seq_info)
 
     def set_sequence(self, actions):
         """Resets environment deterministically to sequence of actions."""
 
         assert self._deterministic
         self.reset()
-        reward = 0
+        reward, last_reward = 0, 0
         for a in actions:
-            _, r, _, _ = self.step(a)
-            reward += r
-        return r
+            _, last_reward, _, _ = self.step(a)
+            reward += last_reward
+        return last_reward
 
     def render(self, *args, **kwargs):
         return self._wrapped_env.render(*args, **kwargs)

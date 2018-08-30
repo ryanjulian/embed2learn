@@ -1,3 +1,5 @@
+import copy
+import pickle
 import os.path as osp
 
 from queue import PriorityQueue
@@ -13,6 +15,7 @@ from scipy.optimize import brute
 from garage.core import Serializable
 
 from sandbox.embed2learn.envs.discrete_embedded_policy_env import DiscreteEmbeddedPolicyEnv
+from tqdm import tqdm
 
 USE_LOG = "sawyer-reach-embed-notanh/sawyer_reach_embed_notanh_2018_08_23_12_38_13_0001"
 # USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"
@@ -28,6 +31,8 @@ GOAL_SEQUENCE = [
 
 PATH_LENGTH = 140  # 80
 SKIP_STEPS = 5  # 20
+
+SAVE_N_ROLLOUTS = 20
 
 SEARCH_METHOD = "ucs"  # "greedy"  # "brute"
 
@@ -179,6 +184,35 @@ def main():
             label="Task {}".format(i + 1),
             rgba=np.array([0.5, 0.5, 0.5, 0.8])
         ))
+
+    print("Collecting %i rollouts..." % SAVE_N_ROLLOUTS)
+    rollouts = []
+    for _ in tqdm(range(SAVE_N_ROLLOUTS)):
+        env.reset()
+        reward = 0.
+        seq_info = {
+            "latents": [],
+            "latent_indices": [],
+            "observations": [],
+            "actions": [],
+            "infos": [],
+            "rewards": [],
+            "dones": []
+        }
+        for i in range(ITERATIONS):
+            obs, r, done, info = env.step(int(result[i]))
+            seq_info["latents"] += info["latents"]
+            seq_info["latent_indices"] += info["latent_indices"]
+            seq_info["observations"] += info["observations"]
+            seq_info["actions"] += info["actions"]
+            seq_info["infos"] += info["infos"]
+            seq_info["rewards"] += info["rewards"]
+            seq_info["dones"] += info["dones"]
+            reward += r
+        # print(result, "\tr:", reward)
+        rollouts.append(copy.deepcopy(seq_info))
+
+    pickle.dump(rollouts, open("rollout_search_sequencer.pkl", "wb"))
 
     while True:
         env.reset()
