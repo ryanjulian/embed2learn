@@ -1,7 +1,6 @@
 from enum import Enum
 from enum import unique
 import time
-
 import pickle
 import os.path as osp
 
@@ -10,7 +9,6 @@ import tensorflow as tf
 import tensorflow.contrib.distributions as tfd
 
 from garage.core import Serializable
-from garage.misc import ext
 from garage.misc import special
 from garage.misc.overrides import overrides
 import garage.misc.logger as logger
@@ -59,18 +57,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  num_minibatches=None,
                  num_opt_epochs=None,
                  policy=None,
-                 policy_ent_coeff=1e-2,
-                 embedding_ent_coeff=1e-2,
-                 embedding_reg_coeff=0.,
                  inference=None,
                  inference_optimizer=LbfgsOptimizer,
                  inference_optimizer_args=dict(),
+                 policy_ent_coeff=1e-2,
+                 embedding_ent_coeff=1e-2,
+                 embedding_reg_coeff=0.,
                  inference_ce_coeff=1e-3,
-                 softplus_policy_ent=False,
-                 softplus_embedding_ent=False,
+                 inference_reg_coeff=0.,
                  stop_policy_ent_gradient=False,
-                 logli_policy_ent=False,
-                 logli_embedding_ent=False,
                  save_sample_frequency=0,
                  **kwargs):
         Serializable.quick_init(self, locals())
@@ -81,14 +76,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.name = name
         self._name_scope = tf.name_scope(self.name)
 
+        self.inference = inference
+
         self._pg_loss = pg_loss
         self._policy_opt_inputs = None
         self._inference_opt_inputs = None
-        self._softplus_policy_ent = softplus_policy_ent
-        self._softplus_embedding_ent = softplus_embedding_ent
+        self._policy_ent_coeff = float(policy_ent_coeff)
+        self._embedding_ent_coeff = float(embedding_ent_coeff)
+        self._embedding_reg_coeff = float(embedding_reg_coeff)
+        self._inference_ce_coeff = float(inference_ce_coeff)
+        self._inference_reg_coeff = float(inference_reg_coeff)
         self._stop_policy_ent_gradient = stop_policy_ent_gradient
-        self._logli_policy_ent = logli_policy_ent
-        self._logli_embedding_ent = logli_embedding_ent
 
         self._save_sample_frequency = save_sample_frequency
 
@@ -96,12 +94,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             # Optimizer for policy and embedding networks
             self.optimizer = optimizer(**optimizer_args)
             self.step_size = float(step_size)
-            self.policy_ent_coeff = float(policy_ent_coeff)
-            self.embedding_ent_coeff = float(embedding_ent_coeff)
-            self.embedding_reg_coeff = float(embedding_reg_coeff)
 
-            self.inference = inference
-            self.inference_ce_coeff = inference_ce_coeff
+            # Optimizer for the inference network
             self.inference_optimizer = inference_optimizer(
                 **inference_optimizer_args)
 
@@ -434,14 +428,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         # Entropy terms
         (embedding_entropy, embedding_divergence, inference_ce,
-            policy_entropy) = self._build_entropy_terms(i)
+         policy_entropy) = self._build_entropy_terms(i)
 
         # Augment the path rewards with entropy terms
         with tf.name_scope("augmented_rewards"):
-            rewards = i.reward_var \
-                      - (self.inference_ce_coeff * inference_ce) \
-                      + (self.policy_ent_coeff * policy_entropy)
-
+            rewards = (
+                i.reward_var
+                - (self._inference_ce_coeff * inference_ce)
+                + (self._policy_ent_coeff * policy_entropy)
+                - (self._embedding_ent_coeff * embedding_entropy)
+                - (self._embedding_reg_coeff * embedding_divergence)
+            )  # yapf: disable
         with tf.name_scope("policy_loss"):
             with tf.name_scope("advantages"):
                 advantages = compute_advantages(
@@ -450,8 +447,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     self.max_path_length,
                     i.baseline_var,
                     rewards,
-                    name="advantages"
-                )
+                    name="advantages")
 
                 # Flatten and filter valids
                 adv_flat = flatten_batch(advantages, name="adv_flat")
@@ -519,11 +515,6 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 # -E_t[surrogate objective]
                 surr_loss = -tf.reduce_mean(surr_obj)
 
-                # Embedding entropy bonus
-                surr_loss -= self.embedding_ent_coeff * embedding_entropy
-                # Embedding divegence penalty
-                surr_loss += self.embedding_reg_coeff * embedding_divergence
-
             embed_mean_kl = self._build_embedding_kl(i)
 
         # Diagnostic functions
@@ -537,9 +528,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             rewards,
             log_name="f_rewards")
 
-        # returns = self._build_returns(rewards)
-        returns = discounted_returns(self.discount, self.max_path_length,
-                                     rewards, name="returns")
+        returns = discounted_returns(
+            self.discount, self.max_path_length, rewards, name="returns")
         self.f_returns = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
             returns,
@@ -551,42 +541,18 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         """ Calculate entropy terms """
 
         with tf.name_scope("entropy_terms"):
-            # 1. Embedding distribution total entropy
+            # Embedding distribution total entropy
             with tf.name_scope('embedding_entropy'):
                 task_dim = self.policy.task_space.flat_dim
                 all_task_one_hots = tf.one_hot(
                     np.arange(task_dim), task_dim, name="all_task_one_hots")
-
-                if not self._logli_embedding_ent:
-                    all_task_entropies = self.policy.embedding.entropy_sym(
-                        all_task_one_hots)
-                    all_task_entropies = softclip(all_task_entropies, 0., 5.)
-                else:
-                    all_task_latent_dist_infos = (
-                        self.policy.embedding.dist_info_sym(all_task_one_hots))
-                    all_task_latent_means = all_task_latent_dist_infos["mean"]
-                    all_latent_loglis = (
-                        self.policy.embedding.log_likelihood_sym(
-                            all_task_one_hots,
-                            all_task_latent_means,
-                            name="all_latent_loglis",
-                        )
-                    )
-                    # Clip extreme log likelihoods to prevent exploding
-                    # gradients
-                    all_latent_loglis = softclip(
-                        all_latent_loglis, np.log(1e-2), 0.)
-                    all_task_entropies = -all_latent_loglis
-
+                all_task_entropies = self.policy.embedding.entropy_sym(
+                    all_task_one_hots)
                 embedding_entropy = tf.reduce_mean(
                     all_task_entropies, name="embedding_entropy")
 
-            # 2. Embedding distribution L-inf norm (regularization)
-            mean_std = self.policy.embedding.dist_info_sym(all_task_one_hots)
-            all_task_means = mean_std["mean"]
-            embedding_divergence = tf.norm(all_task_means, ord=np.inf)
-
-            # 3. Inference distribution cross-entropy (log-likelihood)
+            # Embedding distribution cross-entropy with inference distribution
+            # (i.e. log-likelihood variational loss)
             with tf.name_scope('inference_ce'):
                 traj_ll_flat = self.inference.log_likelihood_sym(
                     i.flat.trajectory_var,
@@ -594,34 +560,41 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     name="traj_ll_flat")
                 traj_ll = tf.reshape(
                     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
-                # Softclip extreme log likelihoods to prevent exploding
-                # gradients
-                traj_ll = softclip(traj_ll, np.log(1e-3), 0.)
                 inference_ce = -traj_ll
 
-            # 4. Policy path entropies
+            latent_dim = self.policy.latent_space.flat_dim
+            z_unit_normal = tfd.MultivariateNormalDiag(
+                tf.zeros(latent_dim, dtype=np.float32),
+                tf.ones(latent_dim, dtype=np.float32),
+            )
+
+            # Divergence of the empircal distribution of latents given tasks
+            # from the unit gaussians
+            all_task_dists = [
+                self.policy.embedding.dist_sym(
+                    tf.expand_dims(tf.one_hot(t, task_dim), 0)
+                )
+                for t in range(task_dim)]
+            p_t = [[1. / task_dim] * task_dim]
+            p_z_t = tfd.Mixture(
+                cat=tfd.Categorical(probs=p_t),
+                components=all_task_dists,
+            )
+            ll_z_t = softclip(p_z_t.log_prob(i.latent_var), -10., 0)
+            ll_z_prior = softclip(z_unit_normal.log_prob(i.latent_var), -10., 0)
+            embedding_divergence = -(ll_z_t - ll_z_prior)
+
+            # Sampled embeddings log-likelihoods under the unit gaussian
+            # embedding_divergence = tf.reduce_mean(
+            #     all_task_dists.kl_divergence(unit_normal))
+
+            # Policy entropy
             with tf.name_scope('policy_entropy'):
-                if not self._logli_policy_ent:
-                    policy_entropy_flat = self.policy.entropy_sym(
-                        i.task_var, i.obs_var, name="policy_entropy_flat")
-                    policy_entropy = tf.reshape(
-                        policy_entropy_flat, [-1, self.max_path_length],
-                        name="policy_entropy")
-                else:
-                    action_loglis = self.policy.log_likelihood_sym(
-                        i.task_var,
-                        i.obs_var,
-                        i.action_var,
-                        name="action_loglis",
-                    )
-                    policy_entropy = -action_loglis
-
-            # optionally add nonlinearities to entropy terms
-            if self._softplus_policy_ent:
-                policy_entropy = tf.nn.softplus(policy_entropy)
-
-            if self._softplus_embedding_ent:
-                embedding_entropy = tf.nn.softplus(embedding_entropy)
+                policy_entropy_flat = self.policy.entropy_sym(
+                    i.task_var, i.obs_var, name="policy_entropy_flat")
+                policy_entropy = tf.reshape(
+                    policy_entropy_flat, [-1, self.max_path_length],
+                    name="policy_entropy")
 
             # optionally stop policy entropy gradients
             if self._stop_policy_ent_gradient:
@@ -638,8 +611,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             log_name="f_embedding_entropy")
         self.f_embedding_divergence = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
-            embedding_divergence,
-            log_name="f_embedding_entropy")
+            tf.reduce_mean(embedding_divergence),
+            log_name="f_embedding_divergence")
         self.f_inference_ce = tensor_utils.compile_function(
             flatten_inputs(self._policy_opt_inputs),
             tf.reduce_mean(inference_ce * i.valid_var),
@@ -687,10 +660,26 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
 
         infer_dist = self.inference._dist
         with tf.name_scope("infer_loss"):
-            traj_ll_flat = self.inference.log_likelihood_sym(
-                i.flat.trajectory_var, i.flat.latent_var, name="traj_ll_flat")
-            traj_ll = tf.reshape(
-                traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
+            # traj_ll_flat = self.inference.log_likelihood_sym(
+            #     i.trajectory_var, i.flat.latent_var, name="traj_ll_flat")
+            # traj_ll = tf.reshape(
+            #     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
+            traj_ll = self.inference.log_likelihood_sym(
+                i.trajectory_var, i.latent_var, name="traj_ll")
+
+            # Inference distribution KL from unit guassian
+            latent_dim = self.policy.latent_space.flat_dim
+            unit_normal = tfd.MultivariateNormalDiag(
+                tf.zeros(latent_dim, dtype=np.float32),
+                tf.ones(latent_dim, dtype=np.float32),
+            )
+            inference_dists = self.inference.dist_sym(i.trajectory_var)
+            unit_kls = inference_dists.kl_divergence(unit_normal)
+            traj_ll -= self._inference_reg_coeff * unit_kls
+
+            # For diagnostics only
+            unit_kls_flat = flatten_batch(unit_kls)
+            unit_kls_valid = filter_valids(unit_kls_flat, i.flat.valid_var)
 
             # Calculate loss
             traj_gammas = tf.constant(
@@ -727,6 +716,12 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 kl = infer_dist.kl_sym(i.valid.infer_old_dist_info_vars,
                                        infer_dist_info_valid)
                 infer_kl = tf.reduce_mean(kl, name="infer_kl")
+
+            # Diagnostic functions
+            self.f_inference_divergence = tensor_utils.compile_function(
+                flatten_inputs(self._inference_opt_inputs),
+                tf.reduce_mean(unit_kls_valid),
+                log_name="f_inference_divergence")
 
             return infer_loss, infer_kl
 
@@ -837,8 +832,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         inference_rmse = np.sqrt(inference_rmse.mean())
         logger.record_tabular('Inference/RMSE', inference_rmse)
 
-        inference_rrse = rrse(
-            samples_data['latents'], samples_data['trajectory_infos']['mean'])
+        inference_rrse = rrse(samples_data['latents'],
+                              samples_data['trajectory_infos']['mean'])
         logger.record_tabular('Inference/RRSE', inference_rrse)
 
         embed_ent = self.f_embedding_entropy(*policy_opt_input_values)
@@ -949,11 +944,15 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             inference_opt_input_values)
         logger.record_tabular('Inference/dLoss',
                               infer_loss_before - infer_loss_after)
+        infer_div = self.f_inference_divergence(*inference_opt_input_values)
+        logger.record_tabular('Inference/Divergence', infer_div)
 
         return infer_loss_after
 
     def save_samples(self, itr, samples_data):
-        with open(osp.join(logger.get_snapshot_dir(), 'samples_%i.pkl' % itr), "wb") as fout:
+        with open(
+                osp.join(logger.get_snapshot_dir(), 'samples_%i.pkl' % itr),
+                "wb") as fout:
             pickle.dump(samples_data, fout)
 
     @overrides

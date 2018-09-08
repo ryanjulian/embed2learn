@@ -294,51 +294,14 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
 
     @overrides
     def get_latent(self, an_input):
-        # flat_in = self.input_space.flatten(an_input)
-        # mean, log_std = [x[0] for x in self._f_dist([flat_in])]
-        # rnd = np.random.normal(size=mean.shape)
-        # latent = rnd * np.exp(log_std) + mean
-        # return latent, dict(mean=mean, log_std=log_std)
         flat_in = self.input_space.flatten(an_input)
         latent, mean, log_std = [x[0] for x in self._f_dist([flat_in])]
         return latent, dict(mean=mean, log_std=log_std)
 
     def get_latents(self, inputs):
-        # flat_in = self.input_space.flatten_n(inputs)
-        # means, log_stds = self._f_dist(flat_in)
-        # rnd = np.random.normal(size=means.shape)
-        # latents = rnd * np.exp(log_stds) + means
-        # return latents, dict(mean=means, log_std=log_stds)
         flat_in = self.input_space.flatten_n(inputs)
         latents, means, log_stds = self._f_dist(flat_in)
         return latents, dict(mean=means, log_std=log_stds)
-
-    def get_reparam_latent_sym(self,
-                               input_var,
-                               latent_var,
-                               old_dist_info_vars,
-                               name=None):
-        """
-        Given inputs, old latent outputs, and a distribution of old latent
-        outputs, return a symbolically reparameterized representation of the
-        inputs in terms of the embedding parameters
-        :param in_var:
-        :param latent_var:
-        :param old_dist_info_vars:
-        :return:
-        """
-        with tf.name_scope(name, "get_reparam_latent_sym",
-                           [input_var, latent_var, old_dist_info_vars]):
-            new_dist_info_vars = self.dist_info_sym(input_var, latent_var)
-            new_mean_var, new_log_std_var = new_dist_info_vars[
-                "mean"], new_dist_info_vars["log_std"]
-            old_mean_var, old_log_std_var = old_dist_info_vars[
-                "mean"], old_dist_info_vars["log_std"]
-            epsilon_var = (latent_var - old_mean_var) / (
-                tf.exp(old_log_std_var) + 1e-8)
-            new_latent_var = new_mean_var + epsilon_var * tf.exp(
-                new_log_std_var)
-        return new_latent_var
 
     def log_likelihood(self, an_input, latent):
         flat_in = self.input_space.flatten(an_input)
@@ -355,10 +318,6 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
     def log_likelihood_sym(self, input_var, latent_var, name=None):
         with tf.name_scope(name, "log_likelihood_sym",
                            [input_var, latent_var]):
-            # dist_info = self.dist_info_sym(input_var, latent_var)
-            # means_var, log_stds_var = dist_info['mean'], dist_info['log_std']
-            # return self._dist.log_likelihood_sym(
-            #     latent_var, dict(mean=means_var, log_std=log_stds_var))
             _, _, _, dist = self._build_graph(input_var)
             return dist.log_prob(latent_var)
 
@@ -370,6 +329,11 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
     def entropy_sym_sampled(self, dist_info_vars, name=None):
         with tf.name_scope(name, "entropy_sym_sampled", [dist_info_vars]):
             return self._dist.entropy_sym(dist_info_vars)
+
+    def dist_sym(self, input_var, name=None):
+        with tf.name_scope(name, "dist_sym", [input_var]):
+            _, _, _, dist = self._build_graph(input_var)
+            return dist
 
     def kl_sym(self, input_var, other, name=None):
         with tf.name_scope(name, "kl_sym", [input_var]):

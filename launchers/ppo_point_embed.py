@@ -52,10 +52,10 @@ def run_task(v):
 
     # Environment
     env = TfEnv(
-            MultiTaskEnv(
-                task_env_cls=PointEnv,
-                task_args=task_args,
-                task_kwargs=task_kwargs))
+        MultiTaskEnv(
+            task_env_cls=PointEnv,
+            task_args=task_args,
+            task_kwargs=task_kwargs))
 
     # Latent space and embedding specs
     # TODO(gh/10): this should probably be done in Embedding or Algo
@@ -81,30 +81,27 @@ def run_task(v):
     traj_ub = np.stack([act_obs_ub] * v.inference_window)
     traj_space = Box(traj_lb, traj_ub)
 
-    task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
-    traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
+    embedding_spec = EmbeddingSpec(env.task_space, latent_space)
+    inference_spec = EmbeddingSpec(traj_space, latent_space)
     task_obs_space = concat_spaces(env.task_space, env.observation_space)
     env_spec_embed = EnvSpec(task_obs_space, env.action_space)
 
-    # TODO(): rename to inference_network
-    traj_embedding = GaussianMLPEmbedding(
+    inference = GaussianMLPEmbedding(
         name="inference",
-        embedding_spec=traj_embed_spec,
+        embedding_spec=inference_spec,
         hidden_sizes=(64, 64),
-        # hidden_nonlinearity=tf.nn.relu,
         std_share_network=True,
-        init_std=2.0,
+        init_std=1.0,
     )
 
     # Embeddings
-    task_embedding = GaussianMLPEmbedding(
+    embedding = GaussianMLPEmbedding(
         name="embedding",
-        embedding_spec=task_embed_spec,
+        embedding_spec=embedding_spec,
         hidden_sizes=(32, 32),
-        hidden_nonlinearity=tf.nn.relu,
         std_share_network=True,
-        init_std=v.embedding_init_std,
-        max_std=v.embedding_max_std,
+        hidden_nonlinearity=tf.nn.relu,
+        init_std=1.0,
     )
 
     # Multitask policy
@@ -112,60 +109,55 @@ def run_task(v):
         name="policy",
         env_spec=env.spec,
         task_space=env.task_space,
-        embedding=task_embedding,
+        embedding=embedding,
         hidden_sizes=(32, 16),
         std_share_network=True,
-        max_std=v.policy_max_std,
         init_std=v.policy_init_std,
-        min_std=v.policy_min_std,
+        stop_latent_gradient=True,
     )
 
     extra = v.latent_length + len(v.tasks)  # + traj_space.flat_dim
-    baseline = MultiTaskGaussianMLPBaseline(env_spec=env.spec, extra_dims=extra)
+    baseline = MultiTaskGaussianMLPBaseline(
+        env_spec=env.spec, extra_dims=extra)
 
     algo = PPOTaskEmbedding(
         env=env,
         policy=policy,
         baseline=baseline,
-        inference=traj_embedding,
+        inference=inference,
         batch_size=v.batch_size,
         max_path_length=v.max_path_length,
         n_itr=500,
         discount=0.99,
         step_size=0.2,
         plot=True,
+        stop_policy_ent_gradient=True,
         policy_ent_coeff=v.policy_ent_coeff,
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
-        softplus_policy_ent=True,
-        softplus_embedding_ent=False,
-        stop_policy_ent_gradient=True,
-        # logli_policy_ent=True,
-        logli_embedding_ent=True,
-
+        inference_reg_coeff=v.inference_reg_coeff,
     )
     algo.train()
 
+
 config = dict(
     tasks=TASKS,
-    latent_length=10,
+    latent_length=2,
     inference_window=2,
     batch_size=4096 * len(TASKS),
-    policy_ent_coeff=1e-3,  # 2e-2
-    embedding_ent_coeff=1e-7,  # 3.5e-8
-    inference_ce_coeff=1e-2,  # 1e-4
+    policy_ent_coeff=1e-3,
+    embedding_ent_coeff=1e-3,
+    embedding_reg_coeff=1e-1,
+    inference_ce_coeff=1e-3,
+    inference_reg_coeff=0.,
     max_path_length=50,
-    embedding_init_std=0.5,
-    embedding_max_std=None,  # 10.0
     policy_init_std=2.0,
-    policy_max_std=None,
-    policy_min_std=None,
 )
 
 run_experiment(
     run_task,
     exp_prefix='ppo_point_embed',
-    n_parallel=2,
+    n_parallel=16,
     seed=1,
     variant=config,
     plot=True,

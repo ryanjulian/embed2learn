@@ -20,25 +20,28 @@ from sandbox.embed2learn.tf.network_utils import two_headed_mlp
 
 class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                                  Serializable):
-    def __init__(self,
-                 env_spec,
-                 embedding,
-                 task_space,
-                 name="GaussianMLPMultitaskPolicy",
-                 hidden_sizes=(32, 32),
-                 learn_std=True,
-                 init_std=1.0,
-                 adaptive_std=False,
-                 std_share_network=False,
-                 std_hidden_sizes=(32, 32),
-                 min_std=1e-6,
-                 max_std=None,
-                 std_hidden_nonlinearity=tf.nn.tanh,
-                 hidden_nonlinearity=tf.nn.tanh,
-                 output_nonlinearity=None,
-                 mean_network=None,
-                 std_network=None,
-                 std_parameterization='exp'):
+    def __init__(
+            self,
+            env_spec,
+            embedding,
+            task_space,
+            name="GaussianMLPMultitaskPolicy",
+            hidden_sizes=(32, 32),
+            learn_std=True,
+            init_std=1.0,
+            adaptive_std=False,
+            std_share_network=False,
+            std_hidden_sizes=(32, 32),
+            min_std=1e-6,
+            max_std=None,
+            std_hidden_nonlinearity=tf.nn.tanh,
+            hidden_nonlinearity=tf.nn.tanh,
+            output_nonlinearity=None,
+            mean_network=None,
+            std_network=None,
+            std_parameterization='exp',
+            stop_latent_gradient=True,
+    ):
         """
         :param env_spec: observation space is a concatenation of task space and
           vanilla env observation space
@@ -96,6 +99,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
         self._mean_network = mean_network
         self._std_network = std_network
         self._std_parameterization = std_parameterization
+        self._stop_latent_gradient = stop_latent_gradient
 
         # Tranform std arguments to parameterized space
         self._init_std_param = None
@@ -184,11 +188,11 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
     def _build_graph(self, from_latent_input, from_obs_input):
         action_dim = self.action_space.flat_dim
-        small = 1e-5
 
         with self._variable_scope:
 
-            from_latent_input = tf.stop_gradient(from_latent_input)
+            if self._stop_latent_gradient:
+                from_latent_input = tf.stop_gradient(from_latent_input)
 
             with tf.variable_scope("concat_latent_obs"):
                 latent_obs_input = tf.concat(
@@ -293,13 +297,8 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
 
         return params
 
-    def log_likelihood_sym(self,
-                           task_var,
-                           obs_var,
-                           action_var,
-                           name=None):
-        with tf.name_scope(name, "log_likelihood_sym",
-                           [task_var, obs_var]):
+    def log_likelihood_sym(self, task_var, obs_var, action_var, name=None):
+        with tf.name_scope(name, "log_likelihood_sym", [task_var, obs_var]):
             latent = self._embedding.latent_sym(task_var)
             _, _, _, dist = self._build_graph(latent, obs_var)
             return dist.log_prob(action_var)
