@@ -65,6 +65,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  inference_ce_coeff=1e-3,
                  use_softplus_entropy=False,
                  save_sample_frequency=0,
+                 stop_ce_graident=False,
                  **kwargs):
         Serializable.quick_init(self, locals())
         assert kwargs['env'].task_space
@@ -80,6 +81,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self._use_softplus_entropy = use_softplus_entropy
 
         self._save_sample_frequency = save_sample_frequency
+        self._stop_ce_graident = stop_ce_graident
 
         with tf.name_scope(self.name):
             # Optimizer for policy and embedding networks
@@ -553,10 +555,14 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     name="traj_ll_flat")
                 traj_ll = tf.reshape(
                     traj_ll_flat, [-1, self.max_path_length], name="traj_ll")
-                inference_ce = -traj_ll
-
+                inference_ce_raw = -traj_ll
+                inference_ce = tf.clip_by_value(inference_ce_raw, -3, 3)
+                
                 if self._use_softplus_entropy:
                     inference_ce = tf.nn.softplus(inference_ce)
+
+                if self._stop_ce_graident:
+                    inference = tf.stop_gradient(inference_ce)
 
             # 3. Policy path entropies
             with tf.name_scope('policy_entropy'):

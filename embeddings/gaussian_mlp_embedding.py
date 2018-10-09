@@ -34,7 +34,8 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                  mean_network=None,
                  std_network=None,
                  std_parameterization='exp',
-                 normalize=False):
+                 normalize=False,
+                 mean_output_nonlinearity=None):
         """
         :param embedding_spec:
         :param hidden_sizes: list of sizes for the fully-connected hidden
@@ -91,6 +92,7 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
         self._std_network = std_network
         self._std_parameterization = std_parameterization
         self._normalize = normalize
+        self._mean_output_nonlinearity = mean_output_nonlinearity
 
         if self._normalize:
             latent_dim = self.latent_space.flat_dim
@@ -235,6 +237,10 @@ class GaussianMLPEmbedding(StochasticEmbedding, Parameterized, Serializable):
                                            "mean_scale")
                 else:
                     mean_var = mean_network
+
+                if self._mean_output_nonlinearity is not None:
+                    mean_var =self._mean_output_nonlinearity(mean_var)
+
                 std_param_var = std_network
 
                 with tf.variable_scope("std_limits"):

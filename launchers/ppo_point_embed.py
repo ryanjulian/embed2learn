@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import tensorflow as tf
 
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
@@ -34,7 +35,7 @@ TASKS = {
             'never_done': True,
             'completion_bonus': 0.0,
             'action_scale': 0.1,
-            'random_start': True,
+            'random_start': False,
         }
     }
     for i, g in enumerate(goals)
@@ -91,6 +92,8 @@ def run_task(v):
         hidden_sizes=(20, 10),  # was the same size as policy in Karol's paper
         std_share_network=True,
         init_std=2.0,
+        mean_output_nonlinearity=tf.nn.tanh,
+        min_std=v.embedding_min_std,
     )
 
     # Embeddings
@@ -101,6 +104,8 @@ def run_task(v):
         std_share_network=True,
         init_std=v.embedding_init_std,
         max_std=v.embedding_max_std,
+        mean_output_nonlinearity=tf.nn.tanh,
+        min_std=v.embedding_min_std,
     )
 
     # Multitask policy
@@ -134,6 +139,7 @@ def run_task(v):
         embedding_ent_coeff=v.embedding_ent_coeff,
         inference_ce_coeff=v.inference_ce_coeff,
         use_softplus_entropy=True,
+        stop_ce_gradient=True,
     )
     algo.train()
 
@@ -143,11 +149,12 @@ config = dict(
     inference_window=2,
     batch_size=1024 * len(TASKS),
     policy_ent_coeff=192e-2,  # 2e-2
-    embedding_ent_coeff=1e-2,  # 1e-2
-    inference_ce_coeff=14e-3,  # 1e-2
-    max_path_length=300,
+    embedding_ent_coeff=2.2e-3,  # 1e-2
+    inference_ce_coeff=5e-2,  # 1e-2
+    max_path_length=100,
     embedding_init_std=1.0,
     embedding_max_std=2.0,
+    embedding_min_std=0.38,
     policy_init_std=1.0,
     policy_max_std=None,
     policy_min_std=None,
