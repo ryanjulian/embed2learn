@@ -6,7 +6,7 @@ Embedding to Learn
 ### Step 1
 Checkout [garage](https://github.com/rlworkgroup/garage/).
 
-Follow the standard rllab [setup instructions](http://rllab.readthedocs.io/en/latest/user/installation.html).
+Follow the standard garage [setup instructions](http://rlgarage.readthedocs.io/en/latest/user/installation.html).
 
 ### Step 2
 Check out this repository as a submodule of the repository above, into
