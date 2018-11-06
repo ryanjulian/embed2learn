@@ -22,3 +22,28 @@ cd sandbox/embed2learn
 git submodule init
 git submodule update
 ```
+
+## Citing This Work
+If you use this code for scholarly work, please kindly cite our work using one of the Bibtex snippets below.
+
+### General
+```
+@inproceedings{julian2018scaling,
+  title={Scaling simulation-to-real transfer by learning composable robot skills},
+  author={Julian, Ryan and Heiden, Eric and He, Zhanpeng and Zhang, Hejia and Schaal, Stefan and Lim, Joseph and Sukhatme, Gaurav and Hausman, Karol},
+  booktitle={International Symposium on Experimental Robotics},
+  year={2018},
+  url={https://arxiv.org/abs/1809.10253}
+}
+```
+
+### MPC-in-latent space launchers and environments
+```
+@article{he2018zero,
+  title={Zero-Shot Skill Composition and Simulation-to-Real Transfer by Learning Task Representations},
+  author={He, Zhanpeng and Julian, Ryan and Heiden, Eric and Zhang, Hejia and Schaal, Stefan and Lim, Joseph and Sukhatme, Gaurav and Hausman, Karol},
+  journal={arXiv preprint arXiv:1810.02422},
+  year={2018},
+  url={https://arxiv.org/abs/1810.02422}
+}
+```
