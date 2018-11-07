@@ -7,8 +7,8 @@ import numpy as np
 from garage import spaces
 from garage.core import Parameterized
 from garage.core import Serializable
-from garage.envs import NormalizedEnv
 from garage.envs import Step
+from garage.envs.normalized_env import NormalizedEnv
 
 from garage.tf.envs import TfEnv as BaseTfEnv
 
