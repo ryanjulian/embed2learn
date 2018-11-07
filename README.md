@@ -23,6 +23,26 @@ git submodule init
 git submodule update
 ```
 
+## Running experiements with point mass environment
+
+### Step 1
+Activate the anaconda environment for garage
+```
+conda activate garage
+```
+
+### Step 2
+```
+cd /your/garage/location
+export PYTHONPATH=`pwd`
+```
+
+### Step3
+Train the embedding model and multi-task policy with point mass environment.
+```
+python sandbox/embed2learn/launchers/ppo_point_embed.py
+```
+
 ## Citing This Work
 If you use this code for scholarly work, please kindly cite our work using one of the Bibtex snippets below.
 
