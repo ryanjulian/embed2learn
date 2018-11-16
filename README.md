@@ -8,6 +8,8 @@ Checkout [garage](https://github.com/rlworkgroup/garage/).
 
 Follow the standard garage [setup instructions](http://rlgarage.readthedocs.io/en/latest/user/installation.html).
 
+If you want to run experiments with Sawyer environments, please also install [sawyer](https://github.com/rlworkgroup/gym-sawyer.git) package in your activated conda environment.
+
 ### Step 2
 Check out this repository as a submodule of the repository above, into
 `sandbox/embed2learn`.
@@ -23,7 +25,7 @@ git submodule init
 git submodule update
 ```
 
-## Running experiements with point mass environment
+## Running experiements
 
 ### Step 1
 Activate the anaconda environment for garage
@@ -38,10 +40,15 @@ export PYTHONPATH=`pwd`
 ```
 
 ### Step3
-Train the embedding model and multi-task policy with point mass environment.
+Train an embedding model and a multi-task policy with point mass environment.
 ```
 python sandbox/embed2learn/launchers/ppo_point_embed.py
 ```
+
+Train an embedding model and a multi-task policy with sawyer reacher environment.
+```
+python sandbox/embed2learn/launchers/sawyer_reach_embed.py
+``` 
 
 ## Citing This Work
 If you use this code for scholarly work, please kindly cite our work using one of the Bibtex snippets below.

@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 
 import numpy as np
+from sawyer.mujoco.reacher_env import SimpleReacherEnv
 
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
 from garage.misc.instrument import run_experiment
 from garage.tf.spaces import Box
 
