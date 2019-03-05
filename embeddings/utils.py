@@ -1,6 +1,6 @@
 import numpy as np
 
-from garage.tf.spaces import Box
+from akro.tf import Box
 
 
 def concat_spaces(top, bottom):

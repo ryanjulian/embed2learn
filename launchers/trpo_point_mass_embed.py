@@ -7,7 +7,7 @@ from garage.envs import EnvSpec
 
 from garage.tf.policies import GaussianMLPPolicy
 from garage.tf.envs import TfEnv
-from garage.tf.spaces import Box
+from akro.tf import Box
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding

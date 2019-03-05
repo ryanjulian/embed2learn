@@ -8,7 +8,7 @@ from garage.misc.instrument import run_experiment
 
 from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
-from garage.tf.spaces import Box
+from akro.tf import Box
 
 from sandbox.embed2learn.algos import TRPOTaskEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding

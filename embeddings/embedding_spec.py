@@ -1,5 +1,5 @@
 from garage.core import Serializable
-from garage.spaces import Space
+from akro import Space
 
 
 class EmbeddingSpec(Serializable):

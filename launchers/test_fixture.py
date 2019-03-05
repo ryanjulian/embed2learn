@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from garage.envs import EnvSpec
 from garage.misc import logger
-from garage.tf.spaces import Box
+from akro.tf import Box
 from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy

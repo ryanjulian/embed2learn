@@ -5,7 +5,7 @@ import numpy as np
 from garage.baselines import LinearFeatureBaseline
 from garage.envs.env_spec import EnvSpec
 from garage.misc.instrument import run_experiment
-from garage.tf.spaces import Box
+from akro.tf import Box
 
 from sandbox.embed2learn.algos import PPOTaskEmbedding
 from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint

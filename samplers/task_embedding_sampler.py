@@ -14,7 +14,7 @@ from garage.tf.misc import tensor_utils
 from garage.tf.samplers.batch_sampler import BatchSampler
 from garage.tf.samplers.batch_sampler import worker_init_tf
 from garage.tf.samplers.batch_sampler import worker_init_tf_vars
-from garage.tf.spaces import Box
+from akro.tf import Box
 
 from sandbox.embed2learn.policies import MultitaskPolicy
 from sandbox.embed2learn.embeddings.utils import concat_spaces

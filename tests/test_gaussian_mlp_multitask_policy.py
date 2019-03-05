@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from garage.envs.env_spec import EnvSpec
-from garage.tf.spaces import Box
+from akro.tf import Box
 from sandbox.embed2learn.embeddings import EmbeddingSpec
 from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
 from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
