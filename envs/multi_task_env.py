@@ -117,7 +117,7 @@ class MultiTaskEnv(gym.Env, Parameterized):
 class TfEnv(BaseTfEnv):
     @cached_property
     def task_space(self):
-        return self._to_garage_space(self.env.task_space)
+        return self._to_akro_space(self.env.task_space)
 
     @property
     def active_task_one_hot(self):
