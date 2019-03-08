@@ -4,4 +4,4 @@
 	branch = rjulian
 [submodule "external/embed_onpolicy"]
 	path = external/embed_onpolicy
-	url = git@github.com:eric-heiden/embed_onpolicy.git
+	url = https://github.com/eric-heiden/embed_onpolicy.git
