@@ -1,0 +1,17 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+akro = {git = "git+https://github.com/rlworkgroup/akro.git@aa89fac70c041b86dc6ab2eded3edc0e806e72ef"}
+numpy = "*"
+rlgarage = {path = "./external/garage"}
+# TODO: Fix multiworld install
+# multiworld = {path = "./external/multiworld"}
+gym-sawyer = {path = "./external/gym-sawyer"}
+
+[requires]
+python_version = "3.6"
