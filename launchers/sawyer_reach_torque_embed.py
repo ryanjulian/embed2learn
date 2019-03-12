@@ -1,29 +1,20 @@
 from types import SimpleNamespace
 
-import numpy as np
-import tensorflow as tf
-
-from garage.core import Serializable
-from garage.core import Parameterized
-from garage.baselines import LinearFeatureBaseline
-from garage.envs.env_spec import EnvSpec
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
 from akro.tf import Box
+from garage.envs.env_spec import EnvSpec
+from garage.misc.instrument import run_experiment
+import numpy as np
 
-from sandbox.embed2learn.algos import PPOTaskEmbedding
-from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
-from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
-from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.envs.multiworld import FlatXYZReacher
-from sandbox.embed2learn.envs.multiworld import FlatTorqueReacher
-from sandbox.embed2learn.envs import MultiTaskEnv
-from sandbox.embed2learn.envs.multi_task_env import TfEnv
-from sandbox.embed2learn.envs.multi_task_env import normalize
-from sandbox.embed2learn.embeddings.utils import concat_spaces
+from embed2learn.algos import PPOTaskEmbedding
+from embed2learn.baselines import MultiTaskGaussianMLPBaseline
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.policies import GaussianMLPMultitaskPolicy
+from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.envs.multiworld import FlatTorqueReacher
+from embed2learn.envs import MultiTaskEnv
+from embed2learn.envs.multi_task_env import TfEnv
+from embed2learn.envs.multi_task_env import normalize
+from embed2learn.embeddings.utils import concat_spaces
 
 
 # FlatTorqueReacherEnv

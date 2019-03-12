@@ -1,22 +1,18 @@
-import numpy as np
-
-from garage.baselines import LinearFeatureBaseline
+from akro.tf import Box
 from garage.envs.env_spec import EnvSpec
 from garage.misc.ext import set_seed
 from garage.misc.instrument import run_experiment
-from akro.tf import Box
+import numpy as np
 
-from sandbox.embed2learn.algos import TRPOTaskEmbedding
-from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
-from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.envs import PointEnv
-from sandbox.embed2learn.envs import MultiTaskEnv
-from sandbox.embed2learn.envs.multi_task_env import TfEnv
-from sandbox.embed2learn.envs.multi_task_env import normalize
-from sandbox.embed2learn.embeddings.utils import concat_spaces
+from embed2learn.algos import TRPOTaskEmbedding
+from embed2learn.baselines import MultiTaskLinearFeatureBaseline
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.embeddings import GaussianMLPMultitaskPolicy
+from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.envs import PointEnv
+from embed2learn.envs import MultiTaskEnv
+from embed2learn.envs.multi_task_env import TfEnv
+from embed2learn.embeddings.utils import concat_spaces
 
 
 TASKS = {

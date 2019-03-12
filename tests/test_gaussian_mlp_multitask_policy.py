@@ -1,13 +1,13 @@
 import unittest
 
+from akro.tf import Box
+from garage.envs.env_spec import EnvSpec
 import numpy as np
 import tensorflow as tf
 
-from garage.envs.env_spec import EnvSpec
-from akro.tf import Box
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
+from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.policies import GaussianMLPMultitaskPolicy
 
 
 class TestStdShareNetwork(unittest.TestCase):

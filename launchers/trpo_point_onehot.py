@@ -1,16 +1,12 @@
-import numpy as np
-
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
-from garage.misc.instrument import stub
 from garage.misc.instrument import run_experiment
-
 from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
 from garage.tf.envs import TfEnv
 
-from sandbox.embed2learn.envs import PointEnv
-from sandbox.embed2learn.envs import OneHotMultiTaskEnv
+from embed2learn.envs import PointEnv
+from embed2learn.envs import OneHotMultiTaskEnv
 
 TASKS = {
     '(-1, 0)': {'args': [], 'kwargs': {'goal': (-1, 0)}},

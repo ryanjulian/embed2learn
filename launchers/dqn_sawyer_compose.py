@@ -2,25 +2,17 @@ import os.path as osp
 import os
 from datetime import datetime
 
-import joblib
-import tensorflow as tf
-import numpy as np
-
-from garage.config import LOG_DIR
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
-from garage.tf.algos import DDPG
-from garage.tf.exploration_strategies import OUStrategy
-from garage.tf.envs import TfEnv
-from garage.tf.policies import ContinuousMLPPolicy
-from garage.tf.q_functions import ContinuousMLPQFunction
-
-from sandbox.embed2learn.envs.discrete_embedded_policy_env import DiscreteEmbeddedPolicyEnv
-
 from baselines import deepq
 from baselines.common import set_global_seeds
 from baselines import bench
 from baselines import logger
+from garage.config import LOG_DIR
+from garage.envs.mujoco.sawyer import SimpleReacherEnv
+import joblib
+import tensorflow as tf
+import numpy as np
+
+from embed2learn.envs.discrete_embedded_policy_env import DiscreteEmbeddedPolicyEnv
 
 
 # USE_LOG = "local/sawyer-reach-embed-8goal/sawyer_reach_embed_8goal_2018_08_19_17_09_21_0001/"

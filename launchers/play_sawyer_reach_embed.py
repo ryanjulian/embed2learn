@@ -1,19 +1,11 @@
 import argparse
-import json
-import os.path as osp
-import sys
 import time
 
 import joblib
-import matplotlib
-from matplotlib import cm
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
 import numpy as np
-from scipy.spatial import ConvexHull
 import tensorflow as tf
 
-from sandbox.embed2learn.envs.util import colormap_mpl
+from embed2learn.envs.util import colormap_mpl
 
 
 def rollout(env,

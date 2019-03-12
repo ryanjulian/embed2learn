@@ -1,23 +1,19 @@
-import os.path as osp
-
-import time
 from queue import PriorityQueue
-
-import gym
-import joblib
-import numpy as np
-import tensorflow as tf
-
-from scipy.optimize import brute
+import os.path as osp
+import time
 
 from garage.core import Parameterized
 from garage.core import Serializable
 from garage.envs import Step
-from sandbox.embed2learn.policies import MultitaskPolicy
-
-from garage.envs.mujoco.sawyer import SimplePushEnv
 from garage.envs.mujoco.sawyer.sawyer_env import SawyerEnvWrapper
 from garage.envs.mujoco.sawyer import PushEnv
+import gym
+import joblib
+import numpy as np
+import tensorflow as tf
+from scipy.optimize import brute
+
+from embed2learn.policies import MultitaskPolicy
 
 
 # USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_27_15_49_32_0001"

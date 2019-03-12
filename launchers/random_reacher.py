@@ -1,6 +1,5 @@
 import ipdb
 import numpy as np
-import time
 
 from garage.envs.mujoco.sawyer import SimpleReacherEnv
 

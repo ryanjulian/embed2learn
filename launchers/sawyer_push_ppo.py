@@ -1,16 +1,12 @@
 from types import SimpleNamespace
 
-import numpy as np
-import tensorflow as tf
-
 from garage.tf.algos import PPO
-from garage.envs import normalize
 from garage.envs.mujoco.sawyer.pusher_env import SimplePusherEnv
-from garage.envs.env_spec import EnvSpec
 from garage.misc.instrument import run_experiment
-from garage.tf.envs import TfEnv
-from sandbox.embed2learn.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from garage.tf.baselines import GaussianMLPBaseline
+from garage.tf.envs import TfEnv
+
+from embed2learn.policies.gaussian_mlp_policy import GaussianMLPPolicy
 
 
 def run_task(v):
@@ -30,7 +26,7 @@ def run_task(v):
     )
 
     baseline = GaussianMLPBaseline(
-        env_spec=env.spec, 
+        env_spec=env.spec,
         regressor_args=dict(hidden_sizes=(256,128)),
     )
 

@@ -1,21 +1,11 @@
-import os.path as osp
-
+from garage.tf.envs import TfEnv
 import joblib
 import tensorflow as tf
 from tqdm import tqdm
 
-from garage.config import LOG_DIR
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
-from garage.tf.algos import DDPG
-from garage.tf.exploration_strategies import OUStrategy
-from garage.tf.envs import TfEnv
-from garage.tf.policies import ContinuousMLPPolicy
-from garage.tf.q_functions import ContinuousMLPQFunction
-
-from sandbox.embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
-from sandbox.embed2learn.envs.mujoco.sequence_reacher import SimpleReacherSequenceEnv
-from sandbox.embed2learn.policies.mpc_policy import MPCPolicy 
+from embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
+from embed2learn.envs.mujoco.sequence_reacher import SimpleReacherSequenceEnv
+from embed2learn.policies.mpc_policy import MPCPolicy
 
 latent_policy_pkl = "/home/zhanpenghe/Desktop/exp/rebase/garage/data/local/sawyer-reach-embed-8goal/sawyer_reach_embed_8goal_2018_08_19_17_09_21_0001/itr_180.pkl"
 
@@ -68,9 +58,9 @@ def play():
     env = TfEnv(EmbeddedPolicyEnv(inner_env, latent_policy))
 
     policy = MPCPolicy(
-        embedding=latent_policy._embedding, 
-        n_learned_skills=8, 
-        inner_policy=latent_policy, 
+        embedding=latent_policy._embedding,
+        n_learned_skills=8,
+        inner_policy=latent_policy,
         inner_env=inner_env_2,
     )
 

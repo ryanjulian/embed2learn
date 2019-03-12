@@ -1,15 +1,11 @@
-import os.path as osp
-
-import tensorflow as tf
-
 from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.envs import normalize
 from garage.misc.instrument import run_experiment
 from garage.tf.algos import DDPG
 from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.envs import TfEnv
 from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
+import tensorflow as tf
 
 
 def run_task(*_):

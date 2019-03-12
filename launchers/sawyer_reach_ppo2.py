@@ -1,16 +1,13 @@
 from types import SimpleNamespace
 
-import numpy as np
-import tensorflow as tf
-
-from garage.tf.algos import PPO
-from garage.envs import normalize
 from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.envs.env_spec import EnvSpec
 from garage.misc.instrument import run_experiment
+from garage.tf.algos import PPO
 from garage.tf.envs import TfEnv
-from sandbox.embed2learn.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from garage.tf.baselines import GaussianMLPBaseline
+
+from embed2learn.policies.gaussian_mlp_policy import GaussianMLPPolicy
+
 
 GOALS = [
     # (  ?,    ?,   ?)

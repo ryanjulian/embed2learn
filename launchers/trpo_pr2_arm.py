@@ -1,15 +1,10 @@
-import numpy as np
-
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
-from garage.misc.instrument import stub
-from garage.misc.instrument import run_experiment
-
 from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
 from garage.tf.envs import TfEnv
 
-from sandbox.embed2learn.envs.mujoco import PR2ArmEnv
+from embed2learn.envs.mujoco import PR2ArmEnv
 
 env = TfEnv(normalize(PR2ArmEnv()))
 

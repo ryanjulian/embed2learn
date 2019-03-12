@@ -1,26 +1,21 @@
 from types import SimpleNamespace
 
-import numpy as np
-
-from garage.baselines import LinearFeatureBaseline
+from akro.tf import Box
 from garage.envs.env_spec import EnvSpec
 from garage.misc.instrument import run_experiment
-from akro.tf import Box
+import numpy as np
 
-from sandbox.embed2learn.algos import PPOTaskEmbedding
-from sandbox.embed2learn.algos.trpo_task_embedding import KLConstraint
-from sandbox.embed2learn.baselines import MultiTaskLinearFeatureBaseline
-from sandbox.embed2learn.baselines import MultiTaskGaussianMLPBaseline
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.envs import PointEnv
-from sandbox.embed2learn.envs import MultiTaskEnv
-from sandbox.embed2learn.envs.multi_task_env import TfEnv
-from sandbox.embed2learn.envs.multi_task_env import normalize
-from sandbox.embed2learn.embeddings.utils import concat_spaces
+from embed2learn.algos import PPOTaskEmbedding
+from embed2learn.baselines import MultiTaskGaussianMLPBaseline
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.embeddings.utils import concat_spaces
+from embed2learn.envs import MultiTaskEnv
+from embed2learn.envs.multi_task_env import TfEnv
+from embed2learn.envs.multi_task_env import normalize
+from embed2learn.policies import GaussianMLPMultitaskPolicy
 
-from embed_onpolicy.sawyer_reach import TaskReacherEnv, TASKS
+from embed_onpolicy.sawyer_reach import TaskReacherEnv
 
 # NOTE: NOT WORKING RIGHT NOW
 

@@ -1,19 +1,9 @@
 import argparse
-import json
-import os.path as osp
-import sys
 import time
 
 import joblib
-import matplotlib
-from matplotlib import cm
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
 import numpy as np
-from scipy.spatial import ConvexHull
 import tensorflow as tf
-
-from sandbox.embed2learn.envs.util import colormap_mpl
 
 
 def rollout(env,
@@ -79,7 +69,7 @@ def play(pkl_file):
             # Run rollout
             print("Animating...")
             rollout(
-                env,    
+                env,
                 policy,
                 max_path_length=300,
                 animated=True,

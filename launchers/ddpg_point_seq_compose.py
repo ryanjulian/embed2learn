@@ -1,17 +1,17 @@
 import os.path as osp
 
-import joblib
-import tensorflow as tf
-
 from garage.config import LOG_DIR
 from garage.misc.instrument import run_experiment
 from garage.tf.algos import DDPG
-from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.envs import TfEnv
+from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
-from sandbox.embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv, AlmostContinuousEmbeddedPolicyEnv
-from sandbox.embed2learn.envs.seq_point_env import SequencePointEnv
+import joblib
+import tensorflow as tf
+
+from embed2learn.envs.embedded_policy_env import AlmostContinuousEmbeddedPolicyEnv
+from embed2learn.envs.seq_point_env import SequencePointEnv
 
 
 USE_LOG = "local/ppo-point-embed-random-start-192-polent/ppo_point_embed_random_start_192_polent_2018_08_14_17_01_37_0001"
@@ -27,7 +27,7 @@ def run_task(*_):
     env = TfEnv(AlmostContinuousEmbeddedPolicyEnv(inner_env, latent_policy))
 
     action_noise = OUStrategy(env, sigma=0.8)
-    
+
     actor_net = ContinuousMLPPolicy(
         env_spec=env,
         name="Actor",

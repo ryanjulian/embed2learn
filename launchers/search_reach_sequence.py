@@ -1,21 +1,19 @@
 import copy
 import pickle
+from queue import PriorityQueue
 import os.path as osp
 
-from queue import PriorityQueue
-
-import joblib
-import numpy as np
-import tensorflow as tf
+from garage.core import Serializable
 from garage.envs.mujoco.sawyer import ReacherEnv
 from garage.envs.mujoco.sawyer.sawyer_env import SawyerEnvWrapper
-
+import joblib
+import numpy as np
 from scipy.optimize import brute
-
-from garage.core import Serializable
-
-from sandbox.embed2learn.envs.discrete_embedded_policy_env import DiscreteEmbeddedPolicyEnv
+import tensorflow as tf
 from tqdm import tqdm
+
+from embed2learn.envs.discrete_embedded_policy_env import DiscreteEmbeddedPolicyEnv
+
 
 USE_LOG = "sawyer-reach-embed-notanh/sawyer_reach_embed_notanh_2018_08_23_12_38_13_0001"
 # USE_LOG = "push_embed/sawyer_pusher_rel_obs_embed_udlr_2018_08_23_15_32_40_0001"

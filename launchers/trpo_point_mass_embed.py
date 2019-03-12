@@ -1,23 +1,20 @@
-import numpy as np
-
+from akro.tf import Box
 from garage.baselines import LinearFeatureBaseline
+from garage.envs import EnvSpec
 from garage.misc.instrument import run_experiment
 from garage.misc.ext import set_seed
-from garage.envs import EnvSpec
-
-from garage.tf.policies import GaussianMLPPolicy
 from garage.tf.envs import TfEnv
-from akro.tf import Box
+import numpy as np
 
-from sandbox.embed2learn.algos import TRPOTaskEmbedding
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.policies import GaussianMLPMultitaskPolicy
-from sandbox.embed2learn.envs import DmControlEnv
-from sandbox.embed2learn.envs import MultiTaskEnv
-from sandbox.embed2learn.envs import TfEnv
-from sandbox.embed2learn.envs import normalize
-from sandbox.embed2learn.embeddings.utils import concat_spaces
+from embed2learn.algos import TRPOTaskEmbedding
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.policies import GaussianMLPMultitaskPolicy
+from embed2learn.envs import DmControlEnv
+from embed2learn.envs import MultiTaskEnv
+from embed2learn.envs import TfEnv
+from embed2learn.envs import normalize
+from embed2learn.embeddings.utils import concat_spaces
 
 
 TASKS = {
@@ -37,7 +34,7 @@ def run_task(plot=True, *_):
     set_seed(0)
 
     # Environment (train on light point mass)
-    from sandbox.embed2learn.envs import point_mass_env
+    from embed2learn.envs import point_mass_env
     from dm_control import suite
     suite._DOMAINS["embed_point_mass"] = point_mass_env
     env = TfEnv(

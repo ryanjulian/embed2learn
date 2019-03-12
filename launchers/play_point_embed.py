@@ -4,12 +4,11 @@ import time
 import joblib
 import numpy as np
 import matplotlib
-from matplotlib import cm
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-from sandbox.embed2learn.envs.util import colormap_mpl
-from sandbox.embed2learn.envs.multi_task_env import normalize, TfEnv
+from embed2learn.envs.util import colormap_mpl
+from embed2learn.envs.multi_task_env import normalize, TfEnv
 
 MAX_PATH_LENGTH = 50
 SAMPLING_POSITIONS = np.linspace(-1, 1, num=10)

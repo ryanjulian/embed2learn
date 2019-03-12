@@ -1,7 +1,6 @@
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
 from garage.envs.mujoco.sawyer import SawyerEnv
-
 from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
 from garage.tf.envs import TfEnv

@@ -1,24 +1,19 @@
-import multiprocessing as mp
-
-import numpy as np
-
+from akro.tf import Box
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import EnvSpec
 from garage.misc.instrument import run_experiment
-
-from garage.tf.algos import TRPO
 from garage.tf.policies import GaussianMLPPolicy
-from akro.tf import Box
+import numpy as np
 
-from sandbox.embed2learn.algos import TRPOTaskEmbedding
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings import OneHotEmbedding
-from sandbox.embed2learn.embeddings import EmbeddingSpec
-from sandbox.embed2learn.envs.mujoco import PR2ArmClockEnv
-from sandbox.embed2learn.envs import MultiTaskEnv
-from sandbox.embed2learn.envs.multi_task_env import TfEnv
-from sandbox.embed2learn.envs.multi_task_env import normalize
-from sandbox.embed2learn.embeddings.utils import concat_spaces
+from embed2learn.algos import TRPOTaskEmbedding
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.envs.mujoco import PR2ArmClockEnv
+from embed2learn.envs import MultiTaskEnv
+from embed2learn.envs.multi_task_env import TfEnv
+from embed2learn.envs.multi_task_env import normalize
+from embed2learn.embeddings.utils import concat_spaces
+
 
 N_PARALLEL = 1  # TODO(gh/10): the sampler is broken for n_parallel > 1
 

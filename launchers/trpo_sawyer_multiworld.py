@@ -1,8 +1,5 @@
-import sys
-
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
-from garage.envs.box2d import CartpoleEnv
 from garage.tf.algos import TRPO
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy

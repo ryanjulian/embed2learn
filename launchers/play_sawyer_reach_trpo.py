@@ -1,11 +1,10 @@
 import argparse
 import time
 
+from garage.misc import tensor_utils
 import joblib
 import numpy as np
 import tensorflow as tf
-
-from garage.misc import tensor_utils
 
 
 def rollout(env,

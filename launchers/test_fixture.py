@@ -1,16 +1,15 @@
 import argparse
-import time
 
+from akro.tf import Box
+from garage.envs import EnvSpec
+from garage.misc import logger
 import ipdb
 import numpy as np
 import tensorflow as tf
 
-from garage.envs import EnvSpec
-from garage.misc import logger
-from akro.tf import Box
-from sandbox.embed2learn.embeddings.embedding_spec import EmbeddingSpec
-from sandbox.embed2learn.embeddings import GaussianMLPEmbedding
-from sandbox.embed2learn.embeddings import GaussianMLPMultitaskPolicy
+from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.embeddings import GaussianMLPMultitaskPolicy
+from embed2learn.embeddings.embedding_spec import EmbeddingSpec
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--i", dest="i", type=int)

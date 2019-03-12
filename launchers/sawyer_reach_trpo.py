@@ -1,16 +1,13 @@
 from types import SimpleNamespace
 
-import numpy as np
-import tensorflow as tf
-
-from garage.tf.algos import TRPO
 from garage.envs import normalize
-from garage.envs.env_spec import EnvSpec
 from garage.misc.instrument import run_experiment
+from garage.tf.algos import TRPO
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
-from sandbox.embed2learn.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
-from sandbox.embed2learn.envs.multiworld import FlatTorqueReacher
+
+from embed2learn.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
+from embed2learn.envs.multiworld import FlatTorqueReacher
 
 # SimpleReacherEnv
 # GOALS = [
