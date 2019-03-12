@@ -5,12 +5,12 @@ import time
 from garage.core import Parameterized
 from garage.core import Serializable
 from garage.envs import Step
-from garage.envs.mujoco.sawyer.sawyer_env import SawyerEnvWrapper
-from garage.envs.mujoco.sawyer import PushEnv
 import gym
 import joblib
 import numpy as np
 import tensorflow as tf
+from sawyer.mujoco import PushEnv
+from sawyer.mujoco import SawyerEnvWrapper
 from scipy.optimize import brute
 
 from embed2learn.policies import MultitaskPolicy

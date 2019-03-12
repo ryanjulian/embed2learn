@@ -4,10 +4,10 @@ from queue import PriorityQueue
 import os.path as osp
 
 from garage.core import Serializable
-from garage.envs.mujoco.sawyer import ReacherEnv
-from garage.envs.mujoco.sawyer.sawyer_env import SawyerEnvWrapper
 import joblib
 import numpy as np
+from sawyer.mujoco import ReacherEnv
+from sawyer.mujoco.sawyer_env import SawyerEnvWrapper
 from scipy.optimize import brute
 import tensorflow as tf
 from tqdm import tqdm

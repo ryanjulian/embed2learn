@@ -1,10 +1,10 @@
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
+from garage.exploration_strategies import OUStrategy
 from garage.tf.algos import DDPG
-from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.envs import TfEnv
 from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
+from sawyer.mujoco import SimpleReacherEnv
 import tensorflow as tf
 
 

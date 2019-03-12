@@ -1,17 +1,17 @@
 import os.path as osp
 
 from garage.config import LOG_DIR
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
+from garage.exploration_strategies import OUStrategy
 from garage.tf.algos import DDPG
 from garage.tf.envs import TfEnv
-from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
 import joblib
+from sawyer.mujoco import SimpleReacherEnv
 import tensorflow as tf
 
-from embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
+from embed2learn.envs import EmbeddedPolicyEnv
 
 
 USE_LOG = "local/sawyer-reach-embed-8goal/sawyer_reach_embed_8goal_2018_08_19_17_09_21_0001/"

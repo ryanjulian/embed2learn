@@ -3,9 +3,9 @@ import joblib
 import tensorflow as tf
 from tqdm import tqdm
 
-from embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
-from embed2learn.envs.mujoco.sequence_reacher import SimpleReacherSequenceEnv
-from embed2learn.policies.mpc_policy import MPCPolicy
+from embed2learn.envs import EmbeddedPolicyEnv
+from embed2learn.envs.mujoco import SimpleReacherSequenceEnv
+from embed2learn.policies import MPCPolicy
 
 latent_policy_pkl = "/home/zhanpenghe/Desktop/exp/rebase/garage/data/local/sawyer-reach-embed-8goal/sawyer_reach_embed_8goal_2018_08_19_17_09_21_0001/itr_180.pkl"
 

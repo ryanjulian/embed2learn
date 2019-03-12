@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
 from garage.tf.algos import PPO
 from garage.tf.envs import TfEnv
 from garage.tf.baselines import GaussianMLPBaseline
+from sawyer.mujoco import SimpleReacherEnv
 
 from embed2learn.policies.gaussian_mlp_policy import GaussianMLPPolicy
 

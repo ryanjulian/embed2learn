@@ -1,16 +1,16 @@
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
+from garage.experiment import run_experiment
 from garage.tf.algos import TRPO
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
-from garage.misc.instrument import run_experiment
 
-from multiworld.envs.mujoco.sawyer_xyz.pick.sawyer_pick import SawyerPickEnv
+from multiworld.envs.mujoco.sawyer_xyz.sawyer_reach import SawyerReachXYZEnv
 from multiworld.core.flat_goal_env import FlatGoalEnv
 
 
 def run_task(*_):
-    env = FlatGoalEnv(SawyerPickEnv(), obs_keys=["state_observation"])
+    env = FlatGoalEnv(SawyerReachXYZEnv(), obs_keys=["state_observation"])
     env = TfEnv(normalize(env))
 
     policy = GaussianMLPPolicy(
@@ -34,7 +34,7 @@ def run_task(*_):
 run_experiment(
     run_task,
     n_parallel=16,
-    exp_prefix="trpo_sawyer_multiworld",
+    exp_prefix="trpo_sawyer_multiworld_sawyer_reach",
     seed=1,
     plot=True,
 )

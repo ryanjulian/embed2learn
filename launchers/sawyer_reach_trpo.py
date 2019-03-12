@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 
 from garage.envs import normalize
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
 from garage.tf.algos import TRPO
+from garage.tf.baselines import GaussianMLPBaseline
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
 
-from embed2learn.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
 from embed2learn.envs.multiworld import FlatTorqueReacher
 
 # SimpleReacherEnv

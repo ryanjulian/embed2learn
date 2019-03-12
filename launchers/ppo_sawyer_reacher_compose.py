@@ -1,16 +1,16 @@
 import os.path as osp
 
 from garage.config import LOG_DIR
-from garage.envs.mujoco.sawyer.reacher_env import SimpleReacherEnv
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
 from garage.tf.algos import PPO
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
-from garage.tf.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
+from garage.tf.baselines import GaussianMLPBaseline
 import joblib
+from sawyer.mujoco import SimpleReacherEnv
 import tensorflow as tf
 
-from embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
+from embed2learn.envs import EmbeddedPolicyEnv
 
 
 USE_LOG = "local/sawyer_reach_embed_2goal_2018_08_12_14_57_14_0001"

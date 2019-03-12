@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 
+from garage.experiment import run_experiment
 from garage.tf.algos import PPO
-from garage.envs.mujoco.sawyer.pusher_env import SimplePusherEnv
-from garage.misc.instrument import run_experiment
 from garage.tf.baselines import GaussianMLPBaseline
 from garage.tf.envs import TfEnv
+from sawyer.mujoco import SimplePusherEnv
 
-from embed2learn.policies.gaussian_mlp_policy import GaussianMLPPolicy
+from embed2learn.policies import GaussianMLPPolicy
 
 
 def run_task(v):

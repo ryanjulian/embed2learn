@@ -1,9 +1,9 @@
 import os.path as osp
 
 from garage.config import LOG_DIR
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
+from garage.exploration_strategies import OUStrategy
 from garage.tf.algos import DDPG
-from garage.tf.exploration_strategies import OUStrategy
 from garage.tf.envs import TfEnv
 from garage.tf.policies import ContinuousMLPPolicy
 from garage.tf.q_functions import ContinuousMLPQFunction
@@ -11,7 +11,7 @@ import joblib
 import tensorflow as tf
 
 from embed2learn.envs import PointEnv
-from embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
+from embed2learn.envs import EmbeddedPolicyEnv
 
 USE_LOG = "local/ppo-point-embed/ppo_point_embed_2018_08_12_16_26_20_0001"
 latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_100.pkl")

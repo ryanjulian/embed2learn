@@ -1,15 +1,15 @@
 import os.path as osp
 
 from garage.config import LOG_DIR
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
 from garage.tf.algos import PPO
-from garage.tf.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
+from garage.tf.baselines import GaussianMLPBaseline
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
 import joblib
 import tensorflow as tf
 
-from embed2learn.envs.embedded_policy_env import EmbeddedPolicyEnv
+from embed2learn.envs import EmbeddedPolicyEnv
 from embed2learn.envs import PointEnv
 
 USE_LOG = "local/ppo-point-embed/ppo_point_embed_2018_08_12_16_26_20_0001"

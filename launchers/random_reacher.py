@@ -1,7 +1,6 @@
-import ipdb
 import numpy as np
 
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
+from sawyer.mujoco import SimpleReacherEnv
 
 env = SimpleReacherEnv(
     goal_position=(0.4, -0.3, 0.15),
@@ -41,5 +40,3 @@ while True:
 
     errors = np.array(errors)
     bias = np.mean(errors, axis=0)
-
-    ipdb.set_trace()

@@ -7,12 +7,12 @@ from baselines.common import set_global_seeds
 from baselines import bench
 from baselines import logger
 from garage.config import LOG_DIR
-from garage.envs.mujoco.sawyer import SimpleReacherEnv
 import joblib
-import tensorflow as tf
 import numpy as np
+from sawyer.mujoco import SimpleReacherEnv
+import tensorflow as tf
 
-from embed2learn.envs.discrete_embedded_policy_env import DiscreteEmbeddedPolicyEnv
+from embed2learn.envs import DiscreteEmbeddedPolicyEnv
 
 
 # USE_LOG = "local/sawyer-reach-embed-8goal/sawyer_reach_embed_8goal_2018_08_19_17_09_21_0001/"

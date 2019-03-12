@@ -1,4 +1,4 @@
-from garage.misc.instrument import run_experiment
+from garage.experiment import run_experiment
 from garage.tf.algos import PPO
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy

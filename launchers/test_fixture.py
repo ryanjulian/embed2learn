@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from embed2learn.embeddings import GaussianMLPEmbedding
 from embed2learn.embeddings import GaussianMLPMultitaskPolicy
-from embed2learn.embeddings.embedding_spec import EmbeddingSpec
+from embed2learn.embeddings import EmbeddingSpec
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--i", dest="i", type=int)

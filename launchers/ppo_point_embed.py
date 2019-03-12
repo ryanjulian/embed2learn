@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 from akro.tf import Box
-from garage.envs.env_spec import EnvSpec
-from garage.misc.instrument import run_experiment
+from garage.envs import EnvSpec
+from garage.experiment import run_experiment
 import numpy as np
 import tensorflow as tf
 
@@ -10,7 +10,7 @@ from embed2learn.algos import PPOTaskEmbedding
 from embed2learn.baselines import MultiTaskGaussianMLPBaseline
 from embed2learn.envs import PointEnv
 from embed2learn.envs import MultiTaskEnv
-from embed2learn.envs.multi_task_env import TfEnv
+from embed2learn.envs import TfEnv
 from embed2learn.embeddings import EmbeddingSpec
 from embed2learn.embeddings import GaussianMLPEmbedding
 from embed2learn.embeddings.utils import concat_spaces

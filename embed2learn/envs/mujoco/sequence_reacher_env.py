@@ -1,9 +1,9 @@
 import numpy as np
 
 from garage.core.serializable import Serializable
-from garage.envs.mujoco.sawyer import ReacherEnv
-from garage.envs.mujoco.sawyer.sawyer_env import SawyerEnvWrapper
 from garage.misc.overrides import overrides
+from sawyer.mujoco import ReacherEnv
+from sawyer.mujoco.sawyer_env import SawyerEnvWrapper
 
 class SequenceReacherEnv(ReacherEnv):
 

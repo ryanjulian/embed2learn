@@ -1,10 +1,9 @@
 from garage.algos import TRPO
 from garage.baselines import LinearFeatureBaseline
 from garage.envs import normalize
+from garage.envs.dm_control import DmControlEnv
+from garage.experiment import run_experiment
 from garage.policies import GaussianMLPPolicy
-from garage.misc.instrument import run_experiment
-
-from embed2learn.envs import DmControlEnv
 
 
 def run_task(*_):
