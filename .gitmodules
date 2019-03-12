@@ -2,6 +2,3 @@
 	path = external/multiworld
 	url = https://github.com/ryanjulian/multiworld.git
 	branch = rjulian
-[submodule "external/embed_onpolicy"]
-	path = external/embed_onpolicy
-	url = git@github.com:eric-heiden/embed_onpolicy.git
