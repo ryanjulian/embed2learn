@@ -11,12 +11,18 @@ ipdb  = "*"
 
 [packages]
 akro = {git = "git+https://github.com/rlworkgroup/akro.git@aa89fac70c041b86dc6ab2eded3edc0e806e72ef"}
-baselines = {git = "git+https://github.com/openai/baselines.git@1259f6ab25c6f7261e33c4c3b92df869188f9260"}
-numpy = "*"
+# baselines = {git = "git+https://github.com/openai/baselines.git@1259f6ab25c6f7261e33c4c3b92df869188f9260"}
+numpy = "==1.16.0"
 pygame = "*"
-rlgarage = {git = "git+https://github.com/rlworkgroup/garage.git@123efdea9a20ea21648b5c0fa6d6d42864190bd0"}
-multiworld = {git = "git+https://github.com/vitchyr/multiworld.git@b073e69c6991e877723ee55f85a3dfc57bed8674"}
-gym-sawyer = {git = "git+https://github.com/rlworkgroup/gym-sawyer.git@77cb252c02c3c9c39d78d5050bc672273447f617"}
+rlgarage = {path = "./external/garage"}
+multiworld = {path = "./external/multiworld", editable = true}
+gym-sawyer = {path = "./external/gym-sawyer", editable = true}
+# rlgarage = {git = "git+https://github.com/rlworkgroup/garage.git@123efdea9a20ea21648b5c0fa6d6d42864190bd0"}
+# multiworld = {git = "git+https://github.com/vitchyr/multiworld.git@b073e69c6991e877723ee55f85a3dfc57bed8674"}
+# gym-sawyer = {git = "git+https://github.com/rlworkgroup/gym-sawyer.git@77cb252c02c3c9c39d78d5050bc672273447f617"}
 
 [requires]
 python_version = "3.6"
+
+[pipenv]
+allow_prereleases = true

@@ -2,7 +2,7 @@ from akro.tf import Box
 import numpy as np
 import tensorflow as tf
 from garage.core import Serializable
-from garage.misc import ext
+from garage.experiment import deterministic
 from garage.misc.overrides import overrides
 from garage.tf.core import Parameterized
 from garage.tf.misc import tensor_utils
@@ -169,7 +169,7 @@ class OneHotEmbedding(StochasticEmbedding, Parameterized, Serializable):
             dist = tf.contrib.distributions.MultivariateNormalDiag(
                 mean_var, std_var)
 
-            latent_var = dist.sample(seed=ext.get_seed())
+            latent_var = dist.sample(seed=deterministic.get_seed())
 
             return latent_var, mean_var, std_param_var, dist
 

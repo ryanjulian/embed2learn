@@ -7,12 +7,12 @@ import numpy as np
 from embed2learn.algos import TRPOTaskEmbedding
 from embed2learn.baselines import MultiTaskLinearFeatureBaseline
 from embed2learn.embeddings import GaussianMLPEmbedding
-from embed2learn.embeddings import GaussianMLPMultitaskPolicy
 from embed2learn.embeddings import EmbeddingSpec
 from embed2learn.envs import PointEnv
 from embed2learn.envs import MultiTaskEnv
 from embed2learn.envs import TfEnv
 from embed2learn.embeddings.utils import concat_spaces
+from embed2learn.policies import GaussianMLPMultitaskPolicy
 
 
 TASKS = {

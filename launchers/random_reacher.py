@@ -1,6 +1,6 @@
 import numpy as np
 
-from sawyer.mujoco import SimpleReacherEnv
+from sawyer.mujoco.reacher_env import SimpleReacherEnv
 
 env = SimpleReacherEnv(
     goal_position=(0.4, -0.3, 0.15),
@@ -13,10 +13,28 @@ env = SimpleReacherEnv(
     # collision_penalty=1.,
 )
 
-low = np.array(
-            [-3.0503, -3.8095, -3.0426, -3.0439, -2.9761, -2.9761, -4.7124])
-high = np.array(
-    [3.0503, 2.2736, 3.0426, 3.0439, 2.9761, 2.9761, 4.7124])
+low = np.array([
+    -3.0503,
+    -3.8095,
+    -3.0426,
+    -3.0439,
+    -2.9761,
+    -2.9761,
+    -4.7124,
+    0.,
+    0.
+])
+high = np.array([
+    3.0503,
+    2.2736,
+    3.0426,
+    3.0439,
+    2.9761,
+    2.9761,
+    4.7124,
+    0.,
+    0.
+])
 
 while True:
 
@@ -24,7 +42,7 @@ while True:
     errors = []
     for _ in range(20):
         start_obs = env.reset()
-        pos = start_obs[:7]
+        pos = start_obs[:9]
         for _ in range(500):
             next_step = env.action_space.sample()
             next_pos = pos + env.action_space.sample()

@@ -3,13 +3,13 @@ import argparse
 from akro.tf import Box
 from garage.envs import EnvSpec
 from garage.misc import logger
-import ipdb
+# import ipdb
 import numpy as np
 import tensorflow as tf
 
 from embed2learn.embeddings import GaussianMLPEmbedding
-from embed2learn.embeddings import GaussianMLPMultitaskPolicy
 from embed2learn.embeddings import EmbeddingSpec
+from embed2learn.policies import GaussianMLPMultitaskPolicy
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--i", dest="i", type=int)
@@ -39,8 +39,7 @@ with tf.Session() as sess:
     my_obs = obs_space.new_tensor_variable(name="my_obs", extra_dims=1)
     with tf.name_scope("build_opt"):
         dist_info = e.dist_info_sym(my_task, name="e_dist_info")
-        my_task_obs = tf.concat([my_task, my_obs], axis=1)
-        p_dist_info = p.dist_info_sym(my_task_obs, name="p_dist_info")
+        p_dist_info = p.dist_info_sym(my_task, my_obs, name="p_dist_info")
 
     with tf.name_scope("test_fixture"):
         a = tf.exp(e.latent)
@@ -56,6 +55,6 @@ with tf.Session() as sess:
     p.get_action_from_latent(o, z)
 
     logger.dump_tensorboard()
-    ipdb.set_trace()
+    # ipdb.set_trace()
 
     print("done!")

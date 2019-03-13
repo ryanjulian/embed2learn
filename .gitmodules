@@ -1,0 +1,9 @@
+[submodule "external/garage"]
+	path = external/garage
+	url = https://github.com/rlworkgroup/garage.git
+[submodule "external/gym-sawyer"]
+	path = external/gym-sawyer
+	url = https://github.com/rlworkgroup/gym-sawyer.git
+[submodule "external/multiworld"]
+	path = external/multiworld
+	url = https://github.com/vitchyr/multiworld.git

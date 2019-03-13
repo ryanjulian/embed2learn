@@ -1,4 +1,4 @@
-from garage import spaces
+import akro
 from garage.core import Serializable
 from garage.envs import Step
 from garage.misc.overrides import overrides
@@ -23,7 +23,7 @@ class OneHotMultiTaskEnv(MultiTaskEnv, Serializable):
         task_ub, task_lb = self.task_space.bounds
         env_ub, env_lb = super(OneHotMultiTaskEnv,
                                self).observation_space.bounds
-        return spaces.Box(
+        return akro.Box(
             np.concatenate([task_ub, env_ub]),
             np.concatenate([task_lb, env_lb]))
 

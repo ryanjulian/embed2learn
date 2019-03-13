@@ -1,0 +1,74 @@
+# TODO
+* Bring up non-embedded launchers
+* Bring up embedded launchers
+* Bring up .pkl launchers
+* Fix packaging/install better
+
+### Launchers
+
+# HAS BLOCKERS
+* Refactor npo_task_embedding for Runner
+  - ppo_point_embed.py
+  - sawyer_reach_embed.py
+  - sawyer_reach_torque_embed.py
+  - trpo_point_embed.py
+  - test_fixture.py
+  - trpo_point_onehot.py
+* Broken gym-sawyer
+  - trpo_sawyer.py  # task space control broken
+  - random_reacher.py  # ??
+  - sawyer_push_ppo.py  # pusher missing
+* Broken garage sampler import
+  - trpo_dm_control_cartpole.py
+* Missing code from MPC
+  - ppo_point_random_start.py
+* Needs pre-trained .pkl file for testing
+  - brute_reach_sequence.py
+  - ddpg_point_compose.py
+  - ddpg_point_seq_compose.py
+  - ddpg_point_seq_task_oriented_compose.py
+  - ddpg_sawyer_compose.py
+  - search_push_sequence.py
+  - search_reach_sequence.py
+  - ppo_sawyer_reacher_compose.py
+  - ppo_point_compose.py
+  - play_point_embed.py
+  - play_pusher.py
+  - play_sawyer_reach_embed.py
+  - play_sawyer_reach_trpo.py
+  - dqn_sawyer_compose.py
+  - mpc_sawyer_sequencing.py
+
+# DONE
+trpo_point.py
+trpo_sawyer_multiworld.py
+ddpg_sawyer_reach.py
+sawyer_reach_ppo2.py
+sawyer_reach_ppo.py
+sawyer_reach_trpo.py
+
+###############################
+#### Known problems
+* PointEnv plotting broken on MacOS
+* gym-sawyer task space control broken
+
+# Install problems
+  * baselines install seems broken with pipenv
+  * mujoco_py install broken -- numpy versions mismatch
+	  - workaround:
+	    ```sh
+	    pipenv run pip uninstall mujoco_py
+	    pipenv run pip install mujoco_py
+	    ```
+# Packaging problems
+ * garage: data directory is in site-packages
+  * garage: scripts/run_experiment.py not copied during setup
+	  - workaround:
+	    ```sh
+	    mkdir -p <missing dir from error>
+	    cp external/garage/scripts/run_experiment.py <missing dir from error>
+	    ```
+* multiworld assets not copied during setup.py (make PR)
+  - workaround: same as garage/scripts
+* gym-sawyer vendor files files not copied by setup.py
+  - workaround: same as garage/scripts

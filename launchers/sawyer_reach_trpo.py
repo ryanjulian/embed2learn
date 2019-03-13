@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from garage.envs import normalize
-from garage.experiment import run_experiment
+from garage.experiment import LocalRunner, run_experiment
 from garage.tf.algos import TRPO
 from garage.tf.baselines import GaussianMLPBaseline
 from garage.tf.envs import TfEnv
@@ -30,43 +30,43 @@ GOALS = [
 def run_task(v):
     v = SimpleNamespace(**v)
 
-    # Environment
-    env = FlatTorqueReacher(
-        fix_goal=True,
-        fixed_goal=GOALS[0],
-        reward_type="hand_distance",
-        hand_distance_completion_bonus=0.,
-        torque_limit_pct=0.2,
-        indicator_threshold=0.03,
-        velocity_penalty_coeff=0.01,
-        action_scale=10.0,
-        hide_goal_pos=True,
-    )
-    env = TfEnv(normalize(env))
+    with LocalRunner() as runner:
+        # Environment
+        env = FlatTorqueReacher(
+            fix_goal=True,
+            fixed_goal=GOALS[0],
+            reward_type="hand_distance",
+            # hand_distance_completion_bonus=0.,
+            # torque_limit_pct=0.2,
+            indicator_threshold=0.03,
+            # velocity_penalty_coeff=0.01,
+            action_scale=10.0,
+            # hide_goal_pos=True,
+        )
+        env = TfEnv(normalize(env))
 
-    # Policy
-    policy = GaussianMLPPolicy(
-        name="policy",
-        env_spec=env.spec,
-        hidden_sizes=(64, 32),
-        init_std=v.policy_init_std,
-    )
+        # Policy
+        policy = GaussianMLPPolicy(
+            name="policy",
+            env_spec=env.spec,
+            hidden_sizes=(64, 32),
+            init_std=v.policy_init_std,
+        )
 
-    baseline = GaussianMLPBaseline(env_spec=env.spec)
+        baseline = GaussianMLPBaseline(env_spec=env.spec)
 
-    algo = TRPO(
-        env=env,
-        policy=policy,
-        baseline=baseline,
-        batch_size=v.batch_size,  # 4096
-        max_path_length=v.max_path_length,
-        n_itr=1000,
-        discount=0.99,
-        step_size=0.01,
-        plot=True,
-        #optimizer_args=dict(max_grad_norm=0.5)
-    )
-    algo.train()
+        algo = TRPO(
+            env=env,
+            policy=policy,
+            baseline=baseline,
+            max_path_length=v.max_path_length,
+            discount=0.99,
+            max_kl_step=0.01,
+            #optimizer_args=dict(max_grad_norm=0.5)
+        )
+
+        runner.setup(algo, env)
+        runner.train(n_epochs=1000, batch_size=v.batch_size, plot=True)
 
 
 config = dict(

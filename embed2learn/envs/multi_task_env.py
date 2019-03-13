@@ -3,7 +3,7 @@ import random
 from cached_property import cached_property
 from garage.core import Parameterized
 from garage.core import Serializable
-from garage.envs import NormalizedEnv
+from garage.envs.normalized_env import NormalizedEnv
 from garage.envs import Step
 from garage.tf.envs import TfEnv as BaseTfEnv
 import gym

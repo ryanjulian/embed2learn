@@ -1,6 +1,6 @@
 from akro.tf import Box
 from garage.core import Serializable
-from garage.misc import ext
+from garage.experiment import deterministic
 from garage.misc import logger
 from garage.misc.overrides import overrides
 from garage.tf.core import Parameterized
@@ -267,7 +267,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
             dist = tf.contrib.distributions.MultivariateNormalDiag(
                 mean_var, std_var)
 
-            action_var = dist.sample(seed=ext.get_seed())
+            action_var = dist.sample(seed=deterministic.get_seed())
 
             return action_var, mean_var, std_param_var, dist
 
@@ -343,7 +343,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
             [x[0] for x in self.f_dist_task_obs([flat_task], [flat_obs])]
         latent_info = dict(mean=latent_mean, log_std=latent_log_std)
         return (action,
-                dict(mean=mean, log_std=log_std, latent_info=latent_info))
+                dict(mean=action_mean, log_std=action_log_std, latent_info=latent_info))
 
     def get_actions(self, observations):
         # TODO implement split_observation_n(...)
