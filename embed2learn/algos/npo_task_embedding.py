@@ -19,15 +19,12 @@ from garage.tf.misc.tensor_utils import flatten_batch_dict
 from garage.tf.misc.tensor_utils import flatten_inputs
 from garage.tf.misc.tensor_utils import graph_inputs
 from garage.tf.optimizers import LbfgsOptimizer
-from garage.tf.plotter import Plotter
 import numpy as np
 import tensorflow as tf
 
 from embed2learn.embeddings import StochasticEmbedding
 from embed2learn.misc.metrics import rrse
 from embed2learn.policies import StochasticMultitaskPolicy
-from embed2learn.samplers import TaskEmbeddingSampler
-from embed2learn.samplers.task_embedding_sampler import rollout
 
 
 @unique
@@ -49,7 +46,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                  kl_constraint=None,
                  optimizer=LbfgsOptimizer,
                  optimizer_args=dict(),
-                 step_size=0.01,
+                 lr_clip_range=0.2,
+                 max_kl_step=0.01,
                  num_minibatches=None,
                  num_opt_epochs=None,
                  policy=None,
@@ -82,7 +80,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         with tf.name_scope(self.name):
             # Optimizer for policy and embedding networks
             self.optimizer = optimizer(**optimizer_args)
-            self.step_size = float(step_size)
+            self.lr_clip_range = float(lr_clip_range)
+            self.max_kl_step = float(max_kl_step)
             self.policy_ent_coeff = float(policy_ent_coeff)
             self.embedding_ent_coeff = float(embedding_ent_coeff)
 
@@ -91,21 +90,46 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             self.inference_optimizer = inference_optimizer(
                 **inference_optimizer_args)
 
-            sampler_cls = TaskEmbeddingSampler
-            sampler_args = dict(inference=self.inference, )
-            super(NPOTaskEmbedding, self).__init__(
-                sampler_cls=sampler_cls,
-                sampler_args=sampler_args,
-                policy=policy,
-                **kwargs)
+            super().__init__(policy=policy, **kwargs)
 
     @overrides
-    def start_worker(self, sess):
-        self.sampler.start_worker()
-        if self.plot:
-            self.plotter = Plotter(
-                self.env, self.policy, sess=sess, rollout=rollout)
-            self.plotter.start()
+    def train_once(self, itr, paths):
+        itr_start_time = time.time()
+        with logger.prefix('itr #%d | ' % itr):
+            self.log_diagnostics(paths)
+            logger.log("Optimizing policy...")
+            self.optimize_policy(itr, paths)
+            logger.record_tabular('IterTime', time.time() - itr_start_time)
+            logger.dump_tabular()
+
+    @overrides
+    def get_itr_snapshot(self, itr, paths):
+        return dict(
+            itr=itr,
+            policy=self.policy,
+            baseline=self.baseline,
+            env=self.env,
+            inference=self.inference,
+        )
+
+    @overrides
+    def optimize_policy(self, itr, samples_data):
+        policy_opt_input_values = self._policy_opt_input_values(samples_data)
+        inference_opt_input_values = self._inference_opt_input_values(
+            samples_data)
+
+        self.train_policy_and_embedding_networks(policy_opt_input_values)
+        self.train_inference_network(inference_opt_input_values)
+
+        samples_data = self.evaluate(policy_opt_input_values, samples_data)
+        self.visualize_distribution(samples_data)
+
+        # Fit baseline
+        logger.log("Fitting baseline...")
+        if hasattr(self.baseline, 'fit_with_samples'):
+            self.baseline.fit_with_samples(samples_data['paths'], samples_data)
+        else:
+            self.baseline.fit(samples_data['paths'])
 
     @overrides
     def init_opt(self):
@@ -124,7 +148,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         self.optimizer.update_opt(
             loss=pol_loss,
             target=self.policy,
-            leq_constraint=(pol_kl, self.step_size),
+            leq_constraint=(pol_kl, self.max_kl_step),
             inputs=flatten_inputs(self._policy_opt_inputs),
             constraint_name="mean_kl")
 
@@ -487,8 +511,8 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                     # PPO uses a surrogate objective with clipped LR
                     lr_clip = tf.clip_by_value(
                         lr,
-                        1 - self.step_size,
-                        1 + self.step_size,
+                        1 - self.lr_clip_range,
+                        1 + self.lr_clip_range,
                         name="lr_clip")
                     surr_clip = lr_clip * adv_valid
                     surr_obj = tf.minimum(
@@ -828,16 +852,17 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
                 mean=latent_infos["mean"][:, i],
                 stddev=stds)
 
-        num_traj = self.batch_size // self.max_path_length
+
+        # TODO: find a way to do this with the new interface
+        # num_traj = len(samples_data['paths'])
         # # samples
         # latents = samples_data["latents"][:num_traj, 0]
         # for i in range(self.policy.latent_space.flat_dim):
         #     logger.record_histogram("Embedding/samples/i={}".format(i),
         #                             latents[:, i])
-
-        # action distributions
-        actions = samples_data["actions"][:num_traj, ...]
-        logger.record_histogram("Actions", actions)
+        # # action distributions
+        # actions = samples_data["actions"][:num_traj, ...]
+        # logger.record_histogram("Actions", actions)
 
 
     def train_policy_and_embedding_networks(self, policy_opt_input_values):
@@ -888,71 +913,3 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
     def save_samples(self, itr, samples_data):
         with open(osp.join(logger.get_snapshot_dir(), 'samples_%i.pkl' % itr), "wb") as fout:
             pickle.dump(samples_data, fout)
-
-    @overrides
-    def optimize_policy(self, itr, **kwargs):
-        paths = self.obtain_samples(itr)
-
-        samples_data = self.process_samples(itr, paths)
-        if self._save_sample_frequency > 0 and itr % self._save_sample_frequency == 0:
-            self.save_samples(itr, samples_data)
-        self.log_diagnostics(paths)
-
-        policy_opt_input_values = self._policy_opt_input_values(samples_data)
-        inference_opt_input_values = self._inference_opt_input_values(
-            samples_data)
-
-        self.train_policy_and_embedding_networks(policy_opt_input_values)
-        self.train_inference_network(inference_opt_input_values)
-
-        samples_data = self.evaluate(policy_opt_input_values, samples_data)
-        self.visualize_distribution(samples_data)
-
-        # Fit baseline
-        logger.log("Fitting baseline...")
-        if hasattr(self.baseline, 'fit_with_samples'):
-            self.baseline.fit_with_samples(paths, samples_data)
-        else:
-            self.baseline.fit(paths)
-
-        return self.get_itr_snapshot(itr, samples_data)
-
-    @overrides
-    def train(self, sess=None):
-        created_session = True if (sess is None) else False
-        if sess is None:
-            sess = tf.Session()
-            sess.__enter__()
-
-        sess.run(tf.global_variables_initializer())
-
-        self.start_worker(sess)
-        start_time = time.time()
-        for itr in range(self.start_itr, self.n_itr):
-            itr_start_time = time.time()
-            with logger.prefix('itr #%d | ' % itr):
-                params = self.optimize_policy(itr, )
-                if self.plot:
-                    self.plotter.update_plot(self.policy, self.max_path_length)
-                    if self.pause_for_plot:
-                        input("Plotting evaluation run: Press Enter to "
-                              "continue...")
-                logger.log("Saving snapshot...")
-                logger.save_itr_params(itr, params)
-                logger.log("Saved")
-                logger.record_tabular('IterTime', time.time() - itr_start_time)
-                logger.record_tabular('Time', time.time() - start_time)
-                logger.dump_tabular()
-        self.shutdown_worker()
-        if created_session:
-            sess.close()
-
-    @overrides
-    def get_itr_snapshot(self, itr, _samples_data):
-        return dict(
-            itr=itr,
-            policy=self.policy,
-            # baseline=self.baseline,
-            env=self.env,
-            inference=self.inference,
-        )

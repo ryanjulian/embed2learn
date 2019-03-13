@@ -19,7 +19,8 @@ class TRPOTaskEmbedding(NPOTaskEmbedding):
     Trust Region Policy Optimization with a Task Embedding
     """
 
-    def __init__(self, kl_constraint=KLConstraint.HARD, **kwargs):
+    def __init__(self, kl_constraint=KLConstraint.HARD, max_kl_step=0.01,
+        **kwargs):
         if kl_constraint == KLConstraint.HARD:
             optimizer = ConjugateGradientOptimizer
         elif kl_constraint == KLConstraint.SOFT:

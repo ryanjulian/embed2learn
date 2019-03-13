@@ -1,7 +1,6 @@
 import random
 
 from cached_property import cached_property
-from garage.core import Parameterized
 from garage.core import Serializable
 from garage.envs.normalized_env import NormalizedEnv
 from garage.envs import Step
@@ -21,14 +20,13 @@ def uniform_random(num_tasks, last_task):
     return random.randint(0, num_tasks)
 
 
-class MultiTaskEnv(gym.Env, Parameterized):
+class MultiTaskEnv(gym.Env, Serializable):
     def __init__(self,
                  task_selection_strategy=round_robin,
                  task_env_cls=None,
                  task_args=None,
                  task_kwargs=None):
         Serializable.quick_init(self, locals())
-        Parameterized.__init__(self)
 
         self._task_envs = [
             task_env_cls(*t_args, **t_kwargs)
@@ -58,23 +56,9 @@ class MultiTaskEnv(gym.Env, Parameterized):
     def render(self, *args, **kwargs):
         return self.active_env.render(*args, **kwargs)
 
-    def log_diagnostics(self, paths, *args, **kwargs):
-        return self.active_env.log_diagnostics(paths, *args, **kwargs)
-
-    @property
-    def horizon(self):
-        return self.active_env.horizon
-
     def close(self):
         for env in self._task_envs:
             env.close()
-
-    def get_params_internal(self, **tags):
-        # return self.active_env.get_params_internal(**tags)
-        return []
-
-    # def set_param_values(self, params):
-    #     self._active_env.set_param_values(params)
 
     @property
     def task_space(self):
@@ -125,11 +109,10 @@ class TfEnv(BaseTfEnv):
         return self.env.active_task
 
 
-class NormalizedMultiTaskEnv(NormalizedEnv, Parameterized):
+class NormalizedMultiTaskEnv(NormalizedEnv, Serializable):
     def __init__(self, env):
+        super().__init__(self, env)
         Serializable.quick_init(self, locals())
-        Parameterized.__init__(self)
-        NormalizedEnv.__init__(self, env)
 
     @property
     def task_space(self):
@@ -142,9 +125,6 @@ class NormalizedMultiTaskEnv(NormalizedEnv, Parameterized):
     @property
     def active_task(self):
         return self.env.active_task
-
-    def get_params_internal(self, *args, **kwargs):
-        return self.env.get_params_internal(*args, **kwargs)
 
 
 normalize = NormalizedMultiTaskEnv

@@ -3,7 +3,7 @@ import argparse
 from akro.tf import Box
 from garage.envs import EnvSpec
 from garage.misc import logger
-# import ipdb
+import ipdb
 import numpy as np
 import tensorflow as tf
 
@@ -52,9 +52,9 @@ with tf.Session() as sess:
     to = np.concatenate([t, o], axis=0)
     p.get_action(to)
     z = latent_space.sample()
-    p.get_action_from_latent(o, z)
+    p.get_action_from_latent(z, o)
 
     logger.dump_tensorboard()
-    # ipdb.set_trace()
+    ipdb.set_trace()
 
     print("done!")

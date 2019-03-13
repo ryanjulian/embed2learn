@@ -1,23 +1,18 @@
-import pickle
 import time
 
-from garage.sampler import utils  # DEBUG
-from garage.misc import ext
-from garage.misc import special  # DEBUG
+from garage.sampler import utils
+from garage.misc import special
 import garage.misc.logger as logger
 from garage.sampler import parallel_sampler
 from garage.sampler.stateful_pool import singleton_pool
 from garage.tf.misc import tensor_utils
 from garage.tf.samplers.batch_sampler import BatchSampler
-from garage.tf.samplers.batch_sampler import worker_init_tf
-from garage.tf.samplers.batch_sampler import worker_init_tf_vars
 import numpy as np
 
 from embed2learn.samplers.utils import sliding_window
 
 # TODO: improvements to garage so that you don't need to rwrite a whole sampler
 # to change the rollout process
-
 
 def rollout(env,
             agent,
@@ -85,116 +80,53 @@ def rollout(env,
         env_infos=tensor_utils.stack_tensor_dict_list(env_infos),
     )
 
-
-# parallel_sampler worker API
-def _worker_populate_task(g, env, policy, inference, scope=None):
-    g = parallel_sampler._get_scoped_g(g, scope)
-    g.env = pickle.loads(env)
-    g.policy = pickle.loads(policy)
-
-
-def _worker_terminate_task(g, scope=None):
-    g = parallel_sampler._get_scoped_g(g, scope)
-    if getattr(g, "env", None):
-        g.env.close()
-        g.env = None
-    if getattr(g, "policy", None):
-        g.policy.terminate()
-        g.policy = None
-    if getattr(g, "inference", None):
-        g.inference.terminate()
-        g.inference = None
-
-
-def _worker_set_inference_params(g, params, scope=None):
-    g = parallel_sampler._get_scoped_g(g, scope)
-    # g.inference.set_param_values(params)
-
-
+# Partial parallel_sampler API to modify the rollout function
 def _worker_collect_one_path(g, max_path_length, scope=None):
     g = parallel_sampler._get_scoped_g(g, scope)
     path = rollout(g.env, g.policy, max_path_length)
     return path, len(path["rewards"])
 
+def sample_paths(policy_params,
+                 max_samples,
+                 max_path_length=np.inf,
+                 scope=None):
+    """
+    :param policy_params: parameters for the policy. This will be updated on
+     each worker process
+    :param max_samples: desired maximum number of samples to be collected. The
+     actual number of collected samples might be greater since all trajectories
+     will be rolled out either until termination or until max_path_length is
+     reached
+    :param max_path_length: horizon / maximum length of a single trajectory
+    :return: a list of collected paths
+    """
+    singleton_pool.run_each(
+        parallel_sampler._worker_set_policy_params,
+        [(policy_params, scope)] * singleton_pool.n_parallel)
+    return singleton_pool.run_collect(
+        _worker_collect_one_path,
+        threshold=max_samples,
+        args=(max_path_length, scope),
+        show_prog_bar=True)
 
 #TODO: can this use VectorizedSampler?
 class TaskEmbeddingSampler(BatchSampler):
-    def __init__(self, *args, inference=None, **kwargs):
-        super(TaskEmbeddingSampler, self).__init__(*args, **kwargs)
-        self.inference = inference
 
-    def populate_task(self, env, policy, scope=None):
-        logger.log("Populating workers...")
-        if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(_worker_populate_task, [
-                (pickle.dumps(env), pickle.dumps(policy), scope)
-            ] * singleton_pool.n_parallel)
-        else:
-            # avoid unnecessary copying
-            g = parallel_sampler._get_scoped_g(singleton_pool.G, scope)
-            g.env = env
-            g.policy = policy
-        parallel_sampler.set_seed(ext.get_seed())
-        logger.log("Populated")
+    def obtain_samples(self, itr, batch_size=None, whole_paths=True):
+        if not batch_size:
+            batch_size = self.algo.max_path_length * self.n_envs
 
-    def terminate_task(self, scope=None):
-        singleton_pool.run_each(_worker_terminate_task,
-                                [(scope, )] * singleton_pool.n_parallel)
-
-    # BatchSampler API
-    def start_worker(self):
-        if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(worker_init_tf)
-        self.populate_task(self.algo.env, self.algo.policy)
-        if singleton_pool.n_parallel > 1:
-            singleton_pool.run_each(worker_init_tf_vars)
-
-    def shutdown_worker(self):
-        self.terminate_task(scope=self.algo.scope)
-
-    def sample_paths(self,
-                     policy_params,
-                     max_samples,
-                     max_path_length,
-                     env_params=None,
-                     inference_params=None,
-                     scope=None):
-        singleton_pool.run_each(
-            parallel_sampler._worker_set_policy_params,
-            [(policy_params, scope)] * singleton_pool.n_parallel,
-        )
-        singleton_pool.run_each(
-            _worker_set_inference_params,
-            [(inference_params, scope)] * singleton_pool.n_parallel,
-        )
-        # if env_params:
-        #     singleton_pool.run_each(
-        #         parallel_sampler._worker_set_env_params,
-        #         [(env_params, scope)] * singleton_pool.n_parallel,
-        #     )
-
-        return singleton_pool.run_collect(
-            _worker_collect_one_path,
-            threshold=max_samples,
-            args=(max_path_length, scope),
-            show_prog_bar=True,
-        )
-
-    def obtain_samples(self, itr):
-        policy_params = self.algo.policy.get_param_values()
-        # env_params = self.algo.env.get_param_values()
-        paths = self.sample_paths(
-            policy_params=policy_params,
-            env_params=None,
-            max_samples=self.algo.batch_size,
+        cur_policy_params = self.algo.policy.get_param_values()
+        paths = sample_paths(
+            policy_params=cur_policy_params,
+            max_samples=batch_size,
             max_path_length=self.algo.max_path_length,
             scope=self.algo.scope,
         )
-        if self.algo.whole_paths:
+        if whole_paths:
             return paths
         else:
-            paths_truncated = parallel_sampler.truncate_paths(
-                paths, self.algo.batch_size)
+            paths_truncated = truncate_paths(paths, batch_size)
             return paths_truncated
 
     #TODO: vectorize
@@ -254,13 +186,13 @@ class TaskEmbeddingSampler(BatchSampler):
             # The length of the sliding window is determined by the trajectory
             # inference spec. We smear the last few elements to preserve the
             # time dimension.
-            window = self.inference.input_space.shape[0]
+            window = self.algo.inference.input_space.shape[0]
             trajs = sliding_window(act_obs, window, 1, smear=True)
-            trajs_flat = self.inference.input_space.flatten_n(trajs)
+            trajs_flat = self.algo.inference.input_space.flatten_n(trajs)
             path['trajectories'] = trajs_flat
 
             # trajectory infos
-            _, traj_infos = self.inference.get_latents(trajs)
+            _, traj_infos = self.algo.inference.get_latents(trajs)
             path['trajectory_infos'] = traj_infos
 
         ev = special.explained_variance_1d(
@@ -381,4 +313,4 @@ class TaskEmbeddingSampler(BatchSampler):
 
     #TODO: embedding-specific diagnostics
     def log_diagnostics(self, paths):
-        return super(TaskEmbeddingSampler, self).log_diagnostics(paths)
+        return super().log_diagnostics(paths)

@@ -12,7 +12,7 @@ class PPOTaskEmbedding(NPOTaskEmbedding):
     """
 
     def __init__(self,
-                 step_size=0.2,
+                 lr_clip_range=0.2,
                  optimizer_args=dict(
                      batch_size=32,
                      max_epochs=10,
@@ -24,7 +24,7 @@ class PPOTaskEmbedding(NPOTaskEmbedding):
                  **kwargs):
         super(PPOTaskEmbedding, self).__init__(
             pg_loss=PGLoss.CLIP,
-            step_size=step_size,
+            lr_clip_range=lr_clip_range,
             optimizer=FirstOrderOptimizer,
             optimizer_args=optimizer_args,
             inference_optimizer=FirstOrderOptimizer,

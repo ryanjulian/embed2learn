@@ -10,11 +10,13 @@ from embed2learn.algos import PPOTaskEmbedding
 from embed2learn.baselines import MultiTaskGaussianMLPBaseline
 from embed2learn.envs import PointEnv
 from embed2learn.envs import MultiTaskEnv
-from embed2learn.envs import TfEnv
+from embed2learn.envs.multi_task_env import TfEnv
 from embed2learn.embeddings import EmbeddingSpec
 from embed2learn.embeddings import GaussianMLPEmbedding
 from embed2learn.embeddings.utils import concat_spaces
+from embed2learn.experiment import TaskEmbeddingRunner
 from embed2learn.policies import GaussianMLPMultitaskPolicy
+from embed2learn.samplers import TaskEmbeddingSampler
 
 
 def circle(r, n):
@@ -40,9 +42,9 @@ TASKS = {
 
 
 def run_task(v):
-    with LocalRunner() as runner:
-        v = SimpleNamespace(**v)
+    v = SimpleNamespace(**v)
 
+    with TaskEmbeddingRunner() as runner:
         task_names = sorted(v.tasks.keys())
         task_args = [v.tasks[t]['args'] for t in task_names]
         task_kwargs = [v.tasks[t]['kwargs'] for t in task_names]
@@ -127,10 +129,9 @@ def run_task(v):
             policy=policy,
             baseline=baseline,
             inference=traj_embedding,
-            batch_size=v.batch_size,
             max_path_length=v.max_path_length,
             discount=0.99,
-            step_size=0.2,
+            lr_clip_range=0.2,
             policy_ent_coeff=v.policy_ent_coeff,
             embedding_ent_coeff=v.embedding_ent_coeff,
             inference_ce_coeff=v.inference_ce_coeff,
@@ -138,8 +139,9 @@ def run_task(v):
             stop_ce_gradient=True,
         )
 
-        runner.setup(algo, env)
-        runner.train(n_epochs=600, batch_size=v.batch_size, plot=True)
+        runner.setup(algo, env, batch_size=v.batch_size,
+            max_path_length=v.max_path_length)
+        runner.train(n_epochs=600, plot=False)
 
 config = dict(
     tasks=TASKS,
@@ -164,5 +166,5 @@ run_experiment(
     n_parallel=2,
     seed=1,
     variant=config,
-    plot=True,
+    plot=False,
 )
