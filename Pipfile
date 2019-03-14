@@ -12,8 +12,8 @@ ipdb  = "*"
 [packages]
 akro = {git = "git+https://github.com/rlworkgroup/akro.git@aa89fac70c041b86dc6ab2eded3edc0e806e72ef"}
 # baselines = {git = "git+https://github.com/openai/baselines.git@1259f6ab25c6f7261e33c4c3b92df869188f9260"}
-numpy = "==1.16.0"
-pygame = "*"
+numpy = "*"
+pygame = "==1.9.4"
 rlgarage = {path = "./external/garage"}
 multiworld = {path = "./external/multiworld", editable = true}
 gym-sawyer = {path = "./external/gym-sawyer", editable = true}
