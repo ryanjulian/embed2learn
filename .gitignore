@@ -80,7 +80,8 @@ celerybeat-schedule
 *.sage.py
 
 # dotenv
-.env
+# We actually need this for properly-functioning pipenv
+# .env
 
 # virtualenv
 .venv
