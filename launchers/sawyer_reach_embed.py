@@ -161,7 +161,7 @@ config = dict(
 run_experiment(
     run_task,
     exp_prefix='sawyer_reach_embed_8goal',
-    n_parallel=8,
+    n_parallel=1,
     seed=1,
     variant=config,
     plot=False,

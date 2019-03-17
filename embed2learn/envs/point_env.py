@@ -16,7 +16,7 @@ BRIGHT_COLOR = (200, 200, 200)
 DARK_COLOR = (150, 150, 150)
 
 
-class PointEnv(gym.Env, Parameterized):
+class PointEnv(gym.Env, Serializable):
     def __init__(
             self,
             goal=(1, 1),
@@ -27,7 +27,7 @@ class PointEnv(gym.Env, Parameterized):
             action_scale=1.,
         ):
         Serializable.quick_init(self, locals())
-        Parameterized.__init__(self)
+        # Parameterized.__init__(self)
 
         self._goal = np.array(goal, dtype=np.float32)
         self._point = np.zeros(2)

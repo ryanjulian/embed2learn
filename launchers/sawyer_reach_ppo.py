@@ -48,11 +48,6 @@ def run_task(v):
             regressor_args=dict(hidden_sizes=(64, 64)),
         )
 
-        # baseline = CollisionAwareBaseline(
-        #     env_spec=env.spec,
-        #     regressor_args=dict(hidden_sizes=(64, 64)),
-        # )
-
         algo = PPO(
             env=env,
             policy=policy,

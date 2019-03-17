@@ -1,59 +1,89 @@
+import argparse
 import os.path as osp
 
+import joblib
+import tensorflow as tf
+
 from garage.config import LOG_DIR
-from garage.experiment import run_experiment
+from garage.experiment import LocalRunner, run_experiment
 from garage.tf.algos import PPO
 from garage.tf.baselines import GaussianMLPBaseline
 from garage.tf.envs import TfEnv
 from garage.tf.policies import GaussianMLPPolicy
-import joblib
-import tensorflow as tf
 
 from embed2learn.envs import EmbeddedPolicyEnv
 from embed2learn.envs import PointEnv
 
-USE_LOG = "local/ppo-point-embed/ppo_point_embed_2018_08_12_16_26_20_0001"
-latent_policy_pkl = osp.join(LOG_DIR, USE_LOG, "itr_100.pkl")
 
 
-def run_task(*_):
-    sess = tf.Session()
-    sess.__enter__()
-    latent_policy = joblib.load(latent_policy_pkl)["policy"]
+def main(latent_policy_pkl):
 
-    inner_env = PointEnv(goal=(1.4, 1.4),completion_bonus=100)
-    env = TfEnv(EmbeddedPolicyEnv(inner_env, latent_policy))
+    def run_task(*_):
+        sess = tf.Session()
+        sess.__enter__()
+        latent_policy = joblib.load(latent_policy_pkl)["policy"]
+        with LocalRunner(sess=sess) as runner:
+            inner_env = PointEnv(goal=(1.4, 1.4), completion_bonus=100)
+            env = TfEnv(EmbeddedPolicyEnv(inner_env, latent_policy))
 
-    policy = GaussianMLPPolicy(
-        name="policy",
-        env_spec=env.spec,
-        hidden_sizes=(64, 64),
-        init_std=20,
-        std_share_network=False,
-        adaptive_std=True
+            policy = GaussianMLPPolicy(
+                name="composer",
+                env_spec=env.spec,
+                hidden_sizes=(64, 64),
+                init_std=20,
+                std_share_network=False,
+                adaptive_std=True
+            )
+
+            baseline = GaussianMLPBaseline(env_spec=env)
+
+            algo = PPO(
+                env=env,
+                policy=policy,
+                baseline=baseline,
+                batch_size=1024,  # 4096
+                max_path_length=50,
+                n_itr=1500,
+                discount=0.99,
+                step_size=0.2,
+                policy_ent_coeff=1e-6,
+                plot=True,
+                use_mpc_es=True,
+            )
+            runner.setup(algo, env)
+            runner.train(n_epochs=600, plot=False, batch_size=1024)
+
+    run_experiment(
+        run_task,
+        n_parallel=1,
+        exp_prefix="ppo_point_compose",
+        seed=2,
+        plot=False,
     )
-    baseline = GaussianMLPBaseline(env_spec=env, include_action_to_input=False)
 
-    algo = PPO(
-        env=env,
-        policy=policy,
-        baseline=baseline,
-        batch_size=1024,  # 4096
-        max_path_length=50,
-        n_itr=1500,
-        discount=0.99,
-        step_size=0.2,
-        policy_ent_coeff=1e-6,
-        plot=True,
-        use_mpc_es=True,
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-d',
+        '--log_directory',
+        required=True,
+        help='The directory of a logged training.',
+        type=str,)
+
+    parser.add_argument(
+        '-i',
+        '--iteration',
+        help='The iteration # to use for composing',
+        type=int,
+        default=-1,  # use params.pkl if this is -1 otherwise iter_%.pkl
     )
-    algo.train(sess=sess)
 
+    args = parser.parse_args()
+    log_dir = args.log_directory
 
-run_experiment(
-    run_task,
-    n_parallel=4,
-    exp_prefix="ppo_point_compose_test_mpc",
-    seed=2,
-    plot=True,
-)
+    pickle_filename = 'itr_{}.pkl'.format(args.iteration) if args.iteration >= 0 else 'params.pkl'
+    latent_policy_pkl = osp.join(LOG_DIR, log_dir, pickle_filename)
+
+    main(latent_policy_pkl)

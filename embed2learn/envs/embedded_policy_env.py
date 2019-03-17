@@ -1,21 +1,22 @@
-from garage.core import Parameterized
-from garage.core import Serializable
-from garage.envs import Step
+
 import gym
 import numpy as np
+
+from garage.core import Serializable
+from garage.envs import Step
+from garage.tf.core import Parameterized
 
 from embed2learn.policies import MultitaskPolicy
 
 
 class EmbeddedPolicyEnv(gym.Env, Parameterized):
     def __init__(self, wrapped_env=None, wrapped_policy=None):
-        assert isinstance(wrapped_policy, MultitaskPolicy)
-        Serializable.quick_init(self, locals())
-        Parameterized.__init__(self)
-
         self._wrapped_env = wrapped_env
         self._wrapped_policy = wrapped_policy
         self._last_obs = None
+        assert isinstance(wrapped_policy, MultitaskPolicy)
+        Serializable.quick_init(self, locals())
+        Parameterized.__init__(self)
 
     def reset(self, **kwargs):
         self._last_obs = self._wrapped_env.reset(**kwargs)
@@ -64,6 +65,9 @@ class EmbeddedPolicyEnv(gym.Env, Parameterized):
 
     def close(self):
         return self._wrapped_env.close()
+
+    def get_params_internal(self, **tags):
+        return self._wrapped_policy.get_params_internal(**tags)
 
 
 class AlmostContinuousEmbeddedPolicyEnv(gym.Env, Parameterized):
