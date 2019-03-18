@@ -15,7 +15,6 @@ from embed2learn.envs import EmbeddedPolicyEnv
 from embed2learn.envs import PointEnv
 
 
-
 def main(latent_policy_pkl):
 
     def run_task(*_):
