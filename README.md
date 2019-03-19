@@ -14,8 +14,8 @@ Also install:
 Check out this repository and setup submodules
 
 ```sh
-git clone git@github.com:ryanjulian/embed2learn-private.git
-cd embed2learn-private
+git clone https://github.com/zhanpenghe/embed2learn.git
+cd embed2learn
 git checkout new-garage
 git submodule init
 git submodule update
