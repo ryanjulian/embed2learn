@@ -25,7 +25,7 @@ git submodule update
 Setup the pipenv
 
 ```
-cd embed2learn-private
+cd embed2learn
 pipenv install --dev
 ```
 
