@@ -555,11 +555,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         with tf.name_scope("entropy_terms"):
             # 1. Embedding distribution total entropy
             with tf.name_scope('embedding_entropy'):
-                task_dim = self.policy.task_space.flat_dim
-                all_task_one_hots = tf.one_hot(
-                    np.arange(task_dim), task_dim, name="all_task_one_hots")
-                all_task_entropies = self.policy.embedding.entropy_sym(
-                    all_task_one_hots)
+                all_task_entropies = self.policy.embedding.entropy_sym(i.flat.task_var)
 
                 if self._use_softplus_entropy:
                     all_task_entropies = tf.nn.softplus(all_task_entropies)
@@ -587,7 +583,7 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
             # 3. Policy path entropies
             with tf.name_scope('policy_entropy'):
                 policy_entropy_flat = self.policy.entropy_sym(
-                    i.task_var, i.obs_var, name="policy_entropy_flat")
+                    i.flat.task_var, i.flat.obs_var, name="policy_entropy_flat")
                 policy_entropy = tf.reshape(
                     policy_entropy_flat, [-1, self.max_path_length],
                     name="policy_entropy")
@@ -809,24 +805,24 @@ class NPOTaskEmbedding(BatchPolopt, Serializable):
         pol_ent = self.f_policy_entropy(*policy_opt_input_values)
         logger.record_tabular('Policy/Entropy', pol_ent)
 
-        task_ents = self.f_task_entropies(*policy_opt_input_values)
-        tasks = samples_data["tasks"][:, 0, :]
-        _, task_indices = np.nonzero(tasks)
-        path_lengths = np.sum(samples_data["valids"], axis=1)
-        for t in range(self.policy.task_space.flat_dim):
-            lengths = path_lengths[task_indices == t]
-            completed = lengths < self.max_path_length
-            pct_completed = np.mean(completed)
-            num_samples = np.sum(lengths)
-            num_trajs = lengths.shape[0]
-            logger.record_tabular('Tasks/EpisodeLength/t={}'.format(t),
-                                  np.mean(lengths))
-            logger.record_tabular('Tasks/CompletionRate/t={}'.format(t),
-                                  pct_completed)
+        #task_ents = self.f_task_entropies(*policy_opt_input_values)
+        #tasks = samples_data["tasks"][:, 0, :]
+        #_, task_indices = np.nonzero(tasks)
+        #path_lengths = np.sum(samples_data["valids"], axis=1)
+        #for t in range(self.policy.n_tasks):
+            #lengths = path_lengths[task_indices == t]
+            #completed = lengths < self.max_path_length
+            #pct_completed = np.mean(completed)
+            #num_samples = np.sum(lengths)
+            #num_trajs = lengths.shape[0]
+            #logger.record_tabular('Tasks/EpisodeLength/t={}'.format(t),
+                    #                     np.mean(lengths))
+            #    logger.record_tabular('Tasks/CompletionRate/t={}'.format(t),
+                    #                       pct_completed)
             # logger.record_tabular('Tasks/NumSamples/t={}'.format(t),
             #                       num_samples)
             # logger.record_tabular('Tasks/NumTrajs/t={}'.format(t), num_trajs)
-            logger.record_tabular('Tasks/Entropy/t={}'.format(t), task_ents[t])
+            # logger.record_tabular('Tasks/Entropy/t={}'.format(t), task_ents[t])
 
         return samples_data
 

@@ -23,6 +23,7 @@ def rollout(env,
 
     observations = []
     tasks = []
+    tasks_gt = []
     latents = []
     latent_infos = []
     actions = []
@@ -38,6 +39,7 @@ def rollout(env,
     # NOTE: it is important to do this _once per rollout_, not once per
     # timestep, since we need correlated noise.
     t = env.active_task_one_hot
+    task_gt = env.active_task_one_hot_gt
     z, latent_info = agent.get_latent(t)
 
     if animated:
@@ -51,6 +53,7 @@ def rollout(env,
         next_o, r, d, env_info = env.step(a)
         observations.append(agent.observation_space.flatten(o))
         tasks.append(t)
+        tasks_gt.append(task_gt)
         # z = latent_info["mean"]
         latents.append(agent.latent_space.flatten(z))
         latent_infos.append(latent_info)
@@ -74,6 +77,7 @@ def rollout(env,
         actions=tensor_utils.stack_tensor_list(actions),
         rewards=tensor_utils.stack_tensor_list(rewards),
         tasks=tensor_utils.stack_tensor_list(tasks),
+        tasks_gt=tensor_utils.stack_tensor_list(tasks_gt),
         latents=tensor_utils.stack_tensor_list(latents),
         latent_infos=tensor_utils.stack_tensor_dict_list(latent_infos),
         agent_infos=tensor_utils.stack_tensor_dict_list(agent_infos),
@@ -226,6 +230,9 @@ class TaskEmbeddingSampler(BatchSampler):
 
         tasks = [path["tasks"] for path in paths]
         tasks = tensor_utils.pad_tensor_n(tasks, max_path_length)
+
+        tasks_gt = [path['tasks_gt'] for path in paths]
+        tasks_gt = tensor_utils.pad_tensor_n(tasks_gt, max_path_length)
 
         latents = [path['latents'] for path in paths]
         latents = tensor_utils.pad_tensor_n(latents, max_path_length)

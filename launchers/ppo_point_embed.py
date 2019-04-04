@@ -5,6 +5,8 @@ from garage.envs import EnvSpec
 from garage.experiment import LocalRunner, run_experiment
 import numpy as np
 import tensorflow as tf
+import itertools
+import collections
 
 from embed2learn.algos import PPOTaskEmbedding
 from embed2learn.baselines import MultiTaskGaussianMLPBaseline
@@ -12,7 +14,7 @@ from embed2learn.envs import PointEnv
 from embed2learn.envs import MultiTaskEnv
 from embed2learn.envs.multi_task_env import TfEnv
 from embed2learn.embeddings import EmbeddingSpec
-from embed2learn.embeddings import GaussianMLPEmbedding
+from embed2learn.embeddings import GaussianMLPEmbedding, GaussianSentenceEmbedding
 from embed2learn.embeddings.utils import concat_spaces
 from embed2learn.experiment import TaskEmbeddingRunner
 from embed2learn.policies import GaussianMLPMultitaskPolicy
@@ -23,14 +25,48 @@ def circle(r, n):
     for t in np.arange(0, 2 * np.pi, 2 * np.pi / n):
         yield r * np.sin(t), r * np.cos(t)
 
+def build_dataset(words, n_words):
+    """Process raw inputs into a dataset."""
+    count = [['UNK', -1]]
+    count.extend(collections.Counter(words).most_common(n_words - 1))
+    dictionary = {}
+    for word, _ in count:
+        dictionary[word] = len(dictionary)
+    data = []
+    unk_count = 0
+    for word in words:
+        index = dictionary.get(word, 0)
+        if index == 0:  # dictionary['UNK']
+            unk_count += 1
+        data.append(index)
+    count[0][1] = unk_count
+    reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
+    return data, count, dictionary, reversed_dictionary
+
+def description_to_code(description, dictionary, max_sentence_length):
+    code = []
+    for s in description.split(' '):
+        code.append(dictionary[s])
+    while len(code) < max_sentence_length:
+        code.append(0)
+    return code
 
 N = 4
 goals = circle(3.0, N)
+goal_descriptions = ['move right', 'move up', 'move left', 'move down']
+words = list(itertools.chain.from_iterable([s.split(' ') for s in goal_descriptions]))
+_, num_words, dictionary, rev_dictionary = build_dataset(words, len(words))
+max_sentence_length = 3
+sentence_code_dim = len(num_words)
+goal_codes = [description_to_code(s, dictionary, max_sentence_length) for s in goal_descriptions]
 TASKS = {
     str(i + 1): {
         'args': [],
         'kwargs': {
             'goal': g,
+            'goal_description': goal_codes[i],
+            'sentence_code_dim': sentence_code_dim,
+            'max_sentence_length': max_sentence_length,
             'never_done': True,
             'completion_bonus': 0.0,
             'action_scale': 0.1,
@@ -82,8 +118,8 @@ def run_task(v):
 
         task_embed_spec = EmbeddingSpec(env.task_space, latent_space)
         traj_embed_spec = EmbeddingSpec(traj_space, latent_space)
-        task_obs_space = concat_spaces(env.task_space, env.observation_space)
-        env_spec_embed = EnvSpec(task_obs_space, env.action_space)
+        # task_obs_space = concat_spaces(env.task_space, env.observation_space)
+        # env_spec_embed = EnvSpec(task_obs_space, env.action_space)
 
         # TODO(): rename to inference_network
         traj_embedding = GaussianMLPEmbedding(
@@ -97,7 +133,7 @@ def run_task(v):
         )
 
         # Embeddings
-        task_embedding = GaussianMLPEmbedding(
+        task_embedding = GaussianSentenceEmbedding(
             name="embedding",
             embedding_spec=task_embed_spec,
             hidden_sizes=(20, 20),
@@ -106,6 +142,8 @@ def run_task(v):
             max_std=v.embedding_max_std,
             mean_output_nonlinearity=tf.nn.tanh,
             min_std=v.embedding_min_std,
+            sentence_code_dim=sentence_code_dim,
+            sentence_embedding_dict_dim=10,
         )
 
         # Multitask policy
@@ -119,6 +157,7 @@ def run_task(v):
             max_std=v.policy_max_std,
             init_std=v.policy_init_std,
             min_std=v.policy_min_std,
+            n_tasks=4,
         )
 
         extra = v.latent_length + len(v.tasks)
@@ -163,7 +202,7 @@ config = dict(
 run_experiment(
     run_task,
     exp_prefix='ppo_point_embed_random_start_192_polent_300maxpath',
-    n_parallel=2,
+    n_parallel=1,
     seed=1,
     variant=config,
     plot=False,

@@ -11,8 +11,8 @@ class MultitaskPolicy(Policy):
         self._env_spec = env_spec
         self._embedding = embedding
         self._task_space = task_space
-        self._task_observation_space = concat_spaces(
-            self._task_space, self._env_spec.observation_space)
+        # self._task_observation_space = concat_spaces(
+        #     self._task_space, self._env_spec.observation_space)
 
     # Should be implemented by all policies
 
@@ -62,9 +62,9 @@ class MultitaskPolicy(Policy):
     def observation_space(self):
         return self._env_spec.observation_space
 
-    @property
-    def task_observation_space(self):
-        return self._task_observation_space
+    # @property
+    # def task_observation_space(self):
+    #     return self._task_observation_space
 
     @property
     def action_space(self):

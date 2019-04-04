@@ -20,6 +20,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                  env_spec,
                  embedding,
                  task_space,
+                 n_tasks,
                  name="GaussianMLPMultitaskPolicy",
                  hidden_sizes=(32, 32),
                  learn_std=True,
@@ -65,7 +66,7 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
                                            task_space)
         Parameterized.__init__(self)
         Serializable.quick_init(self, locals())
-
+        self.n_tasks = n_tasks
         if mean_network or std_network:
             raise NotImplementedError
 
@@ -325,35 +326,12 @@ class GaussianMLPMultitaskPolicy(StochasticMultitaskPolicy, Parameterized,
         :param observation: task onehot + env observation
         :return: action, dict
         """
-        flat_task_obs = self.task_observation_space.flatten(observation)
-        flat_task, flat_obs = self.split_observation(flat_task_obs)
-        # mean, log_std, latent_mean, latent_log_std = \
-        #     [x[0] for x in self.f_dist_task_obs([flat_task], [flat_obs])]
-        # rnd = np.random.normal(size=mean.shape)
-        # action = rnd * np.exp(log_std) + mean
-        # latent_info = dict(mean=latent_mean, log_std=latent_log_std)
-        # return action, dict(
-        #     mean=mean, log_std=log_std, latent_info=latent_info)
-        action, \
-        action_mean, \
-        action_log_std, \
-        latent, \
-        latent_mean, \
-        latent_log_std = \
-            [x[0] for x in self.f_dist_task_obs([flat_task], [flat_obs])]
-        latent_info = dict(mean=latent_mean, log_std=latent_log_std)
-        return (action,
-                dict(mean=action_mean, log_std=action_log_std, latent_info=latent_info))
+        raise NotImplementedError
 
     def get_actions(self, observations):
         # TODO implement split_observation_n(...)
         raise NotImplementedError
-        # flat_obs = self.task_observation_space.flatten_n(observations)
-        # means, log_stds, latents = self._task_obs_action_dist(flat_obs)
-        # rnd = np.random.normal(size=means.shape)
-        # actions = rnd * np.exp(log_stds) + means
-        # return actions, dict(mean=means, log_std=log_stds, latent=latents)
-
+    
     @overrides
     def get_action_from_latent(self, latent, observation):
         flat_obs = self.observation_space.flatten(observation)

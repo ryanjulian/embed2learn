@@ -62,21 +62,33 @@ class MultiTaskEnv(gym.Env, Serializable):
 
     @property
     def task_space(self):
-        n = len(self._task_envs)
-        one_hot_ub = np.ones(n)
+        t = self.active_task or 0
+        n = self._task_envs[t]._max_sentence_length
+        one_hot_ub = np.ones(n) * (self._task_envs[t]._sentence_code_dim - 1)
         one_hot_lb = np.zeros(n)
-        return gym.spaces.Box(one_hot_lb, one_hot_ub, dtype=np.float32)
+        return gym.spaces.Box(one_hot_lb, one_hot_ub, dtype=np.int32)
+        # return {
+        #     'sentence_code_dim': self._task_envs[t]._sentence_code_dim,
+        #     'max_sentence_length': self._task_envs[t]._max_sentence_length
+        # }
 
     @property
     def active_task(self):
         return self._active_task
 
     @property
-    def active_task_one_hot(self):
-        one_hot = np.zeros(self.task_space.shape)
+    def active_task_one_hot_gt(self):
+        one_hot = np.zeros(len(self._task_envs))
         t = self.active_task or 0
-        one_hot[t] = self.task_space.high[t]
+        one_hot[t] = 1
         return one_hot
+
+    @property
+    def active_task_one_hot(self):
+        t = self.active_task or 0
+        goal_description = self._task_envs[t]._goal_description
+        return goal_description
+        # return np.array(self._task_envs[t]._goal_description, np.int32)
 
     @property
     def active_env(self):
@@ -103,6 +115,10 @@ class TfEnv(BaseTfEnv):
     @property
     def active_task_one_hot(self):
         return self.env.active_task_one_hot
+    
+    @property
+    def active_task_one_hot_gt(self):
+        return self.env.active_task_one_hot_gt
 
     @property
     def active_task(self):
@@ -121,6 +137,10 @@ class NormalizedMultiTaskEnv(NormalizedEnv, Serializable):
     @property
     def active_task_one_hot(self):
         return self.env.active_task_one_hot
+
+    @property
+    def active_task_one_hot_gt(self):
+        return self.env.active_task_one_hot_gt
 
     @property
     def active_task(self):
